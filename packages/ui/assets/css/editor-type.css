@@ -1,0 +1,273 @@
+/* ===========================================================================
+   Peek typescale (builder.shadcnspace.com / Peek v0.8.10.1).
+
+   App chrome + style-guide specimens. Generated sites still use `--site-font-*`
+   from the site theme.
+
+   IMPORTANT — these rules are deliberately UNLAYERED.
+   Tailwind v4 emits real CSS cascade layers, and a layer later in the order
+   beats every earlier layer regardless of specificity. Put these in
+   `@layer components` and a single `text-sm` utility on a primitive silently
+   wins. Unlayered rules sit above all layers, so the scale actually applies.
+   =========================================================================== */
+
+@theme {
+  /* Google Sans is not freely hostable — Figtree stands in for that slot. */
+  --font-google-sans: Figtree, ui-sans-serif, system-ui, sans-serif;
+  --font-instrument-serif: 'Instrument Serif', ui-serif, Georgia, serif;
+  --font-rubik: Rubik, ui-sans-serif, system-ui, sans-serif;
+
+  --text-10: 10px;
+  --text-12: 12px;
+  --text-14: 14px;
+  --text-16: 16px;
+  --text-20: 20px;
+  --text-48: 48px;
+  --text-72: 72px;
+  --text-96: 96px;
+
+  --leading-h1: 1;
+  --leading-large-title: 1;
+  --tracking-large-title: -2.4px;
+  --leading-large-title-72: 1;
+  --leading-h1-72: 1;
+  --leading-body: 1;
+  --leading-h2: 1;
+  --leading-body-20: 1.4;
+  --leading-body-20-500: 1.4;
+  --leading-button: 1.5;
+  --leading-header: 1.5;
+  --leading-body-16: normal;
+  --leading-small-body: 1.43;
+  --leading-small-body-14: 1.43;
+  --leading-caption: 1.33;
+  --leading-body-12: 1.33;
+  --leading-small: 1.43;
+}
+
+.type-h1 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-96);
+  font-weight: 500;
+  line-height: var(--leading-h1);
+}
+
+.type-large-title {
+  font-family: var(--font-instrument-serif);
+  font-size: var(--text-96);
+  font-weight: 400;
+  line-height: var(--leading-large-title);
+  letter-spacing: var(--tracking-large-title);
+}
+
+.type-large-title-72 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-72);
+  font-weight: 600;
+  line-height: var(--leading-large-title-72);
+}
+
+.type-h1-72 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-72);
+  font-weight: 400;
+  line-height: var(--leading-h1-72);
+}
+
+.type-body {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-48);
+  font-weight: 600;
+  line-height: var(--leading-body);
+}
+
+.type-h2 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-48);
+  font-weight: 500;
+  line-height: var(--leading-h2);
+}
+
+.type-body-20 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-20);
+  font-weight: 600;
+  line-height: var(--leading-body-20);
+}
+
+.type-body-20-500 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-20);
+  font-weight: 500;
+  line-height: var(--leading-body-20-500);
+}
+
+.type-button {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-16);
+  font-weight: 500;
+  line-height: var(--leading-button);
+}
+
+.type-header {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-16);
+  font-weight: 400;
+  line-height: var(--leading-header);
+}
+
+.type-body-16 {
+  font-family: var(--font-rubik);
+  font-size: var(--text-16);
+  font-weight: 400;
+  line-height: var(--leading-body-16);
+}
+
+.type-small-body {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-14);
+  font-weight: 500;
+  line-height: var(--leading-small-body);
+}
+
+.type-small-body-14 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-14);
+  font-weight: 400;
+  line-height: var(--leading-small-body-14);
+}
+
+.type-caption {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-12);
+  font-weight: 500;
+  line-height: var(--leading-caption);
+}
+
+.type-body-12 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-12);
+  font-weight: 400;
+  line-height: var(--leading-body-12);
+}
+
+.type-small {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-10);
+  font-weight: 500;
+  line-height: var(--leading-small);
+}
+
+/* Legacy editor class names → nearest Peek rungs (existing markup stays intact). */
+.type-button-12 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-12);
+  font-weight: 500;
+  line-height: var(--leading-caption);
+}
+
+.type-caption-12 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-12);
+  font-weight: 400;
+  line-height: var(--leading-body-12);
+}
+
+.type-button-10 {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-10);
+  font-weight: 500;
+  line-height: var(--leading-small);
+}
+
+/* ---------------------------------------------------------------------------
+   Editor chrome: compact Peek rungs so panels stay usable at tool density.
+   Display sizes (type-h1, type-body, …) still win when applied explicitly.
+   --------------------------------------------------------------------------- */
+
+.editor-chrome {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-12);
+  font-weight: 400;
+  line-height: var(--leading-body-12);
+}
+
+.editor-chrome label,
+.editor-chrome p,
+.editor-chrome span,
+.editor-chrome button,
+.editor-chrome a {
+  font-size: var(--text-12);
+  line-height: var(--leading-body-12);
+}
+
+.editor-chrome label {
+  font-weight: 500;
+  line-height: var(--leading-caption);
+}
+
+.editor-chrome input,
+.editor-chrome textarea,
+.editor-chrome select {
+  font-family: var(--font-google-sans);
+  font-size: var(--text-12);
+  line-height: var(--leading-body-12);
+  height: auto;
+  min-height: 1.875rem;
+  padding-block: 0.3125rem;
+}
+
+.editor-chrome textarea {
+  min-height: 3.5rem;
+}
+
+.editor-chrome .type-button {
+  font-size: var(--text-14);
+  font-weight: 500;
+  line-height: var(--leading-small-body);
+}
+
+.editor-chrome .type-header {
+  font-size: var(--text-14);
+  font-weight: 400;
+  line-height: var(--leading-small-body-14);
+}
+
+.editor-chrome .type-body-16 {
+  font-size: var(--text-14);
+  font-weight: 400;
+  line-height: var(--leading-small-body-14);
+}
+
+.editor-chrome .type-small-body {
+  font-size: var(--text-14);
+  font-weight: 500;
+  line-height: var(--leading-small-body);
+}
+
+.editor-chrome .type-small-body-14 {
+  font-size: var(--text-14);
+  font-weight: 400;
+  line-height: var(--leading-small-body-14);
+}
+
+.editor-chrome .type-caption,
+.editor-chrome .type-button-12 {
+  font-size: var(--text-12);
+  font-weight: 500;
+  line-height: var(--leading-caption);
+}
+
+.editor-chrome .type-body-12,
+.editor-chrome .type-caption-12 {
+  font-size: var(--text-12);
+  font-weight: 400;
+  line-height: var(--leading-body-12);
+}
+
+.editor-chrome .type-small,
+.editor-chrome .type-button-10 {
+  font-size: var(--text-10);
+  font-weight: 500;
+  line-height: var(--leading-small);
+}

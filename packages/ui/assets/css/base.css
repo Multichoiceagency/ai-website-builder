@@ -1,0 +1,65 @@
+/* Base layer: document defaults and the focus treatment every primitive
+   inherits. Kept deliberately small — anything component-specific belongs to
+   the component. */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One focus ring for the whole system. Visible for keyboard users, absent for
+   pointer users, never removed. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+::selection {
+  background: var(--brand-soft);
+  color: var(--ink);
+}
+
+/* Native controls should inherit the type system rather than the platform's.
+   These sit in `@layer base` on purpose: Tailwind utilities (e.g. `text-brand-ink`
+   on a primary button) must beat `color: inherit`. An unlayered rule here is
+   what made solid brand/danger buttons render with black labels. */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* Respect the OS setting globally. Individual components must not re-enable
+   motion on top of this. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

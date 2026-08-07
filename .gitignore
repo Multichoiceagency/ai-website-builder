@@ -1,0 +1,47 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+.output/
+.nuxt/
+.turbo/
+*.tsbuildinfo
+
+# env — NEVER commit
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local
+
+# logs / os
+*.log
+npm-debug.log*
+.DS_Store
+
+# local data
+infrastructure/docker/data/
+coverage/
+
+# MotionSites preview videos are large; thumbs + prompt markdown stay tracked
+**/motionsites/**/videos/
+# Built island bundles (regenerate with pnpm --filter @platform/motionsites-islands build)
+apps/dashboard/public/motionsites/islands/
+apps/storefront/public/motionsites/islands/
+packages/motionsites-islands/dist/
+
+# third-party UI libraries, cloned locally for reading only — NEVER redistributed
+# through this repo. See docs/UI-LIBRARIES.md. Nothing under apps/, packages/ or
+# services/ may import from here.
+reference/
+
+# local agent / swarm state — keep untracked
+/.claude-flow
+/.swarm
+/.claude
+ruvector.db
+
+# local API upload/runtime data
+services/core-api/.data/

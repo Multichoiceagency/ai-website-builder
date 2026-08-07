@@ -1,0 +1,825 @@
+[
+  {
+    "id": "hero-with-proof",
+    "library": "platform",
+    "demo": "",
+    "name": "Hero with logo proof",
+    "description": "A split hero followed immediately by a customer logo strip — the fastest way to make a first screen credible.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "proof",
+      "light"
+    ],
+    "blocks": [
+      "hero-split-01",
+      "logos-strip-01"
+    ]
+  },
+  {
+    "id": "hero-aurora-stats",
+    "library": "platform",
+    "demo": "",
+    "name": "Aurora hero with numbers",
+    "description": "A luminous hero over a band of headline figures. Heavier than the split hero — pick it when the first screen is doing the selling.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "dark",
+      "stats"
+    ],
+    "blocks": [
+      "hero-aurora-01",
+      "stats-band-01"
+    ]
+  },
+  {
+    "id": "page-shell",
+    "library": "platform",
+    "demo": "",
+    "name": "Header and footer shell",
+    "description": "Navigation and footer with nothing between them — the two sections every page needs, ready for content.",
+    "collection": "navigation",
+    "tags": [
+      "header",
+      "footer",
+      "shell"
+    ],
+    "blocks": [
+      "header-simple-01",
+      "footer-simple-01"
+    ]
+  },
+  {
+    "id": "feature-trio",
+    "library": "platform",
+    "demo": "",
+    "name": "Feature grid with spotlight",
+    "description": "A three-up grid of capabilities, then one of them expanded. Breadth first, then depth on the one that matters.",
+    "collection": "features",
+    "tags": [
+      "features",
+      "grid",
+      "light"
+    ],
+    "blocks": [
+      "features-grid-01",
+      "feature-spotlight-01"
+    ]
+  },
+  {
+    "id": "sticky-feature-story",
+    "library": "platform",
+    "demo": "",
+    "name": "Sticky feature story",
+    "description": "Scroll-pinned feature stack closing on a call to action. Cinematic pacing; costs more to render than a grid.",
+    "collection": "features",
+    "tags": [
+      "features",
+      "scroll",
+      "sticky"
+    ],
+    "blocks": [
+      "features-sticky-stack-01",
+      "cta-banner-01"
+    ]
+  },
+  {
+    "id": "social-proof-stack",
+    "library": "platform",
+    "demo": "",
+    "name": "Social proof stack",
+    "description": "Testimonials, then logos, then the numbers. Three kinds of evidence in the order people find them convincing.",
+    "collection": "proof",
+    "tags": [
+      "testimonials",
+      "logos",
+      "stats"
+    ],
+    "blocks": [
+      "testimonials-grid-01",
+      "logos-strip-01",
+      "stats-band-01"
+    ]
+  },
+  {
+    "id": "proof-in-motion",
+    "library": "platform",
+    "demo": "",
+    "name": "Proof in motion",
+    "description": "A testimonial marquee over counting figures. Reads as momentum rather than as a list.",
+    "collection": "proof",
+    "tags": [
+      "testimonials",
+      "marquee",
+      "stats"
+    ],
+    "blocks": [
+      "testimonials-marquee-01",
+      "stats-counter-01"
+    ]
+  },
+  {
+    "id": "pricing-with-faq",
+    "library": "platform",
+    "demo": "",
+    "name": "Pricing with FAQ",
+    "description": "A monthly/annual pricing table with the objections answered directly beneath it, where they get read.",
+    "collection": "pricing",
+    "tags": [
+      "pricing",
+      "faq",
+      "conversion"
+    ],
+    "blocks": [
+      "pricing-toggle-01",
+      "faq-accordion-01"
+    ]
+  },
+  {
+    "id": "closing-cta",
+    "library": "platform",
+    "demo": "",
+    "name": "Closing call to action",
+    "description": "A high-contrast final ask, then the footer. The end of a landing page.",
+    "collection": "conversion",
+    "tags": [
+      "cta",
+      "footer",
+      "conversion"
+    ],
+    "blocks": [
+      "cta-high-contrast-01",
+      "footer-simple-01"
+    ]
+  },
+  {
+    "id": "contact-close",
+    "library": "platform",
+    "demo": "",
+    "name": "Contact and footer",
+    "description": "Contact details above the footer, for pages that end in a conversation rather than a purchase.",
+    "collection": "conversion",
+    "tags": [
+      "contact",
+      "footer"
+    ],
+    "blocks": [
+      "contact-details-01",
+      "footer-simple-01"
+    ]
+  },
+  {
+    "id": "editorial-story",
+    "library": "platform",
+    "demo": "",
+    "name": "Editorial story",
+    "description": "A manifesto statement leading into a scroll-told story. For about pages that are meant to be read, not skimmed.",
+    "collection": "content",
+    "tags": [
+      "about",
+      "editorial",
+      "scroll"
+    ],
+    "blocks": [
+      "content-manifesto-01",
+      "about-scroll-story-01"
+    ]
+  },
+  {
+    "id": "team-and-words",
+    "library": "platform",
+    "demo": "",
+    "name": "Team and prose",
+    "description": "An editorial team index followed by a rich-text block. Who we are, then what we think.",
+    "collection": "content",
+    "tags": [
+      "team",
+      "about",
+      "content"
+    ],
+    "blocks": [
+      "team-editorial-01",
+      "content-richtext-01"
+    ]
+  },
+  {
+    "id": "docs-page-shell",
+    "library": "platform",
+    "demo": "",
+    "name": "Documentation page shell",
+    "description": "Navigation, a long-form prose column, footer. The shape a documentation or changelog page wants.",
+    "collection": "navigation",
+    "tags": [
+      "docs",
+      "content",
+      "shell"
+    ],
+    "blocks": [
+      "header-simple-01",
+      "content-richtext-01",
+      "footer-simple-01"
+    ]
+  },
+  {
+    "id": "clean-hero-close",
+    "library": "platform",
+    "demo": "",
+    "name": "Clean hero and close",
+    "description": "A centred hero, customer logos, then the ask. Light, unfussy, and every section class A.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "light",
+      "conversion"
+    ],
+    "blocks": [
+      "hero-centered-01",
+      "logos-strip-01",
+      "cta-banner-01"
+    ]
+  },
+  {
+    "id": "feature-proof-run",
+    "library": "platform",
+    "demo": "",
+    "name": "Features, numbers, voices",
+    "description": "Capability grid, the figures that back it, then customers saying it. Evidence in three registers.",
+    "collection": "features",
+    "tags": [
+      "features",
+      "stats",
+      "testimonials"
+    ],
+    "blocks": [
+      "features-grid-01",
+      "stats-band-01",
+      "testimonials-grid-01"
+    ]
+  },
+  {
+    "id": "pricing-page-run",
+    "library": "platform",
+    "demo": "",
+    "name": "Pricing page run",
+    "description": "Plans, the objections, then the ask. The whole back half of a pricing page.",
+    "collection": "pricing",
+    "tags": [
+      "pricing",
+      "faq",
+      "conversion"
+    ],
+    "blocks": [
+      "pricing-toggle-01",
+      "faq-accordion-01",
+      "cta-banner-01"
+    ]
+  },
+  {
+    "id": "saas-hero-run",
+    "library": "platform",
+    "demo": "",
+    "name": "SaaS hero run",
+    "description": "Split hero, logo proof, feature grid. The opening three screens of a product site.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "saas",
+      "features"
+    ],
+    "blocks": [
+      "hero-split-01",
+      "logos-strip-01",
+      "features-grid-01"
+    ]
+  },
+  {
+    "id": "team-and-contact",
+    "library": "platform",
+    "demo": "",
+    "name": "Team and contact",
+    "description": "Who you would be working with, then how to reach them. An about page that ends usefully.",
+    "collection": "content",
+    "tags": [
+      "team",
+      "contact",
+      "about"
+    ],
+    "blocks": [
+      "team-editorial-01",
+      "contact-details-01"
+    ]
+  },
+  {
+    "id": "kinetic-hero-marquee",
+    "library": "platform",
+    "demo": "",
+    "name": "Kinetic hero with marquee",
+    "description": "Type that arrives in motion over a continuous marquee. Reads as momentum from the first screen.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "motion",
+      "marquee"
+    ],
+    "blocks": [
+      "hero-kinetic-01",
+      "marquee-strip-01"
+    ]
+  },
+  {
+    "id": "beam-steps-numbers",
+    "library": "platform",
+    "demo": "",
+    "name": "Connected steps with counters",
+    "description": "A beam-linked process sequence closing on figures that count up. For explaining how something works.",
+    "collection": "features",
+    "tags": [
+      "process",
+      "motion",
+      "stats"
+    ],
+    "blocks": [
+      "features-beam-steps-01",
+      "stats-counter-01"
+    ]
+  },
+  {
+    "id": "text-reveal-close",
+    "library": "platform",
+    "demo": "",
+    "name": "Text reveal close",
+    "description": "Copy that generates as it enters, landing on a glowing-border call to action.",
+    "collection": "conversion",
+    "tags": [
+      "text-effect",
+      "motion",
+      "cta"
+    ],
+    "blocks": [
+      "content-text-generate-01",
+      "cta-animated-border-01"
+    ]
+  },
+  {
+    "id": "brutalist-hero-grid",
+    "library": "platform",
+    "demo": "",
+    "name": "Brutalist hero and grid",
+    "description": "Oversized type over a hard-ruled grid. Loud, and cheap to render — type at scale is not an effect.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "brutalist",
+      "editorial"
+    ],
+    "blocks": [
+      "hero-oversized-type-01",
+      "features-brutalist-grid-01"
+    ]
+  },
+  {
+    "id": "editorial-index-close",
+    "library": "platform",
+    "demo": "",
+    "name": "Editorial index and close",
+    "description": "A typeset index of services ending in a high-contrast ask. For studios and agencies.",
+    "collection": "content",
+    "tags": [
+      "services",
+      "editorial",
+      "cta"
+    ],
+    "blocks": [
+      "services-editorial-index-01",
+      "cta-high-contrast-01"
+    ]
+  },
+  {
+    "id": "bento-capability-board",
+    "library": "platform",
+    "demo": "",
+    "name": "Bento capability board",
+    "description": "A mixed-size grid of capabilities over a logo strip. Visually ambitious and still class A — the span pattern is static CSS.",
+    "collection": "features",
+    "tags": [
+      "bento",
+      "grid",
+      "features",
+      "light"
+    ],
+    "blocks": [
+      "features-bento-grid-01",
+      "logos-strip-01"
+    ]
+  },
+  {
+    "id": "hyperui-hero-cta-band",
+    "library": "HyperUI",
+    "demo": "marketing/sections/hero",
+    "name": "HyperUI — hero with CTA band",
+    "description": "Layout idea from HyperUI's marketing hero family: centred hero, then a primary call-to-action band. Renders entirely from our registry blocks.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "cta",
+      "hyperui",
+      "light"
+    ],
+    "blocks": [
+      "hero-centered-01",
+      "cta-banner-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "hyperui-feature-grid-faq",
+    "library": "HyperUI",
+    "demo": "marketing/sections/features",
+    "name": "HyperUI — features into FAQ",
+    "description": "HyperUI-style features grid closing on an accordion of objections. Our blocks, their arrangement.",
+    "collection": "features",
+    "tags": [
+      "features",
+      "faq",
+      "hyperui"
+    ],
+    "blocks": [
+      "features-grid-01",
+      "faq-accordion-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "hyperui-pricing-close",
+    "library": "HyperUI",
+    "demo": "marketing/sections/pricing",
+    "name": "HyperUI — pricing close",
+    "description": "Pricing table then a high-contrast ask — the HyperUI landing-page close pattern, expressed as our blocks.",
+    "collection": "pricing",
+    "tags": [
+      "pricing",
+      "cta",
+      "hyperui"
+    ],
+    "blocks": [
+      "pricing-toggle-01",
+      "cta-high-contrast-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "flowbite-header-hero-footer",
+    "library": "Flowbite",
+    "demo": "marketing/hero",
+    "name": "Flowbite — page shell with hero",
+    "description": "Header, split hero, footer — the Flowbite marketing shell shape. MIT layout idea only; all markup is ours.",
+    "collection": "navigation",
+    "tags": [
+      "header",
+      "hero",
+      "footer",
+      "flowbite"
+    ],
+    "blocks": [
+      "header-simple-01",
+      "hero-split-01",
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "flowbite-stats-testimonials",
+    "library": "Flowbite",
+    "demo": "marketing/social-proof",
+    "name": "Flowbite — stats and testimonials",
+    "description": "Numbers then quotes — Flowbite's social-proof stack as our registry sections.",
+    "collection": "proof",
+    "tags": [
+      "stats",
+      "testimonials",
+      "flowbite"
+    ],
+    "blocks": [
+      "stats-band-01",
+      "testimonials-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "shadcn-feature-spotlight",
+    "library": "shadcn/ui",
+    "demo": "blocks/feature-section",
+    "name": "shadcn — feature spotlight",
+    "description": "A feature grid with one capability expanded. Arrangement inspired by shadcn blocks; rendered by our components.",
+    "collection": "features",
+    "tags": [
+      "features",
+      "spotlight",
+      "shadcn"
+    ],
+    "blocks": [
+      "features-grid-01",
+      "feature-spotlight-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "magicui-motion-proof",
+    "library": "Magic UI",
+    "demo": "components/marquee",
+    "name": "Magic UI — proof in motion",
+    "description": "Marquee testimonials over counting stats — the Magic UI free-repo motion-proof idea, via our motion-capable blocks.",
+    "collection": "proof",
+    "tags": [
+      "marquee",
+      "stats",
+      "magicui"
+    ],
+    "blocks": [
+      "testimonials-marquee-01",
+      "stats-counter-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "vengeance-aurora-close",
+    "library": "Vengeance UI",
+    "demo": "hero-aurora",
+    "name": "Vengeance — aurora hero close",
+    "description": "Luminous hero into a closing CTA. Layout cue from Vengeance UI; our aurora and CTA blocks do the work.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "aurora",
+      "cta",
+      "vengeance"
+    ],
+    "blocks": [
+      "hero-aurora-01",
+      "cta-animated-border-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "hyperui-agency-proof-strip",
+    "library": "HyperUI",
+    "demo": "marketing/sections/hero",
+    "name": "HyperUI — agency hero with logos",
+    "description": "Agency-style opener with social proof and a logo strip. Layout cue from HyperUI marketing heroes; our agency-proof and logos blocks.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "proof",
+      "logos",
+      "hyperui"
+    ],
+    "blocks": [
+      "hero-agency-proof-01",
+      "logos-strip-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "hyperui-property-cover",
+    "library": "HyperUI",
+    "demo": "marketing/sections/hero",
+    "name": "HyperUI — property cover close",
+    "description": "Full-bleed property hero into a contact close. Arrangement inspired by HyperUI cover heroes.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "property",
+      "hyperui"
+    ],
+    "blocks": [
+      "hero-property-01",
+      "contact-details-01",
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "nuxt-ui-saas-landing",
+    "library": "Nuxt UI",
+    "demo": "docs/getting-started",
+    "name": "Nuxt UI — SaaS landing shell",
+    "description": "Header, product-preview hero, feature grid, pricing, FAQ, footer — a Nuxt UI docs-style marketing arrangement rendered by our blocks.",
+    "collection": "hero",
+    "tags": [
+      "saas",
+      "landing",
+      "nuxt-ui"
+    ],
+    "blocks": [
+      "header-simple-01",
+      "hero-saas-preview-01",
+      "features-grid-01",
+      "pricing-toggle-01",
+      "faq-accordion-01",
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "nuxt-ui-agency-dark",
+    "library": "Nuxt UI",
+    "demo": "components",
+    "name": "Nuxt UI — dark agency opener",
+    "description": "Dark portrait hero into glow feature cards and a lit CTA. Layout vocabulary from Nuxt UI marketing examples; our spotlight blocks.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "dark",
+      "agency",
+      "nuxt-ui"
+    ],
+    "blocks": [
+      "hero-portrait-01",
+      "features-glow-cards-01",
+      "cta-animated-border-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "shadcn-cover-statement",
+    "library": "shadcn/ui",
+    "demo": "blocks/hero",
+    "name": "shadcn — cover statement",
+    "description": "Quiet centred cover hero into a feature trio. Arrangement inspired by shadcn blocks.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "minimal",
+      "shadcn"
+    ],
+    "blocks": [
+      "hero-cover-statement-01",
+      "features-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "shadcn-vue-asymmetric",
+    "library": "shadcn-vue",
+    "demo": "blocks",
+    "name": "shadcn-vue — asymmetric editorial",
+    "description": "Asymmetric overlap hero into editorial services index. Vue-port catalogue arrangement via our editorial blocks.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "editorial",
+      "shadcn-vue"
+    ],
+    "blocks": [
+      "hero-asymmetric-01",
+      "services-editorial-index-01",
+      "cta-high-contrast-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "platform-agency-landing",
+    "library": "platform",
+    "demo": "",
+    "name": "Agency landing with proof",
+    "description": "Agency hero, logos, features, testimonials, closing CTA — the default agency first page.",
+    "collection": "hero",
+    "tags": [
+      "agency",
+      "hero",
+      "proof"
+    ],
+    "blocks": [
+      "header-simple-01",
+      "hero-agency-proof-01",
+      "logos-strip-01",
+      "features-grid-01",
+      "testimonials-grid-01",
+      "cta-banner-01",
+      "footer-simple-01"
+    ]
+  },
+  {
+    "id": "flowbite-centred-hero-proof",
+    "library": "Flowbite",
+    "demo": "marketing/hero",
+    "name": "Flowbite — centred hero with proof",
+    "description": "Centred hero, logo strip, then CTA — Flowbite's classic marketing hero stack as our blocks.",
+    "collection": "hero",
+    "tags": ["hero", "logos", "cta", "flowbite", "landing"],
+    "blocks": ["hero-centered-01", "logos-strip-01", "cta-banner-01"],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "flowbite-saas-landing",
+    "library": "Flowbite",
+    "demo": "marketing",
+    "name": "Flowbite — full SaaS landing",
+    "description": "Header through footer: split hero, logos, features, stats, pricing, FAQ, CTA. Full free Flowbite marketing shape — our registry only.",
+    "collection": "hero",
+    "tags": ["landing", "saas", "flowbite", "full-page"],
+    "blocks": [
+      "header-simple-01",
+      "hero-split-01",
+      "logos-strip-01",
+      "features-grid-01",
+      "stats-band-01",
+      "pricing-toggle-01",
+      "faq-accordion-01",
+      "cta-banner-01",
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "flowbite-features-pricing",
+    "library": "Flowbite",
+    "demo": "marketing/features",
+    "name": "Flowbite — features into pricing",
+    "description": "Feature grid, spotlight, pricing toggle — Flowbite product-page mid-run via our blocks.",
+    "collection": "features",
+    "tags": ["features", "pricing", "flowbite"],
+    "blocks": ["features-grid-01", "feature-spotlight-01", "pricing-toggle-01"],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "hyperui-full-landing",
+    "library": "HyperUI",
+    "demo": "marketing",
+    "name": "HyperUI — full marketing landing",
+    "description": "Complete HyperUI-style landing: header, centred hero, features, testimonials, pricing, FAQ, CTA, footer.",
+    "collection": "hero",
+    "tags": ["landing", "hyperui", "full-page"],
+    "blocks": [
+      "header-simple-01",
+      "hero-centered-01",
+      "features-grid-01",
+      "testimonials-grid-01",
+      "pricing-toggle-01",
+      "faq-accordion-01",
+      "cta-high-contrast-01",
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "magicui-landing-motion",
+    "library": "Magic UI",
+    "demo": "components",
+    "name": "Magic UI — motion landing (free)",
+    "description": "Kinetic hero, marquee proof, beam steps, animated CTA — free Magic UI motion vocabulary only; Pro components never used.",
+    "collection": "hero",
+    "tags": ["landing", "motion", "magicui", "full-page"],
+    "blocks": [
+      "header-simple-01",
+      "hero-kinetic-01",
+      "marquee-strip-01",
+      "features-beam-steps-01",
+      "testimonials-marquee-01",
+      "cta-animated-border-01",
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "shadcn-saas-landing",
+    "library": "shadcn/ui",
+    "demo": "blocks",
+    "name": "shadcn — SaaS landing run",
+    "description": "Cover statement, feature spotlight, pricing, FAQ, close — shadcn blocks arrangement as our sections.",
+    "collection": "hero",
+    "tags": ["landing", "saas", "shadcn", "full-page"],
+    "blocks": [
+      "header-simple-01",
+      "hero-cover-statement-01",
+      "features-grid-01",
+      "feature-spotlight-01",
+      "pricing-toggle-01",
+      "faq-accordion-01",
+      "cta-banner-01",
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "nuxt-ui-marketing-landing",
+    "library": "Nuxt UI",
+    "demo": "templates",
+    "name": "Nuxt UI — marketing landing",
+    "description": "SaaS preview hero, bento features, social proof, pricing, contact close — Nuxt UI marketing template shape.",
+    "collection": "hero",
+    "tags": ["landing", "nuxt-ui", "full-page"],
+    "blocks": [
+      "header-simple-01",
+      "hero-saas-preview-01",
+      "features-bento-grid-01",
+      "logos-strip-01",
+      "testimonials-grid-01",
+      "pricing-toggle-01",
+      "contact-details-01",
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  }
+]

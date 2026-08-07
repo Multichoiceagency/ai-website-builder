@@ -1,0 +1,218 @@
+[
+  {
+    "library": "platform",
+    "url": "",
+    "licence": "platform-owned",
+    "importable": true,
+    "attribution": "",
+    "notes": "Arrangements authored for this platform from our own registry blocks. No third party is involved, so there is nothing to clear and nothing to attribute.",
+    "evidenceUrl": "",
+    "copyrightNotice": "",
+    "noticeReadAt": "",
+    "install": {
+      "method": "none",
+      "command": "",
+      "docsUrl": "",
+      "referenceDir": "",
+      "cloneUrl": ""
+    }
+  },
+  {
+    "library": "shadcn/ui",
+    "url": "https://ui.shadcn.com",
+    "licence": "mit",
+    "importable": true,
+    "attribution": "",
+    "notes": "CLEARED. MIT verified from the repository LICENSE. Built on an explicit copy-into-your-project model. Scope: the whole public catalogue; there is no paid tier to separate. CLEARED BUT UNUSED: no preset in the catalogue derives from this source today. The clearance stands for future work; it is not a record that anything was taken.",
+    "evidenceUrl": "https://raw.githubusercontent.com/shadcn-ui/ui/main/LICENSE.md",
+    "copyrightNotice": "Copyright (c) 2023 shadcn",
+    "noticeReadAt": "reference/shadcn-ui/LICENSE.md",
+    "install": {
+      "method": "npx",
+      "command": "npx shadcn@latest add",
+      "docsUrl": "https://ui.shadcn.com/docs/cli",
+      "referenceDir": "reference/shadcn-ui",
+      "cloneUrl": "https://github.com/shadcn-ui/ui.git"
+    }
+  },
+  {
+    "library": "Magic UI",
+    "url": "https://magicui.design",
+    "licence": "mit",
+    "importable": true,
+    "attribution": "",
+    "notes": "CLEARED, FREE REPO ONLY. MIT verified from the LICENSE in magicuidesign/magicui. Magic UI Pro is a separate paid product (templates and premium components) that is NOT in the MIT repository and is out of scope — never derive from a Pro component. CLEARED BUT UNUSED: no preset in the catalogue derives from this source today. The clearance stands for future work; it is not a record that anything was taken.",
+    "evidenceUrl": "https://github.com/magicuidesign/magicui/blob/main/LICENSE.md",
+    "copyrightNotice": "Copyright (c) Magic UI",
+    "noticeReadAt": "reference/magicui/LICENSE.md",
+    "install": {
+      "method": "npx",
+      "command": "npx shadcn@latest add @magicui/marquee",
+      "docsUrl": "https://magicui.design/docs/installation",
+      "referenceDir": "reference/magicui",
+      "cloneUrl": "https://github.com/magicuidesign/magicui.git"
+    }
+  },
+  {
+    "library": "Vengeance UI",
+    "url": "https://github.com/Ashutoshx7/VengeanceUI",
+    "licence": "mit",
+    "importable": true,
+    "attribution": "",
+    "notes": "CLEARED. MIT verified from the LICENSE in Ashutoshx7/VengeanceUI. PINNED to that repository specifically: the name is duplicated across mirrors and several domains claim it, so a lookup by name is not sufficient identification. CLEARED BUT UNUSED: no preset in the catalogue derives from this source today. The clearance stands for future work; it is not a record that anything was taken.",
+    "evidenceUrl": "https://github.com/Ashutoshx7/VengeanceUI/blob/main/LICENSE",
+    "copyrightNotice": "Copyright (c) 2025-2026 Ashutoshx7",
+    "noticeReadAt": "reference/vengeance-ui/LICENSE",
+    "install": {
+      "method": "git-clone",
+      "command": "pnpm --filter @platform/assets pull -- \"Vengeance UI\"",
+      "docsUrl": "https://github.com/Ashutoshx7/VengeanceUI",
+      "referenceDir": "reference/vengeance-ui",
+      "cloneUrl": "https://github.com/Ashutoshx7/VengeanceUI.git"
+    }
+  },
+  {
+    "library": "HyperUI",
+    "url": "https://hyperui.dev",
+    "licence": "mit",
+    "importable": true,
+    "attribution": "",
+    "notes": "CLEARED. MIT verified from the LICENSE in markmead/hyperui. Note the commonly cited hyperui-dev/hyperui is a 404; markmead/hyperui is the real repository. CLEARED BUT UNUSED: no preset in the catalogue derives from this source today. The clearance stands for future work; it is not a record that anything was taken.",
+    "evidenceUrl": "https://github.com/markmead/hyperui/blob/main/LICENSE",
+    "copyrightNotice": "Copyright (c) Mark Mead",
+    "noticeReadAt": "reference/hyperui/LICENSE",
+    "install": {
+      "method": "git-clone",
+      "command": "pnpm --filter @platform/assets pull -- HyperUI",
+      "docsUrl": "https://hyperui.dev",
+      "referenceDir": "reference/hyperui",
+      "cloneUrl": "https://github.com/markmead/hyperui.git"
+    }
+  },
+  {
+    "library": "Flowbite",
+    "url": "https://flowbite.com",
+    "licence": "mit",
+    "importable": true,
+    "attribution": "",
+    "notes": "CLEARED, FREE REPO ONLY. MIT verified by reading LICENSE.md in the themesberg/flowbite clone. The copyright holder is Bergside Inc., NOT 'Themesberg' — the GitHub org and the copyright holder are different entities and only the latter is legally operative. THIS ENTRY COVERS themesberg/flowbite ONLY: the Vue bindings (flowbite-vue) are a separate repository with a different copyright holder and have their own entry. Flowbite Pro and Flowbite Blocks are sold separately, are NOT covered by this MIT licence, and are out of scope. CLEARED BUT UNUSED: no preset in the catalogue derives from this source today.",
+    "evidenceUrl": "https://github.com/themesberg/flowbite/blob/main/LICENSE.md",
+    "copyrightNotice": "Copyright (c) 2023 Bergside Inc.",
+    "noticeReadAt": "reference/flowbite/LICENSE.md",
+    "install": {
+      "method": "git-clone",
+      "command": "pnpm --filter @platform/assets pull -- Flowbite",
+      "docsUrl": "https://flowbite.com/docs/getting-started/quickstart/",
+      "referenceDir": "reference/flowbite",
+      "cloneUrl": "https://github.com/themesberg/flowbite.git"
+    }
+  },
+  {
+    "library": "Aceternity UI",
+    "url": "https://ui.aceternity.com",
+    "licence": "proprietary",
+    "importable": false,
+    "attribution": "",
+    "notes": "REFUSED. NOT MIT — search results and secondary sites widely repeat that claim and it is false; the primary licence page contradicts it. Ships a custom 'Aceternity License' that prohibits creating 'themes, templates, or derivative products to sell on any marketplace'. We are a website builder that ships layouts to paying customers, which lands squarely in that clause. No official public source repository exists either. Do not derive, do not proxy, do not import at runtime.",
+    "evidenceUrl": "https://ui.aceternity.com/licence",
+    "copyrightNotice": "",
+    "noticeReadAt": "",
+    "install": {
+      "method": "none",
+      "command": "",
+      "docsUrl": "https://ui.aceternity.com/licence",
+      "referenceDir": "",
+      "cloneUrl": ""
+    }
+  },
+  {
+    "library": "Skiper UI",
+    "url": "https://skiper-ui.com",
+    "licence": "unknown",
+    "importable": false,
+    "attribution": "",
+    "notes": "REFUSED. No LICENSE file, no named licence, no official repository — the GitHub hits are third-party clones. The site states only 'free to use and modify' with mandatory attribution, which is a terms-of-use blurb rather than a licence grant. Worse, the author states most components are 'recreations of existing designs', so the chain of title is unclear upstream of them too: even their permission would not settle whose design it is.",
+    "evidenceUrl": "https://skiper-ui.com/docs/quick-start",
+    "copyrightNotice": "",
+    "noticeReadAt": "",
+    "install": {
+      "method": "none",
+      "command": "",
+      "docsUrl": "https://skiper-ui.com/docs/quick-start",
+      "referenceDir": "",
+      "cloneUrl": ""
+    }
+  },
+  {
+    "library": "Preline UI",
+    "url": "https://preline.co",
+    "licence": "unknown",
+    "importable": false,
+    "attribution": "",
+    "notes": "REFUSED PENDING LEGAL. Dual-licensed MIT + 'Preline UI Fair Use License'. GitHub classifies the repository as NOASSERTION, not plain MIT. The Fair Use terms forbid use in 'any product or service that directly competes with Preline UI'. Ours plausibly does, so this is a commercial judgement rather than an engineering one. Recorded as unknown because the effective permission is unresolved, not because no licence was found.",
+    "evidenceUrl": "https://github.com/htmlstreamofficial/preline/blob/main/LICENSE",
+    "copyrightNotice": "",
+    "noticeReadAt": "",
+    "install": {
+      "method": "none",
+      "command": "",
+      "docsUrl": "https://preline.co",
+      "referenceDir": "",
+      "cloneUrl": ""
+    }
+  },
+  {
+    "library": "flowbite-vue",
+    "url": "https://github.com/themesberg/flowbite-vue",
+    "licence": "mit",
+    "importable": true,
+    "copyrightNotice": "Copyright (c) 2022 Themesberg (Crafty Dwarf LLC) company@themesberg.com",
+    "noticeReadAt": "node_modules/flowbite-vue/LICENSE.md (flowbite-vue@0.4.0)",
+    "attribution": "",
+    "notes": "CLEARED. A SEPARATE REPOSITORY from themesberg/flowbite, with a different copyright holder — Crafty Dwarf LLC here, Bergside Inc. there. Read from the installed package's own LICENSE.md rather than inferred from the sibling repo or the npm summary. Installed as a root devDependency; nothing in apps/, packages/ or services/ imports it. CLEARED BUT UNUSED: no preset derives from it today.",
+    "evidenceUrl": "https://github.com/themesberg/flowbite-vue",
+    "install": {
+      "method": "npx",
+      "command": "pnpm add -wD flowbite-vue",
+      "docsUrl": "https://flowbite-vue.com",
+      "referenceDir": "",
+      "cloneUrl": "https://github.com/themesberg/flowbite-vue.git"
+    }
+  },
+  {
+    "library": "shadcn-vue",
+    "url": "https://github.com/unovue/shadcn-vue",
+    "licence": "mit",
+    "importable": true,
+    "copyrightNotice": "Copyright (c) 2023 unovue",
+    "noticeReadAt": "node_modules/shadcn-vue/LICENSE (shadcn-vue@2.8.1)",
+    "attribution": "",
+    "notes": "CLEARED. The Vue port of shadcn/ui, and a DIFFERENT copyright holder from the React original (unovue, not shadcn) — the port is not covered by the upstream entry. Read from the installed package's own LICENSE. It is a CLI that fetches components on demand rather than shipping them. CLEARED BUT UNUSED: no preset derives from it today.",
+    "evidenceUrl": "https://github.com/unovue/shadcn-vue",
+    "install": {
+      "method": "npx",
+      "command": "npx shadcn-vue@latest add",
+      "docsUrl": "https://www.shadcn-vue.com/docs/cli",
+      "referenceDir": "reference/shadcn-vue",
+      "cloneUrl": "https://github.com/unovue/shadcn-vue.git"
+    }
+  },
+  {
+    "library": "Nuxt UI",
+    "url": "https://ui.nuxt.com",
+    "licence": "mit",
+    "importable": true,
+    "copyrightNotice": "Copyright (c) 2023 Nuxt",
+    "noticeReadAt": "https://github.com/nuxt/ui/blob/v4/LICENSE.md",
+    "attribution": "",
+    "notes": "CLEARED. MIT verified from nuxt/ui LICENSE.md (v4). Free and open-source. Reference / inspiration only — do not add @nuxt/ui as a shipped dependency of customer pages (ADR-0003 / UI-LIBRARIES). CLEARED FOR LAYOUT RECIPES AND FIRST-PARTY PORTS.",
+    "evidenceUrl": "https://github.com/nuxt/ui/blob/v4/LICENSE.md",
+    "install": {
+      "method": "npx",
+      "command": "npx nuxi@latest module add ui",
+      "docsUrl": "https://ui.nuxt.com/docs/getting-started/installation/nuxt",
+      "referenceDir": "reference/nuxt-ui",
+      "cloneUrl": "https://github.com/nuxt/ui.git"
+    }
+  }
+]

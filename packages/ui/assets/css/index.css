@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import './base.css';
+@import './editor-type.css';
+
+/* Tailwind v4 scans the files it is imported from. Layers live outside the app
+   directory, so their sources are declared explicitly or their classes get
+   tree-shaken away. */
+@source '../../components';
+@source '../../../blocks-nuxt/components';
+@source '../../../motion';

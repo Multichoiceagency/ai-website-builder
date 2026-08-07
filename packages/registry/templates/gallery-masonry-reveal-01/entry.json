@@ -1,0 +1,16 @@
+{
+  "id": "gallery-masonry-reveal-01",
+  "collection": "motion",
+  "component": "GalleryMasonryReveal01",
+  "exportName": "galleryMasonryReveal01",
+  "title": "Gallery — masonry reveal",
+  "description": "A column-flow gallery whose tiles rise into place as they enter the viewport. Entrance motion only, so it settles and then costs nothing.",
+  "category": "gallery",
+  "tags": ["masonry", "reveal", "scroll", "gallery"],
+  "performanceClass": "B",
+  "scores": { "performance": 92, "accessibility": 96, "mobile": 93 },
+  "dependencies": [],
+  "registryDependencies": [],
+  "preview": "Two- to four-column masonry; each tile fades and rises once, then stops.",
+  "notes": "Ships as a template rather than pre-installed so `registry add` has something real to install. Nothing here is fetched at runtime."
+}

@@ -1,0 +1,118 @@
+/* ===========================================================================
+   Motion presets.
+
+   Compositor-only: every preset animates `opacity`, `transform` or `filter`.
+   Nothing here touches width, height, margin or top/left.
+   =========================================================================== */
+
+[data-motion] {
+  --motion-duration: var(--duration-slow, 520ms);
+  --motion-delay: 0ms;
+  --motion-stagger: 80ms;
+  transition:
+    opacity var(--motion-duration) var(--ease-out-expo, ease-out) var(--motion-delay),
+    transform var(--motion-duration) var(--ease-out-expo, ease-out) var(--motion-delay),
+    filter var(--motion-duration) var(--ease-out-expo, ease-out) var(--motion-delay);
+  will-change: opacity, transform;
+}
+
+/* `will-change` is a hint, not a permanent state — drop it once settled. */
+[data-motion][data-motion-state='visible'] {
+  will-change: auto;
+}
+
+[data-motion][data-motion-state='hidden'] {
+  opacity: 0;
+}
+
+/* fade-in uses opacity alone — no transform. */
+[data-motion='fade-in'][data-motion-state='hidden'] {
+  transform: none;
+}
+
+[data-motion='fade-up'][data-motion-state='hidden'] {
+  transform: translate3d(0, 1.5rem, 0);
+}
+[data-motion='fade-down'][data-motion-state='hidden'] {
+  transform: translate3d(0, -1.5rem, 0);
+}
+[data-motion='slide-left'][data-motion-state='hidden'] {
+  transform: translate3d(2rem, 0, 0);
+}
+[data-motion='slide-right'][data-motion-state='hidden'] {
+  transform: translate3d(-2rem, 0, 0);
+}
+[data-motion='scale-in'][data-motion-state='hidden'] {
+  transform: scale3d(0.96, 0.96, 1);
+}
+[data-motion='blur-in'][data-motion-state='hidden'] {
+  filter: blur(10px);
+}
+[data-motion='hero-reveal'][data-motion-state='hidden'] {
+  transform: translate3d(0, 2.5rem, 0) scale3d(0.99, 0.99, 1);
+  filter: blur(4px);
+}
+[data-motion='product-reveal'][data-motion-state='hidden'] {
+  transform: translate3d(0, 1rem, 0) scale3d(0.94, 0.94, 1);
+}
+
+[data-motion='none'] {
+  transition: none;
+}
+[data-motion='none'][data-motion-state='hidden'] {
+  opacity: 1;
+}
+
+/* --- stagger ---------------------------------------------------------------
+   The parent stays put; direct children arrive in sequence. Twelve steps is
+   enough for any block in the registry; beyond that the last delay repeats,
+   which reads better than an item that never appears.
+   --------------------------------------------------------------------------- */
+
+[data-motion='stagger-children'][data-motion-state='hidden'] {
+  opacity: 1;
+}
+
+[data-motion='stagger-children'] > * {
+  transition:
+    opacity var(--motion-duration) var(--ease-out-expo, ease-out),
+    transform var(--motion-duration) var(--ease-out-expo, ease-out);
+}
+
+[data-motion='stagger-children'][data-motion-state='hidden'] > * {
+  opacity: 0;
+  transform: translate3d(0, 1.25rem, 0);
+}
+
+[data-motion='stagger-children'] > *:nth-child(1) { transition-delay: calc(var(--motion-delay) + 0 * var(--motion-stagger)); }
+[data-motion='stagger-children'] > *:nth-child(2) { transition-delay: calc(var(--motion-delay) + 1 * var(--motion-stagger)); }
+[data-motion='stagger-children'] > *:nth-child(3) { transition-delay: calc(var(--motion-delay) + 2 * var(--motion-stagger)); }
+[data-motion='stagger-children'] > *:nth-child(4) { transition-delay: calc(var(--motion-delay) + 3 * var(--motion-stagger)); }
+[data-motion='stagger-children'] > *:nth-child(5) { transition-delay: calc(var(--motion-delay) + 4 * var(--motion-stagger)); }
+[data-motion='stagger-children'] > *:nth-child(6) { transition-delay: calc(var(--motion-delay) + 5 * var(--motion-stagger)); }
+[data-motion='stagger-children'] > *:nth-child(7) { transition-delay: calc(var(--motion-delay) + 6 * var(--motion-stagger)); }
+[data-motion='stagger-children'] > *:nth-child(8) { transition-delay: calc(var(--motion-delay) + 7 * var(--motion-stagger)); }
+[data-motion='stagger-children'] > *:nth-child(n + 9) { transition-delay: calc(var(--motion-delay) + 8 * var(--motion-stagger)); }
+
+/* --- safety nets -----------------------------------------------------------
+   Content must never be stranded invisible. If scripting is unavailable the
+   observer never runs, and reduced-motion users should simply see the result.
+   --------------------------------------------------------------------------- */
+
+@media (scripting: none) {
+  [data-motion][data-motion-state='hidden'],
+  [data-motion='stagger-children'][data-motion-state='hidden'] > * {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-motion][data-motion-state='hidden'],
+  [data-motion='stagger-children'][data-motion-state='hidden'] > * {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}

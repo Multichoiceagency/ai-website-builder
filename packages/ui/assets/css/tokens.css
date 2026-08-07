@@ -1,0 +1,183 @@
+/* ===========================================================================
+   Design tokens.
+
+   Direction: Swiss/International — Peek faces (Figtree / Instrument Serif /
+   Rubik), a warm paper ground, one ink, one accent. Density inside tables and
+   cards, air between sections. Explicitly *not* dark-by-default: an admin tool
+   is read in daylight.
+
+   Every colour is defined here on bare `:root` first, then re-declared for
+   dark. Nothing gets its only definition inside a media query.
+   =========================================================================== */
+
+:root {
+  /* --- surfaces & ink ---------------------------------------------------- */
+  --paper: oklch(99% 0.003 95);
+  --paper-raised: oklch(100% 0 0);
+  --paper-sunken: oklch(96.8% 0.005 95);
+  --ink: oklch(23% 0.012 260);
+  --ink-soft: oklch(50% 0.014 260);
+  --ink-faint: oklch(65% 0.012 260);
+  --line: oklch(91% 0.005 95);
+  --line-strong: oklch(84% 0.008 95);
+
+  /* The canvas ground. Deliberately darker than `--paper-sunken`: a device
+     frame only reads as a frame if the surface behind it clearly recedes. */
+  --editor-canvas: oklch(90% 0.004 95);
+
+  /* --- accent & status --------------------------------------------------- */
+  --brand: oklch(55% 0.16 48);
+  --brand-hover: oklch(48% 0.16 48);
+  --brand-soft: oklch(96.5% 0.028 58);
+  --brand-ink: oklch(100% 0 0);
+  --positive: oklch(55% 0.13 152);
+  --positive-soft: oklch(96% 0.04 152);
+  --warning: oklch(68% 0.14 72);
+  --warning-soft: oklch(96% 0.05 82);
+  --danger: oklch(50% 0.2 22);
+  --danger-soft: oklch(96% 0.04 22);
+  --focus: oklch(56% 0.16 48);
+
+  /* --- elevation --------------------------------------------------------- */
+  --shadow-sm: 0 1px 2px oklch(23% 0.012 260 / 0.06);
+  --shadow-md: 0 2px 4px oklch(23% 0.012 260 / 0.05), 0 8px 20px oklch(23% 0.012 260 / 0.06);
+  --shadow-lg: 0 4px 8px oklch(23% 0.012 260 / 0.06), 0 20px 44px oklch(23% 0.012 260 / 0.1);
+
+  /* --- layering -----------------------------------------------------------
+     One ordered scale for everything that overlaps something else. Read it
+     top to bottom: each rung names what lives there and what it must cover.
+
+     A z-index picked to beat whatever is tallest today loses to whatever is
+     added tomorrow, and the bug it causes — a nav tooltip painting across an
+     open panel — is invisible until someone screenshots it. Use a token; if a
+     new surface does not fit a rung, add one here rather than inventing a
+     number at the call site.
+
+     These are plain custom properties, not `@theme` entries: Tailwind v4 has
+     no `--z-index-*` namespace, so they are consumed as `z-[var(--z-…)]`.
+     ------------------------------------------------------------------------ */
+  --z-canvas-chrome: 20;  /* section toolbars, canvas status pills */
+  --z-canvas-drag: 40;    /* drag indicators, teleported to body */
+  --z-nav-flyout: 50;     /* icon-rail tooltips and shell popovers */
+  --z-editor-panel: 60;   /* editor slide-overs — above canvas AND shell chrome */
+  --z-modal: 100;         /* UiDialog: covers everything, including a slide-over */
+
+  /* --- motion ------------------------------------------------------------ */
+  --duration-instant: 90ms;
+  --duration-fast: 160ms;
+  --duration-normal: 280ms;
+  --duration-slow: 520ms;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: oklch(17% 0.012 260);
+    --paper-raised: oklch(21% 0.014 260);
+    --paper-sunken: oklch(14% 0.012 260);
+    --ink: oklch(96% 0.006 260);
+    --ink-soft: oklch(74% 0.012 260);
+    --ink-faint: oklch(58% 0.012 260);
+    --line: oklch(28% 0.014 260);
+    --line-strong: oklch(36% 0.016 260);
+    --editor-canvas: oklch(12% 0.01 260);
+
+    /* Solid brand stays dark enough for white labels — never black-on-orange. */
+    --brand: oklch(62% 0.15 48);
+    --brand-hover: oklch(68% 0.14 48);
+    --brand-soft: oklch(29% 0.065 50);
+    --brand-ink: oklch(100% 0 0);
+    --positive: oklch(74% 0.14 152);
+    --positive-soft: oklch(26% 0.06 152);
+    --warning: oklch(80% 0.13 78);
+    --warning-soft: oklch(28% 0.06 78);
+    --danger: oklch(62% 0.18 22);
+    --danger-soft: oklch(27% 0.07 27);
+    --focus: oklch(62% 0.15 48);
+
+    --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.4);
+    --shadow-md: 0 2px 4px oklch(0% 0 0 / 0.35), 0 8px 20px oklch(0% 0 0 / 0.4);
+    --shadow-lg: 0 4px 8px oklch(0% 0 0 / 0.4), 0 20px 44px oklch(0% 0 0 / 0.5);
+  }
+}
+
+:root[data-theme='dark'] {
+  --paper: oklch(17% 0.012 260);
+  --paper-raised: oklch(21% 0.014 260);
+  --paper-sunken: oklch(14% 0.012 260);
+  --ink: oklch(96% 0.006 260);
+  --ink-soft: oklch(74% 0.012 260);
+  --ink-faint: oklch(58% 0.012 260);
+  --line: oklch(28% 0.014 260);
+  --line-strong: oklch(36% 0.016 260);
+  --editor-canvas: oklch(12% 0.01 260);
+
+  --brand: oklch(62% 0.15 48);
+  --brand-hover: oklch(68% 0.14 48);
+  --brand-soft: oklch(29% 0.065 50);
+  --brand-ink: oklch(100% 0 0);
+  --positive: oklch(74% 0.14 152);
+  --positive-soft: oklch(26% 0.06 152);
+  --warning: oklch(80% 0.13 78);
+  --warning-soft: oklch(28% 0.06 78);
+  --danger: oklch(62% 0.18 22);
+  --danger-soft: oklch(27% 0.07 27);
+  --focus: oklch(62% 0.15 48);
+
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.4);
+  --shadow-md: 0 2px 4px oklch(0% 0 0 / 0.35), 0 8px 20px oklch(0% 0 0 / 0.4);
+  --shadow-lg: 0 4px 8px oklch(0% 0 0 / 0.4), 0 20px 44px oklch(0% 0 0 / 0.5);
+}
+
+/* ---------------------------------------------------------------------------
+   Tailwind theme. Utilities point at the semantic variables above, so a theme
+   swap is a variable swap — no utility classes change.
+   --------------------------------------------------------------------------- */
+@theme inline {
+  /* Peek faces (see editor-type.css). Figtree fills the Google Sans slot. */
+  --font-sans: var(--font-google-sans);
+  --font-serif: var(--font-instrument-serif);
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', monospace;
+
+  --color-paper: var(--paper);
+  --color-raised: var(--paper-raised);
+  --color-sunken: var(--paper-sunken);
+  --color-canvas: var(--editor-canvas);
+  --color-ink: var(--ink);
+  --color-soft: var(--ink-soft);
+  --color-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --shadow-card: var(--shadow-sm);
+  --shadow-raised: var(--shadow-md);
+  --shadow-float: var(--shadow-lg);
+
+  --radius-card: 0.625rem;
+
+  /* Marketing / page-header utilities — mapped onto Peek size rungs. */
+  --text-display: var(--text-96);
+  --text-display--line-height: var(--leading-h1);
+  --text-display--letter-spacing: -0.035em;
+  --text-title: var(--text-48);
+  --text-title--line-height: var(--leading-h2);
+  --text-title--letter-spacing: -0.025em;
+  --text-heading: var(--text-20);
+  --text-heading--line-height: var(--leading-body-20);
+  --text-heading--letter-spacing: -0.015em;
+  --text-label: var(--text-12);
+  --text-label--line-height: var(--leading-caption);
+  --text-label--letter-spacing: 0.06em;
+}

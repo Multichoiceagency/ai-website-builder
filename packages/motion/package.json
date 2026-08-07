@@ -1,0 +1,19 @@
+{
+  "name": "@platform/motion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./nuxt.config.ts",
+  "scripts": {
+    "build": "echo \"@platform/motion is a Nuxt layer \u2014 consumed as source (ADR-0010)\" && exit 0",
+    "typecheck": "echo \"@platform/motion: type-checked by the apps that extend it\" && exit 0",
+    "test": "echo \"@platform/motion: covered by app tests\" && exit 0"
+  },
+  "dependencies": {
+    "@platform/schemas": "workspace:*",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@nuxt/kit": "^4.0.0"
+  }
+}

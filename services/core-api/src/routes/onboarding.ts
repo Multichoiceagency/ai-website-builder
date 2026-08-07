@@ -1,0 +1,267 @@
+import type { FastifyPluginAsync } from 'fastify'
+import { limitsForPlan } from '@platform/permissions'
+import {
+  discoveryInputSchema,
+  generationRequestSchema,
+  GENERATION_PHASE_LABELS,
+  type GenerationResult,
+} from '@platform/schemas'
+import { withTenant } from '../db/client.js'
+import { recordAuditEvent } from '../db/repositories/audit.js'
+import { upsertNavigation } from '../db/repositories/navigation.js'
+import { insertPage, publishPage } from '../db/repositories/pages.js'
+import { countSites, insertDomain, insertSite } from '../db/repositories/sites.js'
+import { discoverBusiness } from '../lib/discovery/index.js'
+import { BlockedUrlError } from '../lib/discovery/fetch.js'
+import {
+  aiGateway,
+  assessQuality,
+  ceilingForStyle,
+  composePage,
+  planSite,
+  themeFromBrand,
+} from '../lib/generation/index.js'
+import { resolveTemplate } from '../lib/generation/templates.js'
+import { buildEvent, eventBus } from '../lib/event-bus.js'
+import { BadRequestError, PlanLimitError } from '../lib/errors.js'
+import { googleConfigurationProblem, isGoogleConfigured } from '../lib/integrations/google.js'
+import { listConnections } from '../db/repositories/integrations.js'
+import { ok } from '../lib/response.js'
+import { uniqueSlug } from '../lib/slug.js'
+import { parseOrThrow } from '../lib/validate.js'
+import { requireTenant } from '../plugins/auth.js'
+
+/**
+ * Onboarding: the flow the whole product is named after.
+ *
+ *   connect a business → discover it → generate a website → preview → publish
+ *
+ * Discovery and generation are separate calls on purpose. The user sees, and
+ * can correct, what we found before anything is built from it — a generator
+ * that silently acts on bad data produces a site nobody trusts.
+ */
+const onboardingRoutes: FastifyPluginAsync = async (app) => {
+  /** What the platform can currently draw on. Honest about what is missing. */
+  app.get('/capabilities', async (request, reply) => {
+    const context = requireTenant(request, 'site:read')
+    const problem = googleConfigurationProblem()
+    const connections = await withTenant(context.tenantId, (tx) => listConnections(tx, context.tenantId))
+    const google = connections.find((entry) => entry.provider === 'google') ?? null
+
+    return reply.send(
+      ok({
+        copyProviders: aiGateway.describe(),
+        integrations: [
+          {
+            id: 'google_business_profile',
+            name: 'Google Business Profile',
+            connected: Boolean(google),
+            available: isGoogleConfigured() && !problem,
+            reason: problem
+              ?? (google
+                ? `Connected as ${google.accountLabel || 'Google account'}.`
+                : 'Ready to connect.'),
+          },
+        ],
+        phases: Object.entries(GENERATION_PHASE_LABELS).map(([id, label]) => ({ id, label })),
+      }),
+    )
+  })
+
+  /**
+   * Read the business. Crawls the company's own website, reads its structured
+   * data, and collects social profiles. Purely a read — nothing is stored.
+   */
+  app.post('/discover', async (request, reply) => {
+    const context = requireTenant(request, 'site:write')
+    const input = parseOrThrow(discoveryInputSchema, request.body, 'discovery request')
+
+    try {
+      const result = await discoverBusiness(input)
+
+      const event = buildEvent({
+        name: 'site.created',
+        tenantId: context.tenantId,
+        actor: context.actor,
+        resource: { type: 'discovery', id: input.website ?? input.businessName ?? 'manual' },
+        payload: { pagesCrawled: result.pagesCrawled, industry: result.profile.company.industry },
+      })
+      await withTenant(context.tenantId, (tx) => recordAuditEvent(tx, event))
+
+      return reply.send(ok(result))
+    } catch (error) {
+      if (error instanceof BlockedUrlError) throw new BadRequestError(error.message)
+      throw error
+    }
+  })
+
+  /**
+   * Build the website.
+   *
+   * Creates a real site, real pages made of registry blocks, and navigation —
+   * all inside one transaction. Publishing stays opt-in, because a generated
+   * site becoming public without the user looking at it is exactly the failure
+   * ADR-0007 exists to prevent.
+   */
+  app.post('/generate', async (request, reply) => {
+    const context = requireTenant(request, 'site:write')
+    const input = parseOrThrow(generationRequestSchema, request.body, 'generation request')
+    const limits = limitsForPlan(context.plan)
+
+    // Fail fast on plan limits before spending an AI call.
+    const currentSites = await withTenant(context.tenantId, (tx) => countSites(tx, context.tenantId))
+    if (currentSites >= limits.sites) {
+      throw new PlanLimitError(
+        `Your ${context.plan} plan includes ${limits.sites} site(s). Upgrade or delete a site to generate another.`,
+        { plan: context.plan, limit: limits.sites, current: currentSites },
+      )
+    }
+
+    const profile = input.profile
+    // Template preferences are applied after the style ceiling filters the pool.
+    // No templateId → first MotionSites catalogue entry with a sourcePrompt.
+    const steering = resolveTemplate(input.templateId)
+    const style = input.style === 'auto' && steering ? steering.style : input.style
+    // The style the user picked decides how heavy the sections may be.
+    const generationInput = { ...input, style, maxPerformanceClass: ceilingForStyle(style) }
+    const plan = planSite(profile, generationInput, steering)
+    const theme = themeFromBrand(profile, generationInput.style, steering)
+
+    // One copy set per site: consistent voice across every page, one AI call.
+    const copy = await aiGateway.generateCopy({
+      profile,
+      locale: plan.locale,
+      goal: 'site',
+      designBrief: steering?.brief,
+    })
+
+    const composed = plan.pages.map((page) => ({
+      page,
+      sections: composePage(page, profile, copy.slots, plan.navigation),
+    }))
+
+    const quality = assessQuality(plan, composed)
+
+    const result = await withTenant(context.tenantId, async (tx) => {
+      // Re-check inside the transaction so two concurrent generates cannot both pass.
+      const current = await countSites(tx, context.tenantId)
+      if (current >= limits.sites) {
+        throw new PlanLimitError(
+          `Your ${context.plan} plan includes ${limits.sites} site(s). Upgrade or delete a site to generate another.`,
+          { plan: context.plan, limit: limits.sites, current },
+        )
+      }
+
+      const slug = await uniqueSlug(plan.siteName, async (candidate) => {
+        const [row] = await tx<{ id: string }[]>`
+          SELECT id FROM sites WHERE tenant_id = ${context.tenantId} AND slug = ${candidate} LIMIT 1
+        `
+        return Boolean(row)
+      })
+
+      const site = await insertSite(tx, {
+        tenantId: context.tenantId,
+        name: plan.siteName,
+        slug,
+        locale: plan.locale,
+        theme,
+      })
+
+      // Primary so the shell and onboarding can open the right host immediately.
+      // Pages stay drafts unless the user opted into publish — the editor is the
+      // place to look before anything goes public (ADR-0007).
+      const previewHostname = `${slug}.localhost`
+      await insertDomain(tx, {
+        tenantId: context.tenantId,
+        siteId: site.id,
+        hostname: previewHostname,
+        isPrimary: true,
+        verified: true,
+      })
+
+      const pageIds: string[] = []
+      for (const entry of composed) {
+        const created = await insertPage(tx, {
+          tenantId: context.tenantId,
+          siteId: site.id,
+          path: entry.page.path,
+          title: entry.page.title,
+          seo: {
+            title: entry.page.goal === 'home' ? copy.slots.seoTitle : `${entry.page.title} | ${plan.siteName}`,
+            description: entry.page.description || copy.slots.seoDescription,
+            noIndex: false,
+          },
+          sections: entry.sections,
+        })
+
+        if (input.publish) await publishPage(tx, context.tenantId, created.id)
+        pageIds.push(created.id)
+      }
+
+      await upsertNavigation(tx, {
+        tenantId: context.tenantId,
+        siteId: site.id,
+        key: 'primary',
+        items: plan.navigation,
+      })
+
+      const event = buildEvent({
+        name: 'site.created',
+        tenantId: context.tenantId,
+        actor: { type: 'agent', id: copy.model, label: 'Website generator', onBehalfOfUserId: context.user.id },
+        resource: { type: 'site', id: site.id },
+        payload: {
+          pages: pageIds.length,
+          model: copy.model,
+          industry: profile.company.industry,
+          costUsd: copy.usage.costUsd,
+          published: input.publish,
+          templateId: input.templateId ?? steering?.template.id ?? null,
+        },
+      })
+      await recordAuditEvent(tx, event)
+
+      return { site, slug, previewHostname, pageIds, event }
+    })
+
+    await eventBus.publish(result.event)
+
+    const homePageId = result.pageIds[0]
+    if (!homePageId) {
+      throw new BadRequestError('Generation produced no pages.')
+    }
+
+    const payload: GenerationResult = {
+      siteId: result.site.id,
+      siteName: result.site.name,
+      siteSlug: result.slug,
+      previewHostname: result.previewHostname,
+      homePageId,
+      plan,
+      pageIds: result.pageIds,
+      quality,
+      model: copy.model,
+      published: input.publish,
+      generatedAt: new Date().toISOString(),
+    }
+
+    return reply.status(201).send(ok(payload))
+  })
+
+  /**
+   * Preview the plan without building anything — what pages we would create and
+   * which blocks each would use.
+   */
+  app.post('/plan', async (request, reply) => {
+    requireTenant(request, 'site:read')
+    const input = parseOrThrow(generationRequestSchema, request.body, 'generation request')
+    const steering = resolveTemplate(input.templateId)
+    const style = input.style === 'auto' && steering ? steering.style : input.style
+    const generationInput = { ...input, style, maxPerformanceClass: ceilingForStyle(style) }
+    return reply.send(ok(planSite(input.profile, generationInput, steering)))
+  })
+}
+
+export default onboardingRoutes
+
+

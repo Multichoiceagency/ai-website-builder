@@ -1,0 +1,16 @@
+{
+  "id": "blog-card-grid-01",
+  "collection": "showcase",
+  "component": "BlogCardGrid01",
+  "exportName": "blogCardGrid01",
+  "title": "Blog — article cards",
+  "description": "A grid of article cards with cover, category, date and reading time. Static markup, so it costs nothing above what the images cost.",
+  "category": "blog",
+  "tags": ["blog", "cards", "grid", "editorial"],
+  "performanceClass": "A",
+  "scores": { "performance": 97, "accessibility": 98, "mobile": 97 },
+  "dependencies": [],
+  "registryDependencies": [],
+  "preview": "Three-column card grid; cover image lifts and the title underlines on hover.",
+  "notes": "Ships as a template rather than pre-installed so `registry add` has something real to install. Nothing here is fetched at runtime."
+}

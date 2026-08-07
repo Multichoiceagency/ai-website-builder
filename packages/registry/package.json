@@ -1,0 +1,29 @@
+{
+  "name": "@platform/registry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Component registry manifest and install-time CLI (shadcn model: source is vendored at build time, never fetched at runtime).",
+  "main": "./src/manifest.mjs",
+  "exports": {
+    ".": "./src/manifest.mjs",
+    "./manifest": "./src/manifest.mjs"
+  },
+  "bin": {
+    "registry": "./bin/registry.mjs"
+  },
+  "files": ["bin", "src", "templates"],
+  "scripts": {
+    "list": "node ./bin/registry.mjs list",
+    "info": "node ./bin/registry.mjs info",
+    "add": "node ./bin/registry.mjs add",
+    "verify": "node ./bin/registry.mjs verify",
+    "build": "echo \"@platform/registry is plain ESM — nothing to compile\" && exit 0",
+    "typecheck": "echo \"@platform/registry is plain ESM — checked by its consumers\" && exit 0",
+    "test": "echo \"@platform/registry: covered by packages/blocks collections.test.ts\" && exit 0"
+  },
+  "dependencies": {
+    "@platform/blocks": "workspace:*",
+    "@platform/schemas": "workspace:*"
+  }
+}

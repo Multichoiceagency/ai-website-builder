@@ -1,0 +1,35 @@
+{
+  "name": "@platform/core-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --watch --import tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=../../.env dist/server.js",
+    "migrate": "node --env-file-if-exists=../../.env --import tsx src/db/migrate.ts",
+    "seed": "node --env-file-if-exists=../../.env --import tsx src/seed.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "reset": "node --env-file-if-exists=../../.env --import tsx src/db/reset.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^10.0.2",
+    "@platform/blocks": "workspace:*",
+    "@platform/permissions": "workspace:*",
+    "@platform/schemas": "workspace:*",
+    "fastify": "^5.2.1",
+    "fastify-plugin": "^5.0.1",
+    "postgres": "^3.4.5",
+    "zod": "^3.25.76",
+    "node-html-parser": "^7.0.1",
+    "@platform/templates": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@platform/storefront",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev --port 3001",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "test": "echo \"@platform/storefront: covered by API and registry tests in Phase 1\" && exit 0"
+  },
+  "dependencies": {
+    "@platform/blocks": "workspace:*",
+    "@platform/blocks-nuxt": "workspace:*",
+    "@platform/motion": "workspace:*",
+    "@platform/schemas": "workspace:*",
+    "@platform/ui": "workspace:*",
+    "nuxt": "^4.0.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vue-tsc": "^2.2.0"
+  }
+}

@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  verify:
+    name: Build, typecheck and test
+    runs-on: ubuntu-latest
+
+    # Ephemeral database for the run. Credentials come from repository secrets
+    # rather than being written into this file — see docs/LOCAL-DEVELOPMENT.md.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: platform
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+      APP_DB_USER: app_user
+      APP_DB_PASSWORD: ${{ secrets.CI_APP_DB_PASSWORD }}
+      SESSION_SECRET: ${{ secrets.CI_SESSION_SECRET }}
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The runtime role must not be the table owner, or row-level security is
+      # never exercised and the isolation tests would pass for the wrong reason.
+      - name: Create the RLS-constrained application role
+        run: |
+          PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U postgres -d platform -v ON_ERROR_STOP=1 \
+            -v app_user="$APP_DB_USER" -v app_password="$APP_DB_PASSWORD" -v db_name="$POSTGRES_DB" <<'SQL'
+          SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'app_user', :'app_password')
+          WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_user')
+          \gexec
+          GRANT CONNECT ON DATABASE :"db_name" TO :"app_user";
+          GRANT USAGE ON SCHEMA public TO :"app_user";
+          SQL
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run migrations
+        run: pnpm db:migrate
+
+      - name: Test
+        run: pnpm test
+
+  guardrails:
+    name: Secret and boundary checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A committed .env is the single most common way credentials leak.
+      - name: Refuse committed environment files
+        run: |
+          if git ls-files --error-unmatch '.env' '**/.env' '.env.*' ':!:.env.example' 2>/dev/null; then
+            echo "::error::An environment file is tracked by git. Remove it with 'git rm --cached' and rotate the secrets."
+            exit 1
+          fi
+          echo "no tracked .env files"
+
+      # Enforces ADR-0006: a vendor SDK may only be imported by its adapter.
+      # The list grows as adapters land in later phases.
+      - name: Check adapter boundaries
+        run: |
+          violations=$(grep -rlE "from '(medusa|@medusajs|stripe|googleapis|@anthropic-ai|openai)" \
+            --include='*.ts' --include='*.vue' apps packages services 2>/dev/null \
+            | grep -v '/adapters/' || true)
+          if [ -n "$violations" ]; then
+            echo "::error::Vendor SDKs imported outside an adapter (ADR-0006):"
+            echo "$violations"
+            exit 1
+          fi
+          echo "no vendor SDK leakage"

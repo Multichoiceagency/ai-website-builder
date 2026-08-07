@@ -1,0 +1,76 @@
+import { z } from 'zod'
+
+/**
+ * Configuration is validated once, at boot. A service that starts with a
+ * missing secret and fails on the first request is worse than one that refuses
+ * to start at all.
+ *
+ * Values come from the environment only — never from a committed file.
+ */
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+
+  POSTGRES_HOST: z.string().min(1).default('localhost'),
+  POSTGRES_PORT: z.coerce.number().int().min(1).max(65535).default(5433),
+  POSTGRES_DB: z.string().min(1).default('platform'),
+
+  /** Owner role. Migrations only — it is the table owner and bypasses RLS. */
+  POSTGRES_USER: z.string().min(1).default('postgres'),
+  POSTGRES_PASSWORD: z.string().min(1),
+
+  /** Runtime role. RLS is enforced against it. See ADR-0004. */
+  APP_DB_USER: z.string().min(1).default('app_user'),
+  APP_DB_PASSWORD: z.string().min(1),
+
+  CORE_API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+  CORE_API_HOST: z.string().default('0.0.0.0'),
+
+  SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
+  SESSION_TTL_SECONDS: z.coerce.number().int().min(300).default(604_800),
+  SESSION_COOKIE_NAME: z.string().default('platform_session'),
+
+  /**
+   * Which Gemini model the AI gateway asks for. Optional: absent means the
+   * provider's own default. Validated here only so that an empty or blank
+   * setting is refused at boot instead of silently meaning "default" — the
+   * provider reads it from the environment at call time, like the API keys.
+   */
+  GEMINI_MODEL: z.string().trim().min(1).optional(),
+
+  // Optional: absent means "Google is not connected on this installation",
+  // which the capabilities endpoint reports rather than crashing the service.
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: z
+    .string()
+    .url()
+    .default('http://localhost:4000/api/v1/integrations/google/callback'),
+
+  CORS_ORIGINS: z
+    .string()
+    .default('http://localhost:3000,http://localhost:3001,http://localhost:3002')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ),
+})
+
+function loadEnv() {
+  const parsed = envSchema.safeParse(process.env)
+  if (!parsed.success) {
+    const problems = parsed.error.issues
+      .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
+      .join('\n')
+    // Names only. Never log values — see the global logging rule.
+    throw new Error(`Invalid environment configuration:\n${problems}\n\nCopy .env.example to .env and fill it in.`)
+  }
+  return parsed.data
+}
+
+export const env = loadEnv()
+
+export const isProduction = env.NODE_ENV === 'production'
+export const isTest = env.NODE_ENV === 'test'

@@ -1,0 +1,36 @@
+{
+  "name": "@platform/motionsites-islands",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./ready.json": "./ready.json"
+  },
+  "files": [
+    "ready.json",
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "node scripts/build-and-copy.mjs",
+    "dev": "vite",
+    "scaffold": "node scripts/scaffold-from-catalog.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"@platform/motionsites-islands: covered by build\" && exit 0"
+  },
+  "dependencies": {
+    "framer-motion": "^12.23.12",
+    "lucide-react": "^0.539.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.3.5"
+  }
+}

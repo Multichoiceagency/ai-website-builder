@@ -1,0 +1,6 @@
+{
+  // Nuxt generates the real configuration (paths, auto-import types, module
+  // augmentations) into .nuxt on `nuxt prepare`. This file only points at it,
+  // so `vue-tsc` and editors resolve the same graph the build does.
+  "extends": "./.nuxt/tsconfig.json"
+}
