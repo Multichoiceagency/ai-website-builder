@@ -20,7 +20,11 @@ RUN pnpm --filter @platform/schemas build \
  && pnpm --filter @platform/storefront build
 
 FROM node:22-bookworm-slim AS runner
-RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
+# curl: Coolify HTTP healthchecks expect it in the image
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/* \
+ && corepack enable && corepack prepare pnpm@11.17.0 --activate
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NUXT_TELEMETRY_DISABLED=1
@@ -29,4 +33,6 @@ ENV PORT=3001
 COPY --from=build /app /app
 WORKDIR /app/apps/storefront
 EXPOSE 3001
+HEALTHCHECK --interval=10s --timeout=5s --start-period=40s --retries=6 \
+  CMD curl -fsS "http://127.0.0.1:3001/" >/dev/null || exit 1
 CMD ["node", ".output/server/index.mjs"]

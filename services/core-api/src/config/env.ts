@@ -6,7 +6,16 @@ import { z } from 'zod'
  * to start at all.
  *
  * Values come from the environment only — never from a committed file.
+ *
+ * Coolify (and similar hosts) often inject optional keys as empty strings.
+ * Treat blank values as absent so optional fields stay optional.
  */
+const emptyToUndefined = (value: unknown) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value
+
+const optionalNonEmpty = z.preprocess(emptyToUndefined, z.string().min(1).optional())
+const optionalUrl = z.preprocess(emptyToUndefined, z.string().url().optional())
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -36,34 +45,31 @@ const envSchema = z.object({
    * setting is refused at boot instead of silently meaning "default" — the
    * provider reads it from the environment at call time, like the API keys.
    */
-  GEMINI_MODEL: z.string().trim().min(1).optional(),
+  GEMINI_MODEL: optionalNonEmpty,
 
   /** Places (New), Geocoding, PageSpeed — platform API key, not OAuth. */
-  GOOGLE_API_KEY: z.string().min(1).optional(),
+  GOOGLE_API_KEY: optionalNonEmpty,
 
   // Optional WhatsApp gateway (OpenWA). Absent = support desk UI works, send/AI disabled.
-  OPENWA_BASE_URL: z.string().url().optional(),
-  OPENWA_API_KEY: z.string().min(1).optional(),
-  OPENWA_WEBHOOK_SECRET: z.string().min(1).optional(),
+  OPENWA_BASE_URL: optionalUrl,
+  OPENWA_API_KEY: optionalNonEmpty,
+  OPENWA_WEBHOOK_SECRET: optionalNonEmpty,
 
   // Optional: absent means "Google is not connected on this installation",
   // which the capabilities endpoint reports rather than crashing the service.
-  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
-  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CLIENT_ID: optionalNonEmpty,
+  GOOGLE_CLIENT_SECRET: optionalNonEmpty,
   GOOGLE_OAUTH_REDIRECT_URI: z
     .string()
     .url()
     .default('http://localhost:4000/api/v1/integrations/google/callback'),
   /** Sign-In / Sign-Up with Google (dashboard auth). Separate from integrations. */
-  GOOGLE_AUTH_REDIRECT_URI: z
-    .string()
-    .url()
-    .optional(),
+  GOOGLE_AUTH_REDIRECT_URI: optionalUrl,
 
   /** Self-hosted or cloud Nango (OAuth broker). Absent = legacy Google PKCE path. */
-  NANGO_SECRET_KEY: z.string().min(1).optional(),
+  NANGO_SECRET_KEY: optionalNonEmpty,
   NANGO_HOST: z.string().url().default('http://localhost:3003'),
-  NANGO_WEBHOOK_SECRET: z.string().min(1).optional(),
+  NANGO_WEBHOOK_SECRET: optionalNonEmpty,
   /** Integration id configured in the Nango UI for Google (Business / GSC / GA). */
   NANGO_GOOGLE_INTEGRATION_ID: z.string().min(1).default('google'),
 
