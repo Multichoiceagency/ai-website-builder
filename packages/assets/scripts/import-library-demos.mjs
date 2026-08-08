@@ -74,7 +74,7 @@
  * cannot yet depend on `@platform/assets`, and a compiled-in catalogue beats a
  * runtime fetch. Delete it and import the package once that dependency exists.
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createSection, getBlock, PERFORMANCE_CLASS_ORDER } from '@platform/blocks'
@@ -173,6 +173,10 @@ function derivePerformanceClass(sections) {
 function main() {
   const register = JSON.parse(readFileSync(SOURCES_IN, 'utf8'))
   const demos = JSON.parse(readFileSync(DEMOS_IN, 'utf8'))
+  const generatedDemos = readdirSync(here)
+    .filter((file) => file.endsWith('-demos.generated.json'))
+    .flatMap((file) => JSON.parse(readFileSync(join(here, file), 'utf8')))
+  const allDemos = [...demos, ...generatedDemos]
 
   const sourceById = new Map(register.map((entry) => [entry.library, entry]))
 
@@ -180,7 +184,7 @@ function main() {
   const refused = []
   const skipped = []
 
-  for (const demo of demos) {
+  for (const demo of allDemos) {
     const source = sourceById.get(demo.library)
 
     // A demo whose source is not in the register is refused, not assumed
@@ -292,7 +296,7 @@ function main() {
   console.log(`sources in register: ${register.length}`)
   console.log(`  importable:        ${register.filter((s) => s.importable).length}`)
   console.log(`  refused:           ${register.filter((s) => !s.importable).map((s) => `${s.library}(${s.licence})`).join(' ') || '—'}`)
-  console.log(`demos considered:    ${demos.length}`)
+  console.log(`demos considered:    ${allDemos.length}`)
   console.log(`presets emitted:     ${presets.length}`)
   for (const note of refused) console.log(`   refused · ${note}`)
   for (const note of skipped) console.log(`   note    · ${note}`)

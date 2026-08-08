@@ -1,0 +1,244 @@
+[
+  {
+    "id": "ss-landing-atomist",
+    "library": "Shadcn Space",
+    "demo": "landing-atomist",
+    "name": "Atomist - SaaS Landing Page Template (Next.js & Astro)",
+    "description": "Atomist is a modern SaaS landing page template built with Next.js & Astro, Tailwind CSS, TypeScript, and shadcn/ui. Fast, minimal, and optimized for conversions.",
+    "collection": "conversion",
+    "tags": [
+      "atomist",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-cover-statement-01",
+      "features-grid-01",
+      "stats-counter-01",
+      "pricing-toggle-01",
+      "testimonials-card-stack-01",
+      "faq-accordion-01",
+      "cta-animated-border-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-landing-awake",
+    "library": "Shadcn Space",
+    "demo": "landing-awake",
+    "name": "Awake – Agency & Portfolio Template (Next.js & Astro)",
+    "description": "Modern agency and portfolio template available in both Next.js and Astro versions. Built with Tailwind CSS and shadcn/ui. Fast, clean, and SEO-ready.",
+    "collection": "conversion",
+    "tags": [
+      "awake",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-cover-statement-01",
+      "features-grid-01",
+      "gallery-compare-slider-01",
+      "testimonials-card-stack-01",
+      "about-scroll-story-01",
+      "cta-animated-border-01",
+      "contact-details-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-landing-crypgo",
+    "library": "Shadcn Space",
+    "demo": "landing-crypgo",
+    "name": "Crypgo - Shadcn UI Crypto Landing Page Template ( Next.js & Astro )",
+    "description": "Free Crypgo landing page template available in Next.js and Astro versions. Built with Shadcn UI and Tailwind - developer-friendly, responsive, SEO optimized, and ready to customize for crypto, SaaS & Web3 projects.",
+    "collection": "conversion",
+    "tags": [
+      "crypgo",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-asymmetric-01",
+      "features-bento-grid-01",
+      "stats-counter-01",
+      "testimonials-card-stack-01",
+      "pricing-toggle-01",
+      "cta-banner-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-landing-digital-arc",
+    "library": "Shadcn Space",
+    "demo": "landing-digital-arc",
+    "name": "Digital Arc – Creative Agency & Portfolio (Next.js & Astro)",
+    "description": "Creative agency and portfolio template available in both Next.js and Astro versions. Fast, responsive, and perfect for design studios or freelance portfolios.",
+    "collection": "conversion",
+    "tags": [
+      "digital-arc",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-split-screen-01",
+      "gallery-tilt-cards-01",
+      "features-bento-grid-01",
+      "testimonials-card-stack-01",
+      "cta-animated-border-01",
+      "contact-details-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-landing-gleamer",
+    "library": "Shadcn Space",
+    "demo": "landing-gleamer",
+    "name": "Gleamer – Next.js Cleaning Service Website Template",
+    "description": "Gleamer is a professional Next.js cleaning website template with Tailwind CSS, TypeScript, and reusable components. Fast, responsive, and easy to customize.",
+    "collection": "conversion",
+    "tags": [
+      "gleamer",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-cover-statement-01",
+      "features-grid-01",
+      "about-scroll-story-01",
+      "testimonials-card-stack-01",
+      "faq-reveal-accordion-01",
+      "cta-animated-border-01",
+      "contact-details-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-landing-homely",
+    "library": "Shadcn Space",
+    "demo": "landing-homely",
+    "name": "Homely – Next.js Real Estate Website Template",
+    "description": "Modern real estate website template built with Next.js, Tailwind CSS, and shadcn/ui. Fast, scalable, SEO-ready, and fully customizable.",
+    "collection": "conversion",
+    "tags": [
+      "homely",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-agency-proof-01",
+      "gallery-tilt-cards-01",
+      "features-bento-grid-01",
+      "testimonials-card-stack-01",
+      "faq-reveal-accordion-01",
+      "cta-animated-border-01",
+      "contact-details-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-landing-resume",
+    "library": "Shadcn Space",
+    "demo": "landing-resume",
+    "name": "Resume - Shadcn UI Resume and Portfolio Template",
+    "description": "Free Resume NextJS Template with Tailwind CSS and Shadcn UI - modern, responsive, fast, and easy to personalize for your online professional profile.",
+    "collection": "conversion",
+    "tags": [
+      "resume",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-cover-statement-01",
+      "about-scroll-story-01",
+      "features-grid-01",
+      "gallery-compare-slider-01",
+      "cta-animated-border-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-landing-saazio",
+    "library": "Shadcn Space",
+    "demo": "landing-saazio",
+    "name": "Saazio - Next.js SaaS Template Built with React, Shadcn UI & Tailwind CSS",
+    "description": "Explore Saazio, a responsive SaaS template built with Next.js, React, Tailwind CSS, TypeScript, and shadcn/ui. Perfect for startups, AI tools, software products, and SaaS businesses.",
+    "collection": "conversion",
+    "tags": [
+      "saazio",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-cover-statement-01",
+      "features-grid-01",
+      "about-scroll-story-01",
+      "testimonials-card-stack-01",
+      "cta-animated-border-01",
+      "contact-details-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-landing-studiova",
+    "library": "Shadcn Space",
+    "demo": "landing-studiova",
+    "name": "Studiova – Creative Agency Template (Next.js & Astro)",
+    "description": "Creative agency template available in both Next.js and Astro versions. Built with Tailwind CSS and shadcn/ui. Fast, modern, and developer-friendly.",
+    "collection": "conversion",
+    "tags": [
+      "studiova",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-agency-proof-01",
+      "gallery-tilt-cards-01",
+      "features-bento-grid-01",
+      "testimonials-card-stack-01",
+      "cta-animated-border-01",
+      "contact-details-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-landing-typefolio",
+    "library": "Shadcn Space",
+    "demo": "landing-typefolio",
+    "name": "Typefolio - Shadcn UI Personal Portfolio Template",
+    "description": "Free Typefolio NextJS portfolio template built with Shadcn UI & Tailwind CSS - clean, minimal, SEO-friendly, and perfect for developers, designers & creatives.",
+    "collection": "conversion",
+    "tags": [
+      "typefolio",
+      "landing",
+      "shadcn-space",
+      "free",
+      "full-page"
+    ],
+    "blocks": [
+      "hero-centered-01",
+      "about-scroll-story-01",
+      "gallery-compare-slider-01",
+      "features-brutalist-grid-01",
+      "cta-high-contrast-01"
+    ],
+    "derivation": "layout-observed"
+  }
+]

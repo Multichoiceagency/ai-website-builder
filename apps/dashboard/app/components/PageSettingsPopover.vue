@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { ContentQualityReport, Page, Section, Seo, SeoPageScore } from '@platform/schemas'
+import type {
+  ContentQualityReport,
+  ContentWidthPreset,
+  Page,
+  Section,
+  Seo,
+  SeoPageScore,
+  Theme,
+} from '@platform/schemas'
+import { CONTENT_WIDTH_PRESETS } from '@platform/schemas'
 import { AlignLeft } from '@lucide/vue'
 
 /**
  * Page settings, in the editor's top bar.
  *
- * Title, search description and the page's SEO fields belong together and
- * belong next to the canvas controls: they describe the thing on screen, not
- * the section you happen to have selected. The score beside them is the point —
- * it turns "did I write a good description" from a guess into a number, and it
- * scores the *unsaved* draft, so it answers while you are still typing.
+ * Title, search description, SEO fields and the site content-width measure
+ * belong together next to the canvas controls: they describe the thing on
+ * screen, not the section you happen to have selected.
  *
  * Self-contained: it owns nothing. The page, the working title, the working SEO
  * and the working document come in as props; every change goes out as an event.
@@ -28,12 +35,15 @@ const props = withDefaults(
     seo?: Seo
     /** Working document, so the score reflects sections added since the last save. */
     sections?: Section[]
+    /** Live site theme — content width writes back via `update:theme`. */
+    theme?: Theme | null
     /** Disables every control — pass `!can('page:write')`. */
     disabled?: boolean
   }>(),
   {
     seo: () => ({ noIndex: false }),
     sections: () => [],
+    theme: null,
     disabled: false,
   },
 )
@@ -41,6 +51,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   'update:title': [value: string]
   'update:seo': [value: Seo]
+  'update:theme': [theme: Theme]
 }>()
 
 const api = useApi()
@@ -95,8 +106,50 @@ const issues = computed(() =>
 
 const SEVERITY_TONE = { critical: 'danger', warning: 'warning', info: 'neutral' } as const
 
+const CONTENT_WIDTH_OPTIONS = CONTENT_WIDTH_PRESETS.map((value) => ({
+  value,
+  label: value === 'full' ? 'Full' : value === 'custom' ? 'Custom' : `${value}px`,
+  icon: value === 'full' ? 'align-center' : 'align-left',
+}))
+
+const contentWidth = computed<ContentWidthPreset>(() => props.theme?.contentWidth ?? 'full')
+const contentWidthPx = computed(() => props.theme?.contentWidthPx ?? 1600)
+
 function setSeo(patch: Partial<Seo>) {
   emit('update:seo', { ...seo.value, ...patch })
+}
+
+function setContentWidth(value: string | string[]) {
+  if (!props.theme || props.disabled) return
+  const preset = (Array.isArray(value) ? value[0] : value) as ContentWidthPreset
+  if (!CONTENT_WIDTH_PRESETS.includes(preset)) return
+  if (preset === 'custom') {
+    emit('update:theme', {
+      ...props.theme,
+      contentWidth: 'custom',
+      contentWidthPx: props.theme.contentWidthPx ?? 1600,
+      presetId: null,
+    })
+    return
+  }
+  emit('update:theme', {
+    ...props.theme,
+    contentWidth: preset,
+    contentWidthPx: null,
+    presetId: null,
+  })
+}
+
+function setCustomPx(raw: string) {
+  if (!props.theme || props.disabled) return
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n)) return
+  emit('update:theme', {
+    ...props.theme,
+    contentWidth: 'custom',
+    contentWidthPx: Math.min(2400, Math.max(320, n)),
+    presetId: null,
+  })
 }
 
 /** Toggle is a pure open-state flip — never gated on score success. */
@@ -244,6 +297,36 @@ onBeforeUnmount(() => {
           >
             Description {{ description.length }}/{{ DESCRIPTION_MAX }}
           </span>
+        </div>
+
+        <div v-if="theme" class="flex flex-col gap-2 border-t border-line pt-3">
+          <UiOptionGrid
+            label="Layout / content width"
+            :options="CONTENT_WIDTH_OPTIONS"
+            :columns="3"
+            :model-value="contentWidth"
+            @update:model-value="setContentWidth"
+          />
+          <p class="type-caption-12 text-faint">
+            Site-wide measure. Sections set to Wide follow it; Motionsites stay full-bleed.
+          </p>
+          <UiField
+            v-if="contentWidth === 'custom'"
+            v-slot="{ id, describedBy }"
+            label="Custom width (px)"
+            help="320–2400"
+          >
+            <UiInput
+              :id="id"
+              type="number"
+              :model-value="String(contentWidthPx)"
+              :described-by="describedBy"
+              :disabled="disabled"
+              min="320"
+              max="2400"
+              @update:model-value="setCustomPx($event)"
+            />
+          </UiField>
         </div>
 
         <button

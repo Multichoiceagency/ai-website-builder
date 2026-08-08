@@ -30,12 +30,24 @@ const tags = ref('')
 
 const usage = ref<MediaUsage | null>(null)
 const busy = ref(false)
+const frameBusy = ref(false)
 const error = ref('')
 const copied = ref(false)
 const replaceInput = ref<HTMLInputElement | null>(null)
 
 const absoluteUrl = computed(() => `${config.public.coreApiUrl}${props.asset.url}`)
 const downloadUrl = computed(() => `${config.public.coreApiUrl}${props.asset.url}?download=true`)
+
+const framePreviewIndexes = computed(() => {
+  const count = props.asset.frameCount
+  if (count <= 0) return [] as number[]
+  if (count <= 6) return Array.from({ length: count }, (_, i) => i)
+  return [0, Math.floor(count * 0.25), Math.floor(count * 0.5), Math.floor(count * 0.75), count - 1]
+})
+
+function frameSrc(index: number): string {
+  return `${config.public.coreApiUrl}${props.asset.url}/frames/${index}.jpg`
+}
 
 /**
  * There is no resizing pipeline, so a thumbnail is the original file scaled by
@@ -129,6 +141,29 @@ async function copyUrl() {
   }
 }
 
+async function rebuildFrames() {
+  frameBusy.value = true
+  error.value = ''
+  try {
+    const result = await api.post<{ asset: MediaAsset }>(
+      `/api/v1/content/media/${props.asset.id}/frames/rebuild`,
+      {},
+    )
+    if (!result?.asset) {
+      error.value = 'Rebuild returned no asset.'
+      return
+    }
+    emit('updated', result.asset)
+    if (result.asset.frameStatus === 'failed') {
+      error.value = result.asset.frameError || 'Frame extract failed.'
+    }
+  } catch (caught) {
+    error.value = caught instanceof ApiError ? caught.message : 'Could not rebuild scroll frames.'
+  } finally {
+    frameBusy.value = false
+  }
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
@@ -208,6 +243,51 @@ function formatBytes(bytes: number): string {
       Served at its original size — this platform does not generate smaller versions yet, so a large file is a
       large download on every page that shows it.
     </p>
+
+    <section
+      v-if="asset.mime.startsWith('video/')"
+      class="rounded-lg border border-line bg-sunken/40 px-3 py-3"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="text-[0.8125rem] font-semibold text-ink">Scroll frames</h3>
+        <UiBadge
+          :tone="asset.frameStatus === 'ready' ? 'positive' : asset.frameStatus === 'failed' ? 'danger' : 'neutral'"
+        >
+          <template v-if="asset.frameStatus === 'ready'">Ready ({{ asset.frameCount }})</template>
+          <template v-else-if="asset.frameStatus === 'pending'">Preparing…</template>
+          <template v-else-if="asset.frameStatus === 'failed'">Failed</template>
+          <template v-else>Not started</template>
+        </UiBadge>
+      </div>
+      <p class="mt-1 text-[0.75rem] leading-relaxed text-soft">
+        JPEG frame pack for scroll-scrub (~24&nbsp;fps, max&nbsp;120 frames from the first&nbsp;5s at ≤960px —
+        industry range for image-sequence scrub is ~90–150 frames).
+      </p>
+      <p v-if="asset.frameError" class="mt-2 text-[0.75rem] text-danger" role="alert">{{ asset.frameError }}</p>
+      <div
+        v-if="asset.frameStatus === 'ready' && asset.frameCount > 0"
+        class="mt-3 flex gap-1.5 overflow-x-auto pb-1"
+      >
+        <img
+          v-for="index in framePreviewIndexes"
+          :key="index"
+          :src="frameSrc(index)"
+          alt=""
+          class="h-14 w-20 shrink-0 rounded border border-line object-cover"
+          loading="lazy"
+        />
+      </div>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <UiButton
+          v-if="can('media:write')"
+          size="sm"
+          :loading="frameBusy"
+          @click="rebuildFrames"
+        >
+          {{ asset.frameStatus === 'ready' ? 'Rebuild frames' : 'Retry frames' }}
+        </UiButton>
+      </div>
+    </section>
 
     <div class="flex flex-wrap gap-2">
       <UiButton size="sm" @click="copyUrl">{{ copied ? 'Copied' : 'Copy URL' }}</UiButton>

@@ -62,6 +62,10 @@ import {
 /**
  * Medusa, behind the platform's commerce contract (ADR-0006).
  *
+ * **Postgres is the default commerce provider.** Set `MEDUSA_URL` (and usually
+ * `MEDUSA_API_KEY`) to use this adapter instead. Without those env vars the
+ * platform provider handles commerce and this class is never selected.
+ *
  * **This directory is the only place in the platform that knows Medusa exists.**
  * `handle`, `variants[].prices[]`, `thumbnail`, `display_id`, the `/admin` and
  * `/store` split, `x-medusa-access-token`, Medusa's decimal amounts — all of it
@@ -71,6 +75,12 @@ import {
  * There is deliberately no Medusa SDK dependency. An SDK would drag Medusa's
  * type system into the build, and the first time it appeared in an import
  * outside this directory the abstraction would already be lost.
+ *
+ * Unsupported on this adapter (throws `CommerceUnsupportedError`):
+ *   - inventory locations (create / list)
+ *   - per-location inventory get / set
+ *   - discount CRUD (create / list / update / delete)
+ *   - shipping-rate configuration (create / list / delete)
  *
  * Where Medusa's model genuinely differs from ours — its inventory module, its
  * shipping options, its promotion engine — the method says so with
@@ -94,7 +104,7 @@ export class MedusaCommerceProvider implements CommerceProvider {
       capabilities: ['products', 'collections', 'carts', 'orders', 'customers'],
       reason: this.#baseUrl
         ? null
-        : 'MEDUSA_URL is not set on this installation; the platform provider is handling commerce.',
+        : 'Medusa is not connected on this installation; the platform commerce engine is handling this store.',
     }
   }
 
@@ -480,7 +490,11 @@ export class MedusaCommerceProvider implements CommerceProvider {
     init: RequestInit & { allowNotFound?: boolean } = {},
   ): Promise<T> {
     if (!this.#baseUrl) {
-      throw new CommerceUnconfiguredError(this.id, 'MEDUSA_URL is not set.')
+      console.warn('[medusa] Refusing request: MEDUSA_URL is not set.')
+      throw new CommerceUnconfiguredError(
+        this.id,
+        'Medusa is not connected — the platform commerce engine should be used instead.',
+      )
     }
 
     const response = await fetch(`${this.#baseUrl}${path}`, {

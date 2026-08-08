@@ -52,6 +52,7 @@ export const BLOCK_CATEGORIES = [
   'stats',
   'gallery',
   'pricing',
+  'product',
   'faq',
   'cta',
   'contact',
@@ -86,7 +87,7 @@ export type BlockScores = z.infer<typeof blockScoresSchema>
 const leafFieldSchema = z.object({
   key: z.string(),
   label: z.string(),
-  type: z.enum(['text', 'textarea', 'url', 'image', 'boolean', 'number', 'select', 'icon']),
+  type: z.enum(['text', 'textarea', 'url', 'image', 'media', 'boolean', 'number', 'select', 'icon']),
   help: z.string().optional(),
   placeholder: z.string().optional(),
   options: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
@@ -98,7 +99,7 @@ const leafFieldSchema = z.object({
  * simple as the registry grows.
  */
 export const blockFieldSchema = leafFieldSchema.extend({
-  type: z.enum(['text', 'textarea', 'url', 'image', 'boolean', 'number', 'select', 'items', 'icon']),
+  type: z.enum(['text', 'textarea', 'url', 'image', 'media', 'boolean', 'number', 'select', 'items', 'icon']),
   /** For `items`: the shape of one repeatable entry. */
   itemFields: z.array(leafFieldSchema).optional(),
   itemLabel: z.string().optional(),
@@ -168,9 +169,30 @@ export const SECTION_STYLE_TEXTS = ['ink', 'muted', 'on-primary'] as const
 export const sectionStyleTextSchema = z.union([sectionHexSchema, z.enum(SECTION_STYLE_TEXTS)])
 export type SectionStyleText = z.infer<typeof sectionStyleTextSchema>
 
+export const SECTION_STYLE_PADDINGS = ['sm', 'md', 'lg', 'xl'] as const
+export const sectionStylePaddingSchema = z.enum(SECTION_STYLE_PADDINGS)
+export type SectionStylePadding = z.infer<typeof sectionStylePaddingSchema>
+
+/** Content measure presets — px tokens match assistant `setContentWidth` actions. */
+export const SECTION_STYLE_MAX_WIDTHS = ['content', 'wide', 'full', '1280', '1440', '1600'] as const
+export const sectionStyleMaxWidthSchema = z.enum(SECTION_STYLE_MAX_WIDTHS)
+export type SectionStyleMaxWidth = z.infer<typeof sectionStyleMaxWidthSchema>
+
+export const SECTION_STYLE_ALIGNS = ['start', 'center', 'end'] as const
+export const sectionStyleAlignSchema = z.enum(SECTION_STYLE_ALIGNS)
+export type SectionStyleAlign = z.infer<typeof sectionStyleAlignSchema>
+
+export const SECTION_STYLE_GAPS = ['sm', 'md', 'lg'] as const
+export const sectionStyleGapSchema = z.enum(SECTION_STYLE_GAPS)
+export type SectionStyleGap = z.infer<typeof sectionStyleGapSchema>
+
+export const SECTION_STYLE_TYPE_SCALES = ['sm', 'md', 'lg'] as const
+export const sectionStyleTypeScaleSchema = z.enum(SECTION_STYLE_TYPE_SCALES)
+export type SectionStyleTypeScale = z.infer<typeof sectionStyleTypeScaleSchema>
+
 /**
  * Per-section visual overrides. Applied as CSS variables on the section wrapper
- * so every block inherits colour and scale without per-block rewrites.
+ * so every block inherits colour, layout, and type without per-block rewrites.
  *
  * `scale` defaults to `md` at render time when omitted. Colour fields accept a
  * theme token or a raw `#rrggbb` hex; `accent: null` clears an override.
@@ -180,6 +202,22 @@ export const sectionStyleSchema = z.object({
   background: sectionStyleBackgroundSchema.optional(),
   text: sectionStyleTextSchema.optional(),
   accent: sectionHexSchema.nullable().optional(),
+  /** Vertical padding band for the section shell. */
+  paddingY: sectionStylePaddingSchema.optional(),
+  /** Horizontal padding band for the section shell. */
+  paddingX: sectionStylePaddingSchema.optional(),
+  /** Content measure: reading column, site wide token, px presets, or full-bleed. */
+  maxWidth: sectionStyleMaxWidthSchema.optional(),
+  /** Horizontal alignment of the content cluster. */
+  align: sectionStyleAlignSchema.optional(),
+  /** Internal stack gap hint for multi-block bands. */
+  gap: sectionStyleGapSchema.optional(),
+  /** Optional Google Font family for headings in this section. */
+  fontHeading: z.string().min(1).max(80).optional(),
+  /** Optional Google Font family for body copy in this section. */
+  fontBody: z.string().min(1).max(80).optional(),
+  /** Local type density (independent of layout `scale` zoom). */
+  typeScale: sectionStyleTypeScaleSchema.optional(),
 })
 export type SectionStyle = z.infer<typeof sectionStyleSchema>
 
@@ -189,6 +227,47 @@ export const SECTION_STYLE_SCALE_FACTORS: Record<SectionStyleScale, number> = {
   md: 1,
   lg: 1.15,
   xl: 1.3,
+}
+
+const SECTION_PAD_Y: Record<SectionStylePadding, string> = {
+  sm: '2.5rem',
+  md: '4rem',
+  lg: '6rem',
+  xl: '8rem',
+}
+
+const SECTION_PAD_X: Record<SectionStylePadding, string> = {
+  sm: '1rem',
+  md: '1.5rem',
+  lg: '2rem',
+  xl: '3rem',
+}
+
+const SECTION_MAX_WIDTH: Record<SectionStyleMaxWidth, string> = {
+  content: '42rem',
+  /** Follows site theme `contentWidth` via `--site-content-width`. */
+  wide: 'min(100%, var(--site-content-width, 72rem))',
+  full: '100%',
+  '1280': '1280px',
+  '1440': '1440px',
+  '1600': '1600px',
+}
+
+/** Resolve a section max-width token to a CSS length. */
+export function resolveSectionMaxWidthCss(maxWidth: SectionStyleMaxWidth): string {
+  return SECTION_MAX_WIDTH[maxWidth]
+}
+
+const SECTION_GAP: Record<SectionStyleGap, string> = {
+  sm: '0.75rem',
+  md: '1.25rem',
+  lg: '2rem',
+}
+
+const SECTION_TYPE_SCALE: Record<SectionStyleTypeScale, string> = {
+  sm: '0.92',
+  md: '1',
+  lg: '1.08',
 }
 
 /**
@@ -204,6 +283,41 @@ export function sectionStyleToCssVars(style?: SectionStyle | null): Record<strin
   const factor = SECTION_STYLE_SCALE_FACTORS[scale]
   vars['--section-scale'] = String(factor)
   if (scale !== 'md') vars.zoom = String(factor)
+
+  if (style.paddingY) {
+    vars['--section-pad-y'] = SECTION_PAD_Y[style.paddingY]
+    vars['padding-block'] = SECTION_PAD_Y[style.paddingY]
+  }
+  if (style.paddingX) {
+    vars['--section-pad-x'] = SECTION_PAD_X[style.paddingX]
+    vars['padding-inline'] = SECTION_PAD_X[style.paddingX]
+  }
+  if (style.maxWidth) {
+    const cssMax = resolveSectionMaxWidthCss(style.maxWidth)
+    vars['--section-max'] = cssMax
+    if (style.maxWidth !== 'full') {
+      vars['max-width'] = cssMax
+      vars['margin-inline'] = 'auto'
+      vars.width = '100%'
+    }
+  }
+  if (style.align) {
+    vars['--section-align'] = style.align
+    vars['text-align'] =
+      style.align === 'start' ? 'start' : style.align === 'end' ? 'end' : 'center'
+  }
+  if (style.gap) {
+    vars['--section-gap'] = SECTION_GAP[style.gap]
+  }
+  if (style.fontHeading) {
+    vars['--site-font-heading'] = `'${style.fontHeading.replace(/'/g, '')}', ui-sans-serif, system-ui, sans-serif`
+  }
+  if (style.fontBody) {
+    vars['--site-font-body'] = `'${style.fontBody.replace(/'/g, '')}', ui-sans-serif, system-ui, sans-serif`
+  }
+  if (style.typeScale) {
+    vars['--section-type-scale'] = SECTION_TYPE_SCALE[style.typeScale]
+  }
 
   const background = style.background
   if (background === 'transparent') {

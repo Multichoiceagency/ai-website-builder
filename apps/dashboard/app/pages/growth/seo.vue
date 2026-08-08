@@ -69,6 +69,74 @@ const { data: files, refresh: refreshFiles } = await useAsyncData(
 )
 
 const running = ref(false)
+const pageSpeedBusy = ref(false)
+const pageSpeedUrl = ref('')
+const pageSpeedResult = ref<{
+  performanceScore: number | null
+  seoScore: number | null
+  lcpMs: number | null
+  warnings: string[]
+  url: string
+} | null>(null)
+const pageSpeedError = ref('')
+
+const gscBusy = ref(false)
+const gscRows = ref<{ key: string; clicks: number; impressions: number; position: number }[]>([])
+const gscError = ref('')
+const gscSiteUrl = ref('')
+
+async function runPageSpeedCheck() {
+  if (!activeSiteId.value) return
+  pageSpeedBusy.value = true
+  pageSpeedError.value = ''
+  try {
+    const result = await api.post<{
+      performanceScore: number | null
+      seoScore: number | null
+      lcpMs: number | null
+      warnings: string[]
+      url: string
+    }>(`/api/v1/seo/sites/${activeSiteId.value}/pagespeed`, {
+      url: pageSpeedUrl.value.trim() || undefined,
+      strategy: 'mobile',
+    })
+    pageSpeedResult.value = result
+  } catch (caught) {
+    pageSpeedError.value = caught instanceof ApiError ? caught.message : 'PageSpeed failed.'
+  } finally {
+    pageSpeedBusy.value = false
+  }
+}
+
+async function loadGsc() {
+  if (!activeSiteId.value) return
+  gscBusy.value = true
+  gscError.value = ''
+  try {
+    const sites = await api.get<{ sites: { siteUrl: string }[] }>(
+      `/api/v1/seo/sites/${activeSiteId.value}/search-console/sites`,
+    )
+    const siteUrl = gscSiteUrl.value || sites.sites[0]?.siteUrl
+    if (!siteUrl) {
+      gscError.value = 'No Search Console properties on this Google account.'
+      return
+    }
+    gscSiteUrl.value = siteUrl
+    const performance = await api.get<{
+      rows: { key: string; clicks: number; impressions: number; position: number }[]
+    }>(`/api/v1/seo/sites/${activeSiteId.value}/search-console/performance`, {
+      siteUrl,
+      days: 28,
+      dimension: 'query',
+      limit: 10,
+    })
+    gscRows.value = performance.rows
+  } catch (caught) {
+    gscError.value = caught instanceof ApiError ? caught.message : 'Search Console failed.'
+  } finally {
+    gscBusy.value = false
+  }
+}
 const activeSeverity = ref<SeoSeverity>('critical')
 const activeFile = ref<'sitemap' | 'robots'>('sitemap')
 const newKeyword = ref('')
@@ -139,6 +207,104 @@ async function removeKeyword(id: string) {
   await api.del(`/api/v1/seo/keywords/${id}`)
   await refreshKeywords()
 }
+
+type ChecklistStatus = 'ready' | 'needs_work' | 'connect'
+
+interface ChecklistRow {
+  id: string
+  label: string
+  status: ChecklistStatus
+  badge: string
+  tone: 'positive' | 'warning' | 'neutral'
+  href?: string
+  hint?: string
+}
+
+const TITLE_META_CODE = /title|meta|description/i
+
+const launchChecklist = computed<ChecklistRow[]>(() => {
+  const keywordsOk = (keywordData.value?.keywords.length ?? 0) > 0
+  const titleMetaCritical = issues.value.some(
+    (issue) => issue.severity === 'critical' && TITLE_META_CODE.test(issue.code),
+  )
+  const sitemapOk = Boolean(files.value?.sitemap?.trim())
+  const robotsOk = Boolean(files.value?.robots?.trim())
+
+  const firstPage = audit.value?.pages[0]
+  let schema: ChecklistRow
+  if (!firstPage) {
+    schema = {
+      id: 'schema',
+      label: 'Schema',
+      status: 'needs_work',
+      badge: 'Needs work',
+      tone: 'warning',
+      hint: 'Run audit / open page editor for schema',
+    }
+  } else {
+    const schemaIssues = firstPage.issues.filter((issue) => /schema/i.test(issue.code))
+    schema = {
+      id: 'schema',
+      label: 'Schema',
+      status: schemaIssues.length ? 'needs_work' : 'ready',
+      badge: schemaIssues.length ? 'Needs work' : 'Ready',
+      tone: schemaIssues.length ? 'warning' : 'positive',
+      hint: schemaIssues.length
+        ? schemaIssues[0]!.message
+        : `${firstPage.title || firstPage.path}`,
+    }
+  }
+
+  return [
+    {
+      id: 'keywords',
+      label: 'Keywords',
+      status: keywordsOk ? 'ready' : 'needs_work',
+      badge: keywordsOk ? 'Ready' : 'Needs work',
+      tone: keywordsOk ? 'positive' : 'warning',
+    },
+    {
+      id: 'titles-meta',
+      label: 'Titles / meta',
+      status: titleMetaCritical ? 'needs_work' : 'ready',
+      badge: titleMetaCritical ? 'Needs work' : 'Ready',
+      tone: titleMetaCritical ? 'warning' : 'positive',
+    },
+    {
+      id: 'sitemap',
+      label: 'Sitemap',
+      status: sitemapOk ? 'ready' : 'needs_work',
+      badge: sitemapOk ? 'Ready' : 'Needs work',
+      tone: sitemapOk ? 'positive' : 'warning',
+    },
+    {
+      id: 'robots',
+      label: 'Robots',
+      status: robotsOk ? 'ready' : 'needs_work',
+      badge: robotsOk ? 'Ready' : 'Needs work',
+      tone: robotsOk ? 'positive' : 'warning',
+    },
+    {
+      id: 'gsc',
+      label: 'Google Search Console',
+      status: 'connect',
+      badge: 'Connect',
+      tone: 'neutral',
+      href: '/settings',
+      hint: 'Check connection',
+    },
+    {
+      id: 'gbp',
+      label: 'Google Business Profile',
+      status: 'connect',
+      badge: 'Connect',
+      tone: 'neutral',
+      href: '/growth/google-business',
+      hint: 'Check connection',
+    },
+    schema,
+  ]
+})
 </script>
 
 <template>
@@ -181,6 +347,77 @@ async function removeKeyword(id: string) {
         <UiStat label="Critical" :value="audit.issueCounts.critical" hint="Fix before publishing" />
         <UiStat label="Warnings" :value="audit.issueCounts.warning" hint="Costs you rankings" />
         <UiStat label="Suggestions" :value="audit.issueCounts.info" hint="Worth doing eventually" />
+      </section>
+
+      <!-- Launch checklist — derived from audit, keywords and generated files -->
+      <UiCard>
+        <h2 class="mb-4 text-heading font-semibold text-ink">Launch checklist</h2>
+        <ul class="flex flex-col gap-2">
+          <li
+            v-for="row in launchChecklist"
+            :key="row.id"
+            class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line px-4 py-3"
+          >
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-ink">{{ row.label }}</p>
+              <p v-if="row.hint" class="mt-0.5 text-[0.8125rem] text-soft">{{ row.hint }}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <UiBadge :tone="row.tone">{{ row.badge }}</UiBadge>
+              <NuxtLink
+                v-if="row.href"
+                :to="row.href"
+                class="text-[0.8125rem] text-soft no-underline hover:text-ink hover:underline"
+              >
+                Open
+              </NuxtLink>
+            </div>
+          </li>
+        </ul>
+      </UiCard>
+
+      <section class="grid gap-5 lg:grid-cols-2">
+        <UiCard>
+          <h2 class="mb-3 text-heading font-semibold text-ink">PageSpeed QA</h2>
+          <p class="mb-3 type-caption-12 text-soft">
+            Runs Google PageSpeed Insights on a public URL (needs GOOGLE_API_KEY).
+          </p>
+          <UiField label="Public URL (optional)">
+            <template #default="{ id }">
+              <UiInput :id="id" v-model="pageSpeedUrl" placeholder="https://example.com" />
+            </template>
+          </UiField>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <UiButton size="sm" :loading="pageSpeedBusy" @click="runPageSpeedCheck">Run PageSpeed</UiButton>
+          </div>
+          <p v-if="pageSpeedError" class="mt-3 type-caption-12 text-danger" role="alert">{{ pageSpeedError }}</p>
+          <ul v-if="pageSpeedResult" class="mt-4 space-y-1 type-caption-12 text-soft">
+            <li>URL: {{ pageSpeedResult.url }}</li>
+            <li>Performance: {{ pageSpeedResult.performanceScore ?? '—' }}</li>
+            <li>SEO: {{ pageSpeedResult.seoScore ?? '—' }}</li>
+            <li>LCP: {{ pageSpeedResult.lcpMs != null ? `${Math.round(pageSpeedResult.lcpMs)} ms` : '—' }}</li>
+          </ul>
+        </UiCard>
+
+        <UiCard>
+          <h2 class="mb-3 text-heading font-semibold text-ink">Search Console</h2>
+          <p class="mb-3 type-caption-12 text-soft">
+            Top queries from the Google account connected under Integrations.
+          </p>
+          <UiButton size="sm" :loading="gscBusy" @click="loadGsc">Load performance</UiButton>
+          <p v-if="gscError" class="mt-3 type-caption-12 text-danger" role="alert">{{ gscError }}</p>
+          <p v-else-if="gscSiteUrl" class="mt-3 type-caption-12 text-faint">{{ gscSiteUrl }}</p>
+          <ul v-if="gscRows.length" class="mt-3 space-y-2">
+            <li
+              v-for="row in gscRows"
+              :key="row.key"
+              class="flex justify-between gap-2 border-b border-line py-2 type-caption-12 last:border-0"
+            >
+              <span class="truncate text-ink">{{ row.key }}</span>
+              <span class="shrink-0 text-soft">{{ row.clicks }} clk · pos {{ row.position.toFixed(1) }}</span>
+            </li>
+          </ul>
+        </UiCard>
       </section>
 
       <!-- Issues, grouped by severity -->

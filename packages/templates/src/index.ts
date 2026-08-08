@@ -7,8 +7,11 @@
  * it can never introduce markup, CSS or a third-party asset (ADR-0003).
  *
  * The catalogue is generated and committed — see
- * `scripts/import-motionsites.mjs` — so nothing is fetched at runtime and the
- * whole thing is reviewable in a diff.
+ * `scripts/import-motionsites.mjs`, `scripts/import-shadcnspace.mjs`,
+ * `scripts/import-shadcnspace-landings.mjs`, `scripts/import-magicui.mjs`,
+ * and `scripts/import-studio-layouts.mjs`
+ * — so nothing is fetched at runtime and the whole thing is reviewable in a
+ * diff.
  */
 import { PERFORMANCE_CLASS_ORDER } from '@platform/blocks'
 import {
@@ -22,10 +25,23 @@ import {
 import { MOTIONSITES_BACKGROUNDS } from './backgrounds.generated.js'
 import { MOTIONSITES_CATALOG } from './catalog.generated.js'
 import { MOTIONSITES_ISLAND_READY } from './island-ready.js'
+import { MAGICUI_CATALOG } from './magicui.generated.js'
+import { SHADCNSPACE_CATALOG } from './shadcnspace.generated.js'
+import { SHADCNSPACE_LANDINGS_CATALOG } from './shadcnspace-landings.generated.js'
+import { STUDIO_LAYOUTS_CATALOG } from './studio-layouts.generated.js'
 
 export { MOTIONSITES_CATALOG } from './catalog.generated.js'
 export { MOTIONSITES_BACKGROUNDS } from './backgrounds.generated.js'
-export { MOTIONSITES_ISLAND_READY } from './island-ready.js'
+export { MOTIONSITES_ISLAND_READY, MOTIONSITES_ISLAND_HEADER_BLOCK } from './island-ready.js'
+export { SHADCNSPACE_CATALOG } from './shadcnspace.generated.js'
+export { SHADCNSPACE_LANDINGS_CATALOG } from './shadcnspace-landings.generated.js'
+export { MAGICUI_CATALOG } from './magicui.generated.js'
+export { STUDIO_LAYOUTS_CATALOG } from './studio-layouts.generated.js'
+export {
+  detectExactIslandIntent,
+  isMotionsitesCodegenBrief,
+  brandFromIslandId,
+} from './detect-island-intent.js'
 export {
   parseSourcePrompt,
   truncateSourcePrompt,
@@ -33,7 +49,73 @@ export {
   type SourcePromptDesignHints,
 } from './parse-source-prompt.js'
 
-export const templateCatalog: TemplateCatalog = MOTIONSITES_CATALOG
+/** Stable id prefix for Shadcn Space free-block recipes. */
+export const SHADCNSPACE_ID_PREFIX = 'shadcnspace-'
+
+/** Stable id prefix for Shadcn Space full landing-page templates. */
+export const SHADCNSPACE_LANDING_ID_PREFIX = 'shadcnspace-landing-'
+
+export function isShadcnSpaceTemplate(id: string): boolean {
+  return id.startsWith(SHADCNSPACE_ID_PREFIX)
+}
+
+export function isShadcnSpaceLandingTemplate(id: string): boolean {
+  return id.startsWith(SHADCNSPACE_LANDING_ID_PREFIX)
+}
+
+/** Stable id prefix for Magic UI free registry recipes. */
+export const MAGICUI_ID_PREFIX = 'magicui-'
+
+export function isMagicUiTemplate(id: string): boolean {
+  return id.startsWith(MAGICUI_ID_PREFIX)
+}
+
+/** Stable id prefix for Studio layout recipes (local marketing site references). */
+export const STUDIO_LAYOUT_ID_PREFIX = 'studio-'
+
+export function isStudioLayoutTemplate(id: string): boolean {
+  return id.startsWith(STUDIO_LAYOUT_ID_PREFIX)
+}
+
+function mergeCatalogs(...catalogs: TemplateCatalog[]): TemplateCatalog {
+  const templates = catalogs.flatMap((catalog) => catalog.templates)
+  const counts = new Map<string, number>()
+  for (const template of templates) {
+    counts.set(template.collection, (counts.get(template.collection) ?? 0) + 1)
+  }
+
+  const byId = new Map<string, TemplateCollection>()
+  for (const catalog of catalogs) {
+    for (const collection of catalog.collections) {
+      if (!byId.has(collection.id)) {
+        byId.set(collection.id, { ...collection, count: 0 })
+      }
+    }
+  }
+
+  const collections = [...byId.values()]
+    .map((collection) => ({
+      ...collection,
+      count: counts.get(collection.id) ?? 0,
+    }))
+    .filter((collection) => collection.count > 0)
+
+  return {
+    version: 1,
+    generatedAt: catalogs.map((catalog) => catalog.generatedAt).sort().at(-1) ?? new Date().toISOString(),
+    source: catalogs.map((catalog) => catalog.source).filter(Boolean).join(' · '),
+    collections,
+    templates,
+  }
+}
+
+export const templateCatalog: TemplateCatalog = mergeCatalogs(
+  MOTIONSITES_CATALOG,
+  SHADCNSPACE_CATALOG,
+  SHADCNSPACE_LANDINGS_CATALOG,
+  MAGICUI_CATALOG,
+  STUDIO_LAYOUTS_CATALOG,
+)
 
 const ISLAND_READY = new Set<string>(MOTIONSITES_ISLAND_READY)
 
@@ -65,10 +147,10 @@ export function getTemplate(id: string): SiteTemplate | undefined {
  * of MotionSites sections (interactive-discovery first today). We do **not**
  * prefer island-ready or hero collection here — the brief itself is the
  * steering signal; island/recipe selection still goes through the registry
- * and performance ceiling (ADR-0003).
+ * and performance ceiling (ADR-0003). Shadcn Space entries are excluded.
  */
 export function defaultMotionSitesTemplate(): SiteTemplate | undefined {
-  return listTemplates().find((template) => template.sourcePrompt.trim().length > 0)
+  return MOTIONSITES_CATALOG.templates.find((template) => template.sourcePrompt.trim().length > 0)
 }
 
 /**
@@ -79,7 +161,7 @@ export function defaultMotionSitesTemplate(): SiteTemplate | undefined {
  * site can afford. It is a browsing convenience, not the budget — the real
  * ceiling is enforced again during block selection and always wins.
  */
-export function searchTemplates(query: TemplateQuery = { limit: 300 }): SiteTemplate[] {
+export function searchTemplates(query: TemplateQuery = { limit: 500 }): SiteTemplate[] {
   const search = query.search?.trim().toLowerCase()
   const ceiling = query.maxPerformanceClass ? PERFORMANCE_CLASS_ORDER[query.maxPerformanceClass] : undefined
 

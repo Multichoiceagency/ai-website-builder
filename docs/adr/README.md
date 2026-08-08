@@ -15,3 +15,4 @@ Status is one of `accepted`, `superseded by NNNN`, `deprecated`.
 | [0008](./0008-event-transport.md)              | In-process typed event bus, swappable transport  | accepted |
 | [0009](./0009-auth-sessions.md)                | Opaque server-side sessions in httpOnly cookies  | accepted |
 | [0010](./0010-nuxt-layers-for-ui.md)           | UI and block renderers ship as Nuxt layers       | accepted |
+| [0011](./0011-ai-gateway-metering.md)          | Persist AI gateway token/cost usage per tenant   | accepted |

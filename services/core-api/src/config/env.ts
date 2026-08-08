@@ -38,6 +38,14 @@ const envSchema = z.object({
    */
   GEMINI_MODEL: z.string().trim().min(1).optional(),
 
+  /** Places (New), Geocoding, PageSpeed — platform API key, not OAuth. */
+  GOOGLE_API_KEY: z.string().min(1).optional(),
+
+  // Optional WhatsApp gateway (OpenWA). Absent = support desk UI works, send/AI disabled.
+  OPENWA_BASE_URL: z.string().url().optional(),
+  OPENWA_API_KEY: z.string().min(1).optional(),
+  OPENWA_WEBHOOK_SECRET: z.string().min(1).optional(),
+
   // Optional: absent means "Google is not connected on this installation",
   // which the capabilities endpoint reports rather than crashing the service.
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
@@ -46,6 +54,18 @@ const envSchema = z.object({
     .string()
     .url()
     .default('http://localhost:4000/api/v1/integrations/google/callback'),
+  /** Sign-In / Sign-Up with Google (dashboard auth). Separate from integrations. */
+  GOOGLE_AUTH_REDIRECT_URI: z
+    .string()
+    .url()
+    .optional(),
+
+  /** Self-hosted or cloud Nango (OAuth broker). Absent = legacy Google PKCE path. */
+  NANGO_SECRET_KEY: z.string().min(1).optional(),
+  NANGO_HOST: z.string().url().default('http://localhost:3003'),
+  NANGO_WEBHOOK_SECRET: z.string().min(1).optional(),
+  /** Integration id configured in the Nango UI for Google (Business / GSC / GA). */
+  NANGO_GOOGLE_INTEGRATION_ID: z.string().min(1).default('google'),
 
   CORS_ORIGINS: z
     .string()

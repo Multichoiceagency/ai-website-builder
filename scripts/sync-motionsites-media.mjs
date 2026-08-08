@@ -6,9 +6,9 @@
  *   node scripts/sync-motionsites-media.mjs
  *   node scripts/sync-motionsites-media.mjs --source ~/Dropbox/MotionSites
  */
-import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { extname, join, resolve } from 'node:path'
 
 const args = process.argv.slice(2)
 const sourceArg = args.indexOf('--source')
@@ -47,6 +47,31 @@ const pairs = [
   ],
 ]
 
+/** Dropbox sometimes ships WebP bytes under a `.png` name — browsers reject that MIME. */
+function fixMislabeledWebp(dir) {
+  if (!existsSync(dir)) return 0
+  let fixed = 0
+  for (const name of readdirSync(dir)) {
+    const file = join(dir, name)
+    if (extname(name).toLowerCase() !== '.png') continue
+    let head
+    try {
+      head = readFileSync(file).subarray(0, 16)
+    } catch {
+      continue
+    }
+    if (head.toString('ascii', 0, 4) !== 'RIFF' || head.toString('ascii', 8, 12) !== 'WEBP') {
+      continue
+    }
+    const dest = file.slice(0, -4) + '.webp'
+    if (!existsSync(dest)) {
+      renameSync(file, dest)
+      fixed += 1
+    }
+  }
+  return fixed
+}
+
 function mirror(src, dest) {
   if (!existsSync(src)) {
     console.warn(`skip missing ${src}`)
@@ -54,11 +79,13 @@ function mirror(src, dest) {
   }
   mkdirSync(dest, { recursive: true })
   cpSync(src, dest, { recursive: true })
+  fixMislabeledWebp(dest)
   // also mirror media into storefront public
   const storefront = dest.replace('/apps/dashboard/public/', '/apps/storefront/public/')
   if (storefront !== dest && dest.includes('/public/motionsites/')) {
     mkdirSync(storefront, { recursive: true })
     cpSync(src, storefront, { recursive: true })
+    fixMislabeledWebp(storefront)
   }
   return readdirSync(dest).length
 }

@@ -4,7 +4,8 @@ import type { MediaAsset, MediaLibrary } from '@platform/schemas'
 import { PhotoIcon } from '@heroicons/vue/24/outline'
 
 /**
- * Choose an image from the library, or add one without leaving the field.
+ * Choose an image from the library, Mixkit stock, or add one without leaving
+ * the field.
  *
  * Built to drop into an image field. It owns its own dialog, so a caller needs
  * one tag and nothing else:
@@ -29,14 +30,21 @@ const props = withDefaults(
     title?: string
     /** Folder new uploads land in, and the folder the browser opens on. */
     folder?: string
+    /** Only list videos whose scroll frame pack is ready. */
+    scrollReadyOnly?: boolean
+    /** Only list video MIME types. */
+    videoOnly?: boolean
   }>(),
-  { title: 'Choose media', folder: '' },
+  { title: 'Choose media', folder: '', scrollReadyOnly: false, videoOnly: false },
 )
 
 const emit = defineEmits<{ select: [asset: MediaAsset] }>()
 
 const api = useApi()
 const can = useCan()
+
+type PickerTab = 'library' | 'mixkit'
+const tab = ref<PickerTab>('library')
 
 const search = ref('')
 const folder = ref(props.folder)
@@ -67,7 +75,10 @@ async function load() {
 }
 
 watch(open, (isOpen) => {
-  if (isOpen) void load()
+  if (isOpen) {
+    tab.value = 'library'
+    void load()
+  }
 })
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -92,7 +103,31 @@ function afterUpload(uploaded: MediaAsset[]) {
   void load()
 }
 
-const assets = computed(() => library.value?.assets ?? [])
+function afterStockImport(asset: MediaAsset) {
+  choose(asset)
+}
+
+const assets = computed(() => {
+  let list = library.value?.assets ?? []
+  if (props.videoOnly || props.scrollReadyOnly) {
+    list = list.filter((asset) => asset.mime.startsWith('video/'))
+  }
+  if (props.scrollReadyOnly) {
+    list = list.filter((asset) => asset.frameStatus === 'ready' && asset.frameCount > 0)
+  }
+  return list
+})
+
+/** Poll while a video in the open picker is still extracting frames. */
+let framePoll: ReturnType<typeof setInterval> | undefined
+watch(
+  () => open.value && (library.value?.assets.some((asset) => asset.frameStatus === 'pending') ?? false),
+  (pending) => {
+    clearInterval(framePoll)
+    if (!pending) return
+    framePoll = setInterval(() => void load(), 2500)
+  },
+)
 </script>
 
 <template>
@@ -100,61 +135,91 @@ const assets = computed(() => library.value?.assets ?? [])
 
   <UiDialog v-model:open="open" :title="title" wide>
     <div class="flex flex-col gap-4">
-      <div class="flex flex-wrap items-center gap-2">
-        <UiInput v-model="search" placeholder="Search name, alt text or tag" class="min-w-48 flex-1" />
+      <div class="flex gap-1 border-b border-line" role="tablist" aria-label="Media source">
         <button
           type="button"
-          class="h-10 rounded-lg border px-3 text-[0.8125rem] font-medium transition-colors"
-          :class="missingOnly ? 'border-warning bg-warning-soft text-warning' : 'border-line bg-raised text-soft hover:border-line-strong'"
-          :aria-pressed="missingOnly"
-          @click="missingOnly = !missingOnly"
+          role="tab"
+          class="border-b-2 px-3 py-2 text-[0.8125rem] font-medium transition-colors"
+          :class="tab === 'library' ? 'border-brand text-ink' : 'border-transparent text-soft hover:text-ink'"
+          :aria-selected="tab === 'library'"
+          @click="tab = 'library'"
         >
-          Needs alt
+          Library
         </button>
-        <UiButton v-if="can('media:write')" size="sm" @click="dropZone?.browse()">Upload</UiButton>
+        <button
+          type="button"
+          role="tab"
+          class="border-b-2 px-3 py-2 text-[0.8125rem] font-medium transition-colors"
+          :class="tab === 'mixkit' ? 'border-brand text-ink' : 'border-transparent text-soft hover:text-ink'"
+          :aria-selected="tab === 'mixkit'"
+          @click="tab = 'mixkit'"
+        >
+          Mixkit stock
+        </button>
       </div>
 
-      <p v-if="error" class="rounded-lg bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger" role="alert">
-        {{ error }}
-      </p>
-
-      <MediaDropZone
-        ref="dropZone"
-        compact
-        :folder="folder"
-        :disabled="!can('media:write')"
-        @uploaded="afterUpload"
-      >
-        <div class="max-h-[26rem] overflow-y-auto pr-1">
-          <MediaBrowser
-            :assets="assets"
-            :folders="library?.folders ?? []"
-            :folder="folder"
-            view="grid"
-            density="compact"
-            :active-id="currentId"
-            :loading="loading"
-            @update:folder="folder = $event"
-            @open="choose"
+      <template v-if="tab === 'library'">
+        <div class="flex flex-wrap items-center gap-2">
+          <UiInput v-model="search" placeholder="Search name, alt text or tag" class="min-w-48 flex-1" />
+          <button
+            type="button"
+            class="h-10 rounded-lg border px-3 text-[0.8125rem] font-medium transition-colors"
+            :class="missingOnly ? 'border-warning bg-warning-soft text-warning' : 'border-line bg-raised text-soft hover:border-line-strong'"
+            :aria-pressed="missingOnly"
+            @click="missingOnly = !missingOnly"
           >
-            <template #empty>
-              <UiEmptyState
-                title="Nothing here yet"
-                description="Drop an image, GIF or video, paste a screenshot, or upload one — it will be selected straight away."
-              >
-                <template #icon>
-                  <PhotoIcon class="h-10 w-10" aria-hidden="true" />
-                </template>
-              </UiEmptyState>
-            </template>
-          </MediaBrowser>
+            Needs alt
+          </button>
+          <UiButton v-if="can('media:write')" size="sm" @click="dropZone?.browse()">Upload</UiButton>
         </div>
-      </MediaDropZone>
 
-      <p class="text-[0.75rem] text-faint">
-        Images and GIFs need alt text before a block can render them accessibly. Anything marked
-        <span class="font-medium text-warning">No alt</span> still needs a description in the media library.
-      </p>
+        <p v-if="error" class="rounded-lg bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger" role="alert">
+          {{ error }}
+        </p>
+
+        <MediaDropZone
+          ref="dropZone"
+          compact
+          :folder="folder"
+          :disabled="!can('media:write')"
+          @uploaded="afterUpload"
+        >
+          <div class="max-h-[26rem] overflow-y-auto pr-1">
+            <MediaBrowser
+              :assets="assets"
+              :folders="library?.folders ?? []"
+              :folder="folder"
+              view="grid"
+              density="compact"
+              :active-id="currentId"
+              :loading="loading"
+              @update:folder="folder = $event"
+              @open="choose"
+            >
+              <template #empty>
+                <UiEmptyState
+                  title="Nothing here yet"
+                  description="Drop an image, GIF or video, paste a screenshot, or upload one — it will be selected straight away. Or switch to Mixkit stock."
+                >
+                  <template #icon>
+                    <PhotoIcon class="h-10 w-10" aria-hidden="true" />
+                  </template>
+                  <UiButton size="sm" @click="tab = 'mixkit'">Browse Mixkit</UiButton>
+                </UiEmptyState>
+              </template>
+            </MediaBrowser>
+          </div>
+        </MediaDropZone>
+
+        <p class="text-[0.75rem] text-faint">
+          Images and GIFs need alt text before a block can render them accessibly. Anything marked
+          <span class="font-medium text-warning">No alt</span> still needs a description in the media library.
+        </p>
+      </template>
+
+      <div v-else class="max-h-[30rem] overflow-y-auto pr-1">
+        <MediaStockPanel :folder="folder || 'stock'" @imported="afterStockImport" />
+      </div>
     </div>
 
     <template #footer>

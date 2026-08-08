@@ -57,6 +57,7 @@ const AI_REACHABLE_PREFIXES: Record<string, string> = {
   contact: 'contact-',
   header: 'header-',
   footer: 'footer-',
+  product: 'product-',
 }
 
 /**
@@ -67,7 +68,11 @@ const AI_REACHABLE_PREFIXES: Record<string, string> = {
  * excluded, and left alone because the existing library is not ours to rename —
  * renaming a block id would orphan every page already using it.
  */
-const LEGACY_PREFIX_EXCEPTIONS = new Set(['feature-spotlight-01'])
+const LEGACY_PREFIX_EXCEPTIONS = new Set([
+  'feature-spotlight-01',
+  // Nestable empty canvas — picker / InsertPanel only; id is layout-* not content-*.
+  'layout-canvas-01',
+])
 
 describe('collections', () => {
   it('declares metadata for every collection id and no others', () => {
@@ -231,5 +236,25 @@ describe('collection-aware search', () => {
     const pool = searchBlocks({ category: 'features', maxPerformanceClass: 'C', industry: 'saas' })
     expect(pool.map((block) => block.id)).toContain('features-sticky-stack-01')
     expect(pool.map((block) => block.id)).toContain('features-glow-cards-01')
+  })
+
+  it('finds scroll video scrub via frames / scrub / 3d keywords', () => {
+    for (const term of ['frames', 'scrub', '3d', 'frame-pack', 'scrollytelling']) {
+      expect(
+        searchBlocks({ search: term }).map((block) => block.id),
+        term,
+      ).toContain('scroll-video-scrub-01')
+    }
+    const scrub = searchBlocks({ search: 'scroll-video-scrub' })
+    expect(scrub.map((block) => block.id)).toContain('scroll-video-scrub-01')
+  })
+
+  it('finds empty layout canvas via empty / manual / nestable keywords', () => {
+    for (const term of ['empty', 'manual', 'nestable', 'layout-canvas']) {
+      expect(
+        searchBlocks({ search: term }).map((block) => block.id),
+        term,
+      ).toContain('layout-canvas-01')
+    }
   })
 })

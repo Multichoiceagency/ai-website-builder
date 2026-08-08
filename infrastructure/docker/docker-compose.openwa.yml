@@ -1,0 +1,48 @@
+# Optional WhatsApp gateway — OpenWA (https://github.com/rmyndharis/OpenWA)
+#
+# From repo root:
+#   docker compose -f infrastructure/docker/docker-compose.yml -f infrastructure/docker/docker-compose.openwa.yml --profile openwa up -d openwa
+#
+# First build clones/builds from GitHub (slow once). Dashboard: http://localhost:2785
+# Point core-api at it with OPENWA_BASE_URL + OPENWA_API_KEY (see .env.example).
+#
+# Risk: unofficial WhatsApp client — use a dedicated number only (see OpenWA README).
+
+services:
+  openwa:
+    profiles: ['openwa']
+    build:
+      context: https://github.com/rmyndharis/OpenWA.git#main
+      dockerfile: Dockerfile
+    container_name: platform-openwa
+    restart: unless-stopped
+    stop_grace_period: 45s
+    ports:
+      - '${OPENWA_PORT:-2785}:2785'
+    environment:
+      NODE_ENV: development
+      PORT: 2785
+      HOME: /tmp
+      XDG_CONFIG_HOME: /tmp/.config
+      XDG_CACHE_HOME: /tmp/.cache
+      LOG_LEVEL: info
+      AUTO_START_SESSIONS: 'true'
+      DATABASE_TYPE: sqlite
+      DATABASE_SYNCHRONIZE: 'true'
+      # Bootstrap key — replace after first login in the OpenWA dashboard.
+      API_KEY: ${OPENWA_API_KEY:-dev-openwa-change-me}
+    volumes:
+      - openwa-data:/app/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:2785/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+volumes:
+  openwa-data:

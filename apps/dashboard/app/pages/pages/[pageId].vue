@@ -2,15 +2,23 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createSection, getBlock, listBlockMetadata } from '@platform/blocks'
 import {
+  brandFromIslandId,
+  detectExactIslandIntent,
+  isMotionsitesCodegenBrief,
+  MOTIONSITES_ISLAND_HEADER_BLOCK,
+} from '@platform/templates'
+import {
   applyTemplateMotionTypes,
   type Page,
   type PageSummary,
   type Section,
   type Seo,
+  type SeoSettings,
   type Site,
   type TemplateMotionType,
+  type Theme,
 } from '@platform/schemas'
-import { ArrowLeft, Monitor, PanelLeft, PanelRight, Redo2, Smartphone, Tablet, Undo2 } from '@lucide/vue'
+import { ArrowLeft, Monitor, PanelLeft, PanelRight, Redo2, Smartphone, Sparkles, Tablet, Undo2 } from '@lucide/vue'
 
 /**
  * The canvas editor.
@@ -30,18 +38,21 @@ const activeSiteId = useActiveSiteId()
 
 const pageId = computed(() => route.params.pageId as string)
 
-const { data, refresh } = await useAsyncData(
+const { data, refresh, error: loadError, status: loadStatus } = await useAsyncData(
   () => `editor:${pageId.value}`,
   async () => {
     const page = await api.get<Page>(`/api/v1/pages/${pageId.value}`)
-    const [site, siblings] = await Promise.all([
+    const [site, siblings, seoSettings] = await Promise.all([
       api.get<Site>(`/api/v1/sites/${page.siteId}`),
       api.get<PageSummary[]>(`/api/v1/sites/${page.siteId}/pages`),
+      api.get<SeoSettings>(`/api/v1/seo/sites/${page.siteId}/settings`).catch(() => null),
     ])
-    return { page, site, siblings }
+    return { page, site, siblings, brandLogo: seoSettings?.business.logo?.trim() ?? '' }
   },
   { watch: [pageId] },
 )
+
+const brandLogo = computed(() => data.value?.brandLogo ?? '')
 
 const sections = ref<Section[]>([])
 const title = ref('')
@@ -54,37 +65,77 @@ const message = ref('')
 const errorMessage = ref('')
 const picking = ref(false)
 
-const leftTab = ref<'pages' | 'layers' | 'assets'>('layers')
+const leftTab = ref<'pages' | 'layers'>('layers')
 const rightTab = ref<'agent' | 'style'>('style')
-/** Closed by default: canvas owns the viewport until Layers / Properties are opened. */
-const leftOpen = ref(false)
-const rightOpen = ref(false)
+/** Open by default so Layers + Properties are available as soon as the editor loads. */
+const leftOpen = ref(true)
+const rightOpen = ref(true)
 const device = ref<'desktop' | 'tablet' | 'mobile'>('desktop')
 const zoom = ref(70)
 
-/** Panel widths persist per browser, so the layout you set is the one you get back. */
+/** Classic layers/properties editor vs Lovable-style assistant + live preview. */
+const { mode: builderMode, setMode: setBuilderMode } = useEditorBuilderMode()
+const interactive = computed(() => builderMode.value === 'interactive')
+
+/** Panel widths + open state persist per browser. */
 const leftWidth = ref(256)
 const rightWidth = ref(336)
+/** Wider assistant column when interactive builder is on. */
+const interactiveAssistantWidth = ref(400)
 
 onMounted(() => {
   const stored = localStorage.getItem('editor:panels')
   if (!stored) return
   try {
-    const parsed = JSON.parse(stored) as { left?: number; right?: number }
+    const parsed = JSON.parse(stored) as {
+      left?: number
+      right?: number
+      leftOpen?: boolean
+      rightOpen?: boolean
+      interactiveAssistantWidth?: number
+    }
     if (parsed.left) leftWidth.value = parsed.left
     if (parsed.right) rightWidth.value = parsed.right
+    if (typeof parsed.leftOpen === 'boolean') leftOpen.value = parsed.leftOpen
+    if (typeof parsed.rightOpen === 'boolean') rightOpen.value = parsed.rightOpen
+    if (parsed.interactiveAssistantWidth) interactiveAssistantWidth.value = parsed.interactiveAssistantWidth
   } catch {
     // A corrupt value just means the defaults stand.
   }
 })
 
-watch([leftWidth, rightWidth], ([left, right]) => {
-  localStorage.setItem('editor:panels', JSON.stringify({ left, right }))
-})
+watch(
+  [leftWidth, rightWidth, leftOpen, rightOpen, interactiveAssistantWidth],
+  ([left, right, leftIsOpen, rightIsOpen, assistantWidth]) => {
+    localStorage.setItem(
+      'editor:panels',
+      JSON.stringify({
+        left,
+        right,
+        leftOpen: leftIsOpen,
+        rightOpen: rightIsOpen,
+        interactiveAssistantWidth: assistantWidth,
+      }),
+    )
+  },
+)
+
+watch(builderMode, (next) => {
+  if (next === 'interactive') {
+    // Assistant stays primary; properties open when a section is selected.
+    leftOpen.value = true
+    rightOpen.value = Boolean(selectedId.value)
+    rightTab.value = selectedId.value ? 'style' : 'agent'
+  } else {
+    leftOpen.value = true
+    rightOpen.value = true
+    rightTab.value = 'style'
+  }
+}, { immediate: true })
 
 const metadata = listBlockMetadata()
 
-const styleTab = ref<'content' | 'properties'>('content')
+const styleTab = ref<'content' | 'design'>('content')
 const history = useEditorHistory<Section[]>()
 
 /** Snapshot before every mutation, so undo returns to the prior document. */
@@ -145,6 +196,37 @@ function labelFor(section: Section): string {
 function markDirty() {
   dirty.value = true
   message.value = ''
+}
+
+/**
+ * Persist a theme patch immediately (site-wide design tokens / content width).
+ * Updates the local site so the canvas reacts without a full reload.
+ */
+async function patchSiteTheme(next: Theme) {
+  if (!data.value || !can('page:write')) return
+  const previous = data.value.site.theme
+  data.value = {
+    ...data.value,
+    site: { ...data.value.site, theme: next },
+  }
+  try {
+    await api.patch(`/api/v1/sites/${data.value.site.id}`, { theme: next })
+  } catch (error) {
+    data.value = {
+      ...data.value,
+      site: { ...data.value.site, theme: previous },
+    }
+    errorMessage.value = error instanceof ApiError ? error.message : 'Could not update the theme.'
+  }
+}
+
+/** Assistant already PATCHed — only sync the live editor canvas. */
+function applyThemeLocal(next: Theme) {
+  if (!data.value) return
+  data.value = {
+    ...data.value,
+    site: { ...data.value.site, theme: next },
+  }
 }
 
 function updateSelectedProps(props: Record<string, unknown>) {
@@ -219,11 +301,23 @@ function duplicate(index: number) {
  */
 function insertSections(incoming: Section[], atIndex?: number) {
   if (!incoming.length) return
-  const fresh = incoming.map((section) => ({ ...createSection(section.block, section.props), ...{
+
+  // Exact islands pair with one system header — never stack duplicate headers.
+  const hasHeader = sections.value.some((section) => {
+    const meta = metadata.find((block) => block.id === section.block)
+    return meta?.category === 'header'
+  })
+  const prepared = hasHeader
+    ? incoming.filter((section) => metadata.find((block) => block.id === section.block)?.category !== 'header')
+    : incoming
+  if (!prepared.length) return
+
+  const fresh = prepared.map((section) => ({
+    ...createSection(section.block, section.props),
     motion: section.motion,
     visibility: section.visibility,
     seo: section.seo,
-  } }))
+  }))
   const index =
     atIndex === undefined
       ? sections.value.length
@@ -231,12 +325,16 @@ function insertSections(incoming: Section[], atIndex?: number) {
   const next = [...sections.value]
   next.splice(index, 0, ...fresh)
   mutate(next)
-  selectedId.value = fresh[0]?.id ?? selectedId.value
+  // Prefer selecting the island (last of the run) when a header was prepended.
+  const island = [...fresh].reverse().find((section) => section.block === 'motion-section-01')
+  selectedId.value = island?.id ?? fresh[0]?.id ?? selectedId.value
   rightTab.value = 'style'
   styleTab.value = 'content'
 
-  // Curated MotionSites React islands already ship their own copy — skip copy AI.
-  const needsCopy = fresh.filter((section) => section.block !== 'motion-section-01')
+  // Curated MotionSites React islands + shared glass header ship their own copy.
+  const needsCopy = fresh.filter(
+    (section) => section.block !== 'motion-section-01' && section.block !== 'header-liquid-glass-01',
+  )
   if (needsCopy.length) void writeCopyFor(needsCopy)
 }
 
@@ -263,6 +361,51 @@ function insertBlockIds(
   )
 }
 
+/**
+ * One-click insert from assistant catalogue hits (block registry or template recipe).
+ */
+async function onInsertCatalogue(hit: {
+  kind: 'block' | 'template'
+  id: string
+  name: string
+}) {
+  if (!can('page:write')) {
+    errorMessage.value = 'You need edit access to insert sections.'
+    return
+  }
+  errorMessage.value = ''
+  try {
+    if (hit.kind === 'block') {
+      insertBlockIds({ blockIds: [hit.id], source: 'block' })
+      message.value = `Inserted ${hit.name}.`
+      return
+    }
+
+    const detail = await api.get<{
+      template: { id: string; title: string; blockRecipe: string[]; motionType?: TemplateMotionType[] }
+      blocks: { id: string }[]
+    }>(`/api/v1/templates/${hit.id}`)
+    const blockIds =
+      detail.blocks?.map((block) => block.id).filter(Boolean) ??
+      detail.template.blockRecipe ??
+      []
+    if (!blockIds.length) {
+      errorMessage.value = `Template “${hit.name}” has no registry blocks to insert.`
+      return
+    }
+    insertBlockIds({
+      blockIds,
+      source: 'template',
+      templateId: detail.template.id,
+      motionTypes: detail.template.motionType,
+    })
+    message.value = `Inserted template “${detail.template.title}”.`
+  } catch (caught) {
+    errorMessage.value =
+      caught instanceof ApiError ? caught.message : `Could not insert “${hit.name}”.`
+  }
+}
+
 function onLibraryDrop(
   payload: {
     kind: 'insert-block' | 'insert-template'
@@ -286,8 +429,11 @@ function onLibraryDrop(
 
 // --- generated copy for freshly inserted sections ---------------------------
 
-/** Sections whose copy is being written. Drives the canvas veil and the layers list. */
+/** Sections whose copy / Motionsites island is being written. Drives the canvas veil. */
 const generatingIds = ref<string[]>([])
+
+/** Exact Motionsites reveal dwell — long enough to read the generating state. */
+const MOTION_EXACT_REVEAL_MS = 1_600
 
 interface GeneratedSection {
   blockId: string
@@ -298,6 +444,7 @@ interface GeneratedSection {
 
 /** A hung request must not leave a section shimmering for the rest of the session. */
 const GENERATE_TIMEOUT_MS = 25_000
+const MOTION_LIVE_TIMEOUT_MS = 120_000
 
 function defaultsFor(blockId: string): Record<string, unknown> {
   return (metadata.find((block) => block.id === blockId)?.defaults ?? {}) as Record<string, unknown>
@@ -483,8 +630,97 @@ function askAi(index: number) {
 }
 
 /**
+ * Close Add, place Motionsites on the canvas under a generating veil, then
+ * either reveal the exact island or finish live codegen into the same slot.
+ */
+async function onGenerateMotion(payload: {
+  mode: 'exact' | 'live'
+  templateId: string
+  title: string
+  brief?: string
+  previewImage?: string
+  previewVideo?: string
+}) {
+  picking.value = false
+  aiOpen.value = false
+
+  const brand = brandFromIslandId(payload.templateId)
+  const incoming = [
+    createSection(MOTIONSITES_ISLAND_HEADER_BLOCK, { brand, trademark: true }),
+    createSection('motion-section-01', {
+      sectionId: payload.templateId,
+      title: payload.title,
+      minHeight: '100vh',
+    }),
+  ]
+  insertSections(incoming)
+
+  const island = [...sections.value]
+    .reverse()
+    .find((section) => section.block === 'motion-section-01')
+  if (!island) return
+
+  generatingIds.value = [island.id]
+  announce(
+    payload.mode === 'live'
+      ? `Generating Motionsites “${payload.title}”.`
+      : `Placing Motionsites “${payload.title}”.`,
+  )
+  message.value =
+    payload.mode === 'live' ? 'Generating Motionsites…' : 'Building Motionsites on the canvas…'
+
+  try {
+    if (payload.mode === 'live') {
+      const brief =
+        payload.brief?.trim() ||
+        `Rebuild this section in the spirit of MotionSites “${payload.title}” — cinematic motion, theme colours only, no third-party assets.`
+      const result = await Promise.race([
+        api.post<{ sectionId: string }>('/api/v1/ai/motionsites-generate-live', {
+          brief,
+          templateId: payload.templateId,
+          title: payload.title,
+          previewImage: payload.previewImage,
+          previewVideo: payload.previewVideo,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('MotionSites generate timed out')), MOTION_LIVE_TIMEOUT_MS),
+        ),
+      ])
+
+      amend(
+        sections.value.map((section) =>
+          section.id === island.id
+            ? {
+                ...section,
+                props: {
+                  ...section.props,
+                  sectionId: result.sectionId,
+                  title: payload.title || result.sectionId,
+                },
+              }
+            : section,
+        ),
+      )
+      message.value = `Live island “${result.sectionId}” inserted.`
+      announce(message.value)
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, MOTION_EXACT_REVEAL_MS))
+      message.value = `Exact island “${payload.templateId}” inserted.`
+      announce(message.value)
+    }
+  } catch (error) {
+    message.value =
+      error instanceof Error ? error.message : 'Could not generate a Motionsites island.'
+    announce(message.value)
+  } finally {
+    generatingIds.value = []
+  }
+}
+
+/**
  * MotionSites background / section rebuild: optionally insert a seed block,
- * then open Ask AI with the sanitised rebuild prompt and auto-apply the result.
+ * then open Ask AI — unless the instruction is a React Motionsites brief, which
+ * must go through generate-live → island (Ask AI rejects those as invalid).
  *
  * When the catalogue carries same-origin preview media (`/motionsites/...`),
  * patch those onto the newly inserted seed as `image` / `video` props so the
@@ -497,7 +733,35 @@ async function onRebuildAi(payload: {
   templateId?: string
   previewImage?: string
   previewVideo?: string
+  openAi?: boolean
 }) {
+  // Exact React Motionsites briefs must never rewrite Vue template props.
+  const islandId = detectExactIslandIntent(payload.instruction)
+  if (islandId) {
+    await onGenerateMotion({
+      mode: 'exact',
+      templateId: islandId,
+      title: payload.templateId || islandId,
+      brief: payload.instruction,
+      previewImage: payload.previewImage,
+      previewVideo: payload.previewVideo,
+    })
+    return
+  }
+
+  // Full Motionsites React/Vite briefs → codegen live island (not Ask AI).
+  if (isMotionsitesCodegenBrief(payload.instruction)) {
+    await onGenerateMotion({
+      mode: 'live',
+      templateId: payload.templateId || 'generated-island',
+      title: payload.templateId || 'Motionsites island',
+      brief: payload.instruction,
+      previewImage: payload.previewImage,
+      previewVideo: payload.previewVideo,
+    })
+    return
+  }
+
   const insertedCount = payload.blockIds?.length ?? 0
   if (payload.blockIds?.length) {
     insertBlockIds({
@@ -524,6 +788,7 @@ async function onRebuildAi(payload: {
         ),
       )
       selectedId.value = last.id
+      markDirty()
     }
   }
 
@@ -532,10 +797,55 @@ async function onRebuildAi(payload: {
   if (!selectedId.value && sections.value.length) {
     selectedId.value = sections.value[sections.value.length - 1]!.id
   }
+
+  // Motionsites backgrounds: media is already on the section — stay on canvas.
+  if (payload.openAi === false) {
+    message.value = 'Background added to the page.'
+    return
+  }
+
+  // Persist before Ask AI — otherwise suggest returns "Section not found."
+  try {
+    await ensureDraftSaved()
+  } catch {
+    message.value = 'Save the draft before asking AI to edit this section.'
+    return
+  }
+
   aiInstruction.value = payload.instruction
   aiAutoApply.value = true
   await nextTick()
   aiOpen.value = true
+}
+
+/**
+ * Replace a seed / selected section with the shared liquid-glass header (once)
+ * plus the exact React island — never a Vue prop rewrite of the Motionsites brief.
+ */
+function onUseIsland(sectionId: string) {
+  picking.value = false
+  aiOpen.value = false
+  aiInstruction.value = ''
+  aiAutoApply.value = false
+
+  const brand = brandFromIslandId(sectionId)
+  const title = brandFromIslandId(sectionId)
+  const incoming = [
+    createSection(MOTIONSITES_ISLAND_HEADER_BLOCK, { brand, trademark: true }),
+    createSection('motion-section-01', {
+      sectionId,
+      title: `${title} Hero`,
+      minHeight: '100vh',
+    }),
+  ]
+
+  // Drop the temporary seed the rebuild flow may have inserted.
+  if (selectedId.value) {
+    mutate(sections.value.filter((section) => section.id !== selectedId.value))
+  }
+
+  insertSections(incoming)
+  message.value = `Exact island “${sectionId}” inserted with shared header.`
 }
 
 /**
@@ -594,7 +904,7 @@ function onDragEnd() {
 
 // --- persistence ------------------------------------------------------------
 
-async function save() {
+async function save(): Promise<boolean> {
   saving.value = true
   errorMessage.value = ''
   try {
@@ -605,11 +915,23 @@ async function save() {
     })
     await refresh()
     message.value = 'Draft saved.'
+    return true
   } catch (caught) {
     errorMessage.value = caught instanceof ApiError ? caught.message : 'Could not save.'
+    return false
   } finally {
     saving.value = false
   }
+}
+
+/**
+ * Section AI looks up the section on the stored page. Fresh inserts must be
+ * saved first or the API returns "Section not found."
+ */
+async function ensureDraftSaved() {
+  if (!dirty.value) return
+  const ok = await save()
+  if (!ok) throw new Error(errorMessage.value || 'Could not save.')
 }
 
 async function publish() {
@@ -639,10 +961,42 @@ const DEVICES = [
   { id: 'tablet', label: 'Tablet', icon: Tablet },
   { id: 'mobile', label: 'Mobile', icon: Smartphone },
 ] as const
+
+function togglePropertiesPanel() {
+  rightOpen.value = !rightOpen.value
+  if (rightOpen.value) rightTab.value = 'style'
+}
 </script>
 
 <template>
-  <div v-if="data" class="flex h-screen min-h-0 flex-col overflow-hidden">
+  <div
+    v-if="loadStatus === 'pending' && !data"
+    class="grid h-screen place-items-center bg-sunken px-6 text-center"
+  >
+    <p class="text-[0.875rem] text-soft">Opening page editor…</p>
+  </div>
+
+  <div
+    v-else-if="!data"
+    class="grid h-screen place-items-center bg-sunken px-6 text-center"
+  >
+    <div class="max-w-md">
+      <p class="text-[1.125rem] font-semibold text-ink">Could not open this page</p>
+      <p class="mt-2 text-[0.875rem] leading-relaxed text-soft">
+        {{
+          loadError instanceof Error
+            ? loadError.message
+            : 'The page may have been deleted, or the API is unreachable.'
+        }}
+      </p>
+      <div class="mt-5 flex justify-center gap-2">
+        <UiButton to="/website/pages">Back to pages</UiButton>
+        <UiButton variant="primary" @click="refresh()">Try again</UiButton>
+      </div>
+    </div>
+  </div>
+
+  <div v-else class="flex h-screen min-h-0 flex-col overflow-hidden">
     <!-- Top bar ------------------------------------------------------------ -->
     <!--
       Header z-index: the body paints after this row, so an absolute Page
@@ -654,7 +1008,7 @@ const DEVICES = [
         class="grid h-8 w-8 place-items-center rounded-md text-faint no-underline transition-colors hover:bg-sunken hover:text-ink"
         aria-label="Back to pages"
       >
-        <ArrowLeft class="h-4 w-4" :stroke-width="ICON_STROKE" aria-hidden="true" />
+        <ArrowLeft class="h-4 w-4" :stroke-width="1.75" aria-hidden="true" />
       </NuxtLink>
 
       <div class="min-w-0">
@@ -664,6 +1018,29 @@ const DEVICES = [
 
       <div class="ml-4 flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
         <button
+          type="button"
+          class="type-button-12 rounded-md px-2.5 py-1.5 transition-colors"
+          :class="!interactive ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
+          :aria-pressed="!interactive"
+          title="Classic editor — layers, canvas, properties"
+          @click="setBuilderMode('classic')"
+        >Editor</button>
+        <button
+          type="button"
+          class="type-button-12 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 transition-colors"
+          :class="interactive ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
+          :aria-pressed="interactive"
+          title="Interactive builder — AI assistant + live preview"
+          @click="setBuilderMode('interactive')"
+        >
+          <Sparkles class="h-3.5 w-3.5" :stroke-width="ICON_STROKE" aria-hidden="true" />
+          Interactive
+        </button>
+      </div>
+
+      <div class="flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
+        <button
+          v-if="!interactive"
           type="button"
           class="grid h-7 w-8 place-items-center rounded-md transition-colors"
           :class="leftOpen ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
@@ -681,7 +1058,7 @@ const DEVICES = [
           aria-label="Toggle properties panel"
           :aria-pressed="rightOpen"
           title="Properties"
-          @click="rightOpen = !rightOpen"
+          @click="togglePropertiesPanel"
         >
           <PanelRight class="h-4 w-4" :stroke-width="ICON_STROKE" aria-hidden="true" />
         </button>
@@ -743,9 +1120,11 @@ const DEVICES = [
         :title="title"
         :seo="seo"
         :sections="sections"
+        :theme="data.site.theme"
         :disabled="!can('page:write')"
         @update:title="title = $event; markDirty()"
         @update:seo="seo = $event; markDirty()"
+        @update:theme="patchSiteTheme"
       />
 
       <div class="ml-auto flex items-center gap-2">
@@ -754,7 +1133,12 @@ const DEVICES = [
         <UiBadge v-else-if="data.page.status === 'published'" tone="positive">Live</UiBadge>
 
         <UiButton size="sm" :to="liveUrl" target="_blank" external>View</UiButton>
-        <UiButton size="sm" :loading="saving" :disabled="!dirty" @click="save">Save</UiButton>
+        <UiButton
+          size="sm"
+          :loading="saving"
+          :disabled="!dirty || !can('page:write')"
+          @click="save"
+        >Save</UiButton>
         <UiButton v-if="can('page:publish')" size="sm" variant="primary" :loading="publishing" @click="publish">
           Publish
         </UiButton>
@@ -762,7 +1146,145 @@ const DEVICES = [
     </header>
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
-      <!-- Left: pages / layers / assets ----------------------------------- -->
+      <!-- Interactive: assistant + canvas + properties (when a section is selected) -->
+      <template v-if="interactive">
+        <aside
+          class="editor-chrome flex min-h-0 shrink-0 flex-col border-r border-line bg-paper"
+          :style="{ width: `${interactiveAssistantWidth}px` }"
+        >
+          <AssistantPanel
+            @insert-catalogue="onInsertCatalogue"
+            @theme-updated="applyThemeLocal"
+          />
+        </aside>
+
+        <EditorResizer
+          v-model="interactiveAssistantWidth"
+          side="left"
+          :min="300"
+          :max="560"
+          label="Resize the assistant panel"
+        />
+
+        <div data-editor-scroll class="relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas">
+          <InsertPanel
+            v-model:open="picking"
+            :max-performance-class="data.site.theme.maxPerformanceClass"
+            :theme="data.site.theme"
+            :can-write="can('page:write')"
+            :site-id="data.site.id"
+            :page-id="data.page.id"
+            @insert="insertBlockIds"
+            @insert-sections="(sections) => { insertSections(sections); picking = false }"
+            @generate-motion="onGenerateMotion"
+            @rebuild-ai="onRebuildAi"
+          />
+
+          <p
+            v-if="message || errorMessage"
+            class="type-button-12 absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg px-3 py-1.5 shadow-raised"
+            :class="errorMessage ? 'bg-danger-soft text-danger' : 'bg-positive-soft text-positive'"
+            role="status"
+          >
+            {{ errorMessage || message }}
+          </p>
+
+          <div class="pointer-events-none absolute left-3 top-3 z-10">
+            <UiButton
+              v-if="can('page:write')"
+              class="pointer-events-auto"
+              size="sm"
+              variant="ghost"
+              @click="picking = true"
+            >+ Add</UiButton>
+          </div>
+
+          <EditorCanvas
+            :sections="sections"
+            :theme="data.site.theme"
+            :selected-id="selectedId"
+            :device="device"
+            :zoom="zoom"
+            :can-write="can('page:write')"
+            :generating-ids="generatingIds"
+            :brand-logo="brandLogo"
+            @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
+            @reorder="reorder"
+            @move-up="move($event, -1)"
+            @move-down="move($event, 1)"
+            @duplicate="duplicate"
+            @remove="remove"
+            @ask-ai="askAi"
+            @library-drop="onLibraryDrop"
+          />
+        </div>
+
+        <EditorResizer
+          v-if="rightOpen"
+          v-model="rightWidth"
+          side="right"
+          :min="260"
+          :max="560"
+          label="Resize the properties panel"
+        />
+
+        <aside
+          v-if="rightOpen"
+          class="editor-chrome flex min-h-0 shrink-0 flex-col border-l border-line bg-paper"
+          :style="{ width: `${rightWidth}px` }"
+        >
+          <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+            <span class="type-button-12 text-ink">Properties</span>
+            <button
+              type="button"
+              class="type-button-10 rounded-md px-2 py-1 text-faint hover:bg-sunken hover:text-ink"
+              aria-label="Close properties"
+              @click="rightOpen = false"
+            >Close</button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto p-4">
+            <template v-if="selected && selectedBlock">
+              <div class="mb-4 border-b border-line pb-3">
+                <h2 class="type-button text-ink">{{ selectedBlock.name }}</h2>
+                <p class="type-caption-12 mt-1 leading-relaxed text-soft">{{ selectedBlock.description }}</p>
+              </div>
+              <div class="mb-4 flex gap-0.5 rounded-lg bg-sunken p-0.5">
+                <button
+                  v-for="tab in ([
+                    { id: 'content' as const, label: 'Content' },
+                    { id: 'design' as const, label: 'Design' },
+                  ])"
+                  :key="tab.id"
+                  type="button"
+                  class="type-button-12 flex-1 rounded-md py-1.5 transition-colors"
+                  :class="styleTab === tab.id ? 'bg-raised text-ink shadow-card' : 'text-soft hover:text-ink'"
+                  :aria-pressed="styleTab === tab.id"
+                  @click="styleTab = tab.id"
+                >{{ tab.label }}</button>
+              </div>
+              <SectionForm
+                v-if="styleTab === 'content'"
+                :section="selected"
+                :block="selectedBlock"
+                :pages="data.siblings"
+                :site-id="data.page.siteId"
+                @update="updateSelectedProps"
+              />
+              <SectionProperties v-else :section="selected" @update="updateSelectedSection" />
+            </template>
+            <SiteDesignRail
+              v-else
+              :theme="data.site.theme"
+              :disabled="!can('page:write')"
+              @update:theme="patchSiteTheme"
+            />
+          </div>
+        </aside>
+      </template>
+
+      <!-- Classic: layers / canvas / properties ----------------------------- -->
+      <template v-else>
+      <!-- Left: pages / layers ------------------------------------------- -->
       <aside
         v-if="leftOpen"
         class="editor-chrome flex min-h-0 shrink-0 flex-col bg-paper"
@@ -770,7 +1292,7 @@ const DEVICES = [
       >
         <div class="flex shrink-0 gap-0.5 border-b border-line px-2 py-2" role="tablist">
           <button
-            v-for="tab in (['pages', 'layers', 'assets'] as const)"
+            v-for="tab in (['pages', 'layers'] as const)"
             :key="tab"
             role="tab"
             :aria-selected="leftTab === tab"
@@ -784,6 +1306,8 @@ const DEVICES = [
         <div v-if="leftTab === 'layers'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div class="flex shrink-0 items-center justify-between px-3 py-2">
             <span class="type-button-10 uppercase tracking-[0.08em] text-faint">Sections</span>
+            <!-- TODO(Wave 0.5+): when selected section is layout-canvas-01, show Structure
+                 subtree (walkLayoutNodes / isLayoutCanvasBlock) with nest/rename/duplicate. -->
             <UiButton v-if="can('page:write')" size="sm" variant="ghost" @click="picking = true">+ Add</UiButton>
           </div>
 
@@ -812,10 +1336,12 @@ const DEVICES = [
                 <span
                   v-if="generatingIds.includes(section.id)"
                   class="grid h-4 w-4 shrink-0 place-items-center px-0.5"
-                  title="Writing copy…"
+                  :title="section.block === 'motion-section-01' ? 'Generating Motionsites…' : 'Writing copy…'"
                 >
                   <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" aria-hidden="true" />
-                  <span class="sr-only">Writing copy</span>
+                  <span class="sr-only">{{
+                    section.block === 'motion-section-01' ? 'Generating Motionsites' : 'Writing copy'
+                  }}</span>
                 </span>
                 <span v-else class="type-button-12 cursor-grab select-none px-0.5 text-faint active:cursor-grabbing" aria-hidden="true">⠿</span>
 
@@ -840,7 +1366,7 @@ const DEVICES = [
         </div>
 
         <!-- Pages -->
-        <div v-else-if="leftTab === 'pages'" class="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
+        <div v-else class="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
           <NuxtLink
             v-for="sibling in data.siblings"
             :key="sibling.id"
@@ -854,17 +1380,6 @@ const DEVICES = [
             </span>
             <span v-if="sibling.hasUnpublishedChanges" class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-label="Unpublished changes" />
           </NuxtLink>
-        </div>
-
-        <!-- Assets -->
-        <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <AssetsPanel
-            :selection="selected ? [selected] : []"
-            :max-performance-class="data.site.theme.maxPerformanceClass"
-            :can-write="can('page:write')"
-            :theme="data.site.theme"
-            @insert="insertSections"
-          />
         </div>
       </aside>
 
@@ -887,10 +1402,12 @@ const DEVICES = [
           v-model:open="picking"
           :max-performance-class="data.site.theme.maxPerformanceClass"
           :theme="data.site.theme"
-          :selection="selected ? [selected] : []"
           :can-write="can('page:write')"
+          :site-id="data.site.id"
+          :page-id="data.page.id"
           @insert="insertBlockIds"
           @insert-sections="(sections) => { insertSections(sections); picking = false }"
+          @generate-motion="onGenerateMotion"
           @rebuild-ai="onRebuildAi"
         />
 
@@ -911,6 +1428,7 @@ const DEVICES = [
           :zoom="zoom"
           :can-write="can('page:write')"
           :generating-ids="generatingIds"
+          :brand-logo="brandLogo"
           @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
           @reorder="reorder"
           @move-up="move($event, -1)"
@@ -983,14 +1501,17 @@ const DEVICES = [
 
             <div class="mb-4 flex gap-0.5 rounded-lg bg-sunken p-0.5">
               <button
-                v-for="tab in (['content', 'properties'] as const)"
-                :key="tab"
+                v-for="tab in ([
+                  { id: 'content' as const, label: 'Content' },
+                  { id: 'design' as const, label: 'Design' },
+                ])"
+                :key="tab.id"
                 type="button"
-                class="type-button-12 flex-1 rounded-md py-1.5 capitalize transition-colors"
-                :class="styleTab === tab ? 'bg-raised text-ink shadow-card' : 'text-soft hover:text-ink'"
-                :aria-pressed="styleTab === tab"
-                @click="styleTab = tab"
-              >{{ tab }}</button>
+                class="type-button-12 flex-1 rounded-md py-1.5 transition-colors"
+                :class="styleTab === tab.id ? 'bg-raised text-ink shadow-card' : 'text-soft hover:text-ink'"
+                :aria-pressed="styleTab === tab.id"
+                @click="styleTab = tab.id"
+              >{{ tab.label }}</button>
             </div>
 
             <SectionForm
@@ -1004,15 +1525,22 @@ const DEVICES = [
             <SectionProperties v-else :section="selected" @update="updateSelectedSection" />
           </template>
 
-          <p v-else class="type-caption-12 pt-10 text-center text-faint">
-            Select a section on the canvas to edit it.
-          </p>
+          <SiteDesignRail
+            v-else
+            :theme="data.site.theme"
+            :disabled="!can('page:write')"
+            @update:theme="patchSiteTheme"
+          />
         </div>
 
         <div v-else class="min-h-0 flex-1 overflow-hidden">
-          <AssistantPanel />
+          <AssistantPanel
+            @insert-catalogue="onInsertCatalogue"
+            @theme-updated="applyThemeLocal"
+          />
         </div>
       </aside>
+      </template>
     </div>
 
 
@@ -1023,7 +1551,9 @@ const DEVICES = [
       :block-name="selectedBlock?.name ?? ''"
       :initial-instruction="aiInstruction"
       :auto-apply="aiAutoApply"
+      :persist="ensureDraftSaved"
       @apply="applyAiProposal"
+      @use-island="onUseIsland"
     />
 
     <!-- Reordering has no visual anchor for a screen reader, so every move is

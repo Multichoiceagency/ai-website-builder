@@ -10,7 +10,8 @@
  * through the same `searchBlocks()` query the AI selector uses.
  */
 import { registerBlock, registerBlockFacets } from './registry.js'
-import { footerSimple01, headerSimple01 } from './library/layout.js'
+import { footerSimple01, headerLiquidGlass01, headerSimple01 } from './library/layout.js'
+import { layoutCanvas01 } from './library/layout-canvas.js'
 import { heroCentered01, heroSplit01 } from './library/hero.js'
 import { contentRichText01, faqAccordion01, featuresGrid01, servicesList01 } from './library/content.js'
 import { logosStrip01, statsBand01, testimonialsGrid01 } from './library/proof.js'
@@ -32,6 +33,7 @@ export * from './collections/index.js'
 /** The blocks that predate collections. Described as `core`, never rewritten. */
 const CORE_BLOCKS = [
   headerSimple01,
+  headerLiquidGlass01,
   heroSplit01,
   heroCentered01,
   logosStrip01,
@@ -39,6 +41,7 @@ const CORE_BLOCKS = [
   servicesList01,
   featuresGrid01,
   contentRichText01,
+  layoutCanvas01,
   testimonialsGrid01,
   faqAccordion01,
   ctaBanner01,
@@ -65,12 +68,14 @@ for (const [id, facet] of Object.entries(CORE_BLOCK_FACETS)) registerBlockFacets
 
 export {
   headerSimple01,
+  headerLiquidGlass01,
   footerSimple01,
   heroSplit01,
   heroCentered01,
   featuresGrid01,
   servicesList01,
   contentRichText01,
+  layoutCanvas01,
   faqAccordion01,
   statsBand01,
   testimonialsGrid01,

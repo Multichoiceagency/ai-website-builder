@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import type { Section } from '@platform/schemas'
+import { detectExactIslandIntent } from '@platform/templates'
 
 /**
  * Ask AI to edit one section.
@@ -13,6 +14,9 @@ import type { Section } from '@platform/schemas'
  *
  * Rebuild-with-AI passes `initialInstruction` + `autoApply` so the MotionSites
  * prompt runs and lands without a second confirmation.
+ *
+ * Exact React+Vite Motionsites briefs are not prop rewrites — they emit
+ * `use-island` so the editor inserts the curated island + shared header.
  */
 const props = defineProps<{
   pageId: string
@@ -22,9 +26,17 @@ const props = defineProps<{
   initialInstruction?: string
   /** After a successful suggest with changes, apply without waiting for a click. */
   autoApply?: boolean
+  /**
+   * Persist the draft before suggest/apply. Freshly inserted sections only exist
+   * in the editor until save — the API looks them up on the stored page.
+   */
+  persist?: () => Promise<void>
 }>()
 
-const emit = defineEmits<{ apply: [props: Record<string, unknown>] }>()
+const emit = defineEmits<{
+  apply: [props: Record<string, unknown>]
+  'use-island': [sectionId: string]
+}>()
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -42,6 +54,17 @@ interface Proposal {
   instruction: string
   model: string
   notes: string[]
+  /** When set, Apply / auto-apply should insert this Motionsites island instead. */
+  islandId?: string
+  /** Related block / Motionsites / studio layout rows for citation. */
+  catalogueHits?: {
+    kind: 'block' | 'template'
+    id: string
+    name: string
+    category: string
+    collection: string
+    score?: number
+  }[]
   current: Record<string, unknown>
   proposed: Record<string, unknown>
   changedFields: FieldChange[]
@@ -94,12 +117,32 @@ async function suggest() {
   proposal.value = null
 
   try {
+    const islandId = detectExactIslandIntent(instruction.value)
+    if (islandId) {
+      emit('use-island', islandId)
+      open.value = false
+      return
+    }
+
+    // New inserts (Rebuild with AI / backgrounds) live only in the editor until
+    // save — without this the API returns "Section not found."
+    if (props.persist) await props.persist()
+    if (!props.section) {
+      errorMessage.value = 'Section not found.'
+      return
+    }
+
     proposal.value = await api.post<Proposal>(
       `/api/v1/pages/${props.pageId}/sections/${props.section.id}/suggest`,
       // The editor's live values, which may not be saved yet — otherwise the
       // model would reason about a headline the user has already replaced.
       { instruction: instruction.value, props: props.section.props },
     )
+    if (proposal.value?.islandId) {
+      emit('use-island', proposal.value.islandId)
+      open.value = false
+      return
+    }
     if (props.autoApply && (proposal.value?.changedFields.length ?? 0) > 0) {
       await apply()
     }
@@ -129,6 +172,7 @@ async function apply() {
   errorMessage.value = ''
 
   try {
+    if (props.persist) await props.persist()
     await api.post(`/api/v1/pages/${props.pageId}/sections/${props.section.id}/apply`, {
       props: current.proposed,
       model: current.model,
@@ -194,6 +238,26 @@ async function apply() {
         <p v-for="note in proposal.notes" :key="note" class="type-caption-12 leading-relaxed text-soft">
           {{ note }}
         </p>
+
+        <div
+          v-if="proposal.catalogueHits?.length"
+          class="rounded-lg border border-line bg-sunken/40 px-3 py-2.5"
+        >
+          <p class="type-button-10 mb-2 uppercase tracking-[0.08em] text-faint">
+            Catalogue context
+          </p>
+          <ul class="flex flex-col gap-1">
+            <li
+              v-for="hit in proposal.catalogueHits.slice(0, 6)"
+              :key="`${hit.kind}:${hit.id}`"
+              class="type-caption-12 text-soft"
+            >
+              <span class="font-medium text-ink">{{ hit.id }}</span>
+              — {{ hit.name }}
+              <span class="text-faint">({{ hit.kind }} · {{ hit.category }})</span>
+            </li>
+          </ul>
+        </div>
 
         <ul v-if="hasChanges" class="flex flex-col gap-2.5">
           <li

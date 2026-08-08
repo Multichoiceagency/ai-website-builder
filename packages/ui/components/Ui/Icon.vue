@@ -50,6 +50,7 @@ const PATHS: Record<string, IconPath[]> = {
   'align-left': ['M3 6h18', 'M3 12h10', 'M3 18h14'],
   'align-center': ['M3 6h18', 'M7 12h10', 'M5 18h14'],
   'align-right': ['M3 6h18', 'M11 12h10', 'M7 18h14'],
+  'layout-split': ['M4 6h4', 'M10 6h4', 'M16 6h4', 'M4 12h6', 'M14 12h6', 'M4 18h4', 'M16 18h4'],
 
   // --- surface tone --------------------------------------------------------
   'tone-light': ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z'],

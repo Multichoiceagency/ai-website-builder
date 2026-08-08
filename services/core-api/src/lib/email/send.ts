@@ -30,9 +30,14 @@ import {
   markCampaignSent,
 } from '../../db/repositories/email.js'
 import { listContactsForSend } from '../../db/repositories/crm.js'
+import { findConnectionTokens } from '../../db/repositories/integrations.js'
+import { connectionHasScope } from '../integrations/google.js'
+import { googleAccessTokenFor } from '../integrations/google-token.js'
+import { GmailEmailProvider } from './gmail-provider.js'
 import { getEmailConfig, getEmailProvider } from './index.js'
 import { contactVariables, renderEmail } from './render.js'
 import { matchesSegment } from './segments.js'
+import type { EmailProvider } from './provider.js'
 
 export interface SendEmailRequest {
   kind: EmailMessageKind
@@ -63,8 +68,9 @@ export function idempotencyKey(...parts: (string | null | undefined)[]): string 
 }
 
 export async function sendEmail(tenantId: string, request: SendEmailRequest): Promise<SendEmailOutcome> {
-  const provider = getEmailProvider()
+  const fallback = getEmailProvider()
   const config = getEmailConfig()
+  const provider = (await resolveTenantEmailProvider(tenantId)) ?? fallback
 
   const claimed = await withTenant(tenantId, (tx) =>
     claimEmailMessage(tx, tenantId, {
@@ -115,6 +121,22 @@ export async function sendEmail(tenantId: string, request: SendEmailRequest): Pr
   }
 }
 
+/** Prefer connected Gmail when the workspace granted `gmail.send`. */
+async function resolveTenantEmailProvider(tenantId: string): Promise<EmailProvider | null> {
+  const connection = await withTenant(tenantId, (tx) => findConnectionTokens(tx, tenantId, 'google'))
+  if (!connection) return null
+  if (!connectionHasScope(connection.scopes, 'https://www.googleapis.com/auth/gmail.send')) {
+    return null
+  }
+
+  try {
+    const accessToken = await googleAccessTokenFor(tenantId)
+    return new GmailEmailProvider(accessToken)
+  } catch {
+    return null
+  }
+}
+
 export interface CampaignSendResult {
   campaign: EmailCampaign
   stats: EmailCampaignStats
@@ -131,8 +153,6 @@ export interface CampaignSendResult {
  * half-finished campaign safe.
  */
 export async function sendCampaign(tenantId: string, campaignId: string): Promise<CampaignSendResult | null> {
-  const provider = getEmailProvider()
-
   const prepared = await withTenant(tenantId, async (tx) => {
     const campaign = await findEmailCampaignById(tx, tenantId, campaignId)
     if (!campaign) return null
@@ -150,6 +170,7 @@ export async function sendCampaign(tenantId: string, campaignId: string): Promis
   )
 
   const stats = { recipients: recipients.length, sent: 0, failed: 0, skipped: 0 }
+  let delivered = false
 
   for (const contact of recipients) {
     const rendered = renderEmail(
@@ -171,8 +192,10 @@ export async function sendCampaign(tenantId: string, campaignId: string): Promis
       fromName: prepared.campaign.fromName,
     })
 
-    if (outcome.status === 'sent') stats.sent += 1
-    else if (outcome.status === 'failed') stats.failed += 1
+    if (outcome.status === 'sent') {
+      stats.sent += 1
+      if (outcome.provider !== 'console') delivered = true
+    } else if (outcome.status === 'failed') stats.failed += 1
     else stats.skipped += 1
   }
 
@@ -186,6 +209,6 @@ export async function sendCampaign(tenantId: string, campaignId: string): Promis
   return {
     campaign: campaign ?? prepared.campaign,
     stats: parsedStats,
-    delivered: provider.configured,
+    delivered,
   }
 }

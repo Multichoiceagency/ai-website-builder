@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { CommerceStatus, ShippingRate } from '@platform/schemas'
 
 /**
@@ -12,9 +12,10 @@ import type { CommerceStatus, ShippingRate } from '@platform/schemas'
  * One panel at a time. A single scrolling page of all seven is where merchants
  * lose the setting they came for.
  */
-type Panel = 'payments' | 'shipping' | 'taxes' | 'checkout' | 'inventory' | 'currencies' | 'email'
+type Panel = 'connection' | 'payments' | 'shipping' | 'taxes' | 'checkout' | 'inventory' | 'currencies' | 'email'
 
 const PANELS: { key: Panel; label: string }[] = [
+  { key: 'connection', label: 'Connection' },
   { key: 'payments', label: 'Payments' },
   { key: 'shipping', label: 'Shipping' },
   { key: 'taxes', label: 'Taxes' },
@@ -26,14 +27,29 @@ const PANELS: { key: Panel; label: string }[] = [
 
 const api = useApi()
 const route = useRoute()
+const router = useRouter()
 
-const panel = ref<Panel>(
-  PANELS.some((entry) => entry.key === route.query.panel) ? (route.query.panel as Panel) : 'payments',
+function panelFromQuery(value: unknown): Panel {
+  return PANELS.some((entry) => entry.key === value) ? (value as Panel) : 'connection'
+}
+
+const panel = ref<Panel>(panelFromQuery(route.query.panel))
+
+watch(
+  () => route.query.panel,
+  (value) => {
+    panel.value = panelFromQuery(value)
+  },
 )
+
+function selectPanel(next: Panel) {
+  panel.value = next
+  void router.replace({ query: { ...route.query, panel: next } })
+}
 
 // Provider status and flat rates are read once here and passed down, so the
 // panels that need them do not each open their own request.
-const { data: status } = await useAsyncData('commerce:settings:status', () =>
+const { data: status, refresh: refreshStatus } = await useAsyncData('commerce:settings:status', () =>
   api.get<CommerceStatus>('/api/v1/commerce/status'),
 )
 
@@ -48,7 +64,7 @@ const { data: rates } = await useAsyncData(
   <div class="editor-chrome">
     <UiPageHeader
       title="Store settings"
-      description="Payments, shipping, tax, checkout, stock and store e-mail."
+      description="Connect Shopify / WooCommerce / Medusa, then payments, shipping, tax and checkout."
       back="/commerce"
       back-label="Commerce"
     />
@@ -65,13 +81,22 @@ const { data: rates } = await useAsyncData(
             : 'border-line text-soft hover:border-line-strong hover:text-ink'
         "
         :aria-current="panel === entry.key ? 'page' : undefined"
-        @click="panel = entry.key"
+        @click="selectPanel(entry.key)"
       >
         {{ entry.label }}
       </button>
     </nav>
 
-    <SettingsCommercePayments v-if="panel === 'payments'" :status="status ?? null" />
+    <SettingsCommerceEngine
+      v-if="panel === 'connection'"
+      :status="status ?? null"
+      @status-changed="refreshStatus()"
+    />
+    <SettingsCommercePayments
+      v-else-if="panel === 'payments'"
+      :status="status ?? null"
+      @status-changed="refreshStatus()"
+    />
     <SettingsCommerceShipping
       v-else-if="panel === 'shipping'"
       :status="status ?? null"

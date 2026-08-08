@@ -98,6 +98,21 @@ function videoStemName(thumbFile) {
   return `${thumbFile.slice(0, -ext.length)}.mp4`
 }
 
+/** Dropbox often labels WebP thumbs as `.png` — fix the on-disk + catalogue name. */
+function correctedThumbFile(srcPath, thumbFile) {
+  const ext = extname(thumbFile).toLowerCase()
+  if (ext !== '.png') return thumbFile
+  try {
+    const head = readFileSync(srcPath).subarray(0, 16)
+    if (head.toString('ascii', 0, 4) === 'RIFF' && head.toString('ascii', 8, 12) === 'WEBP') {
+      return `${thumbFile.slice(0, -ext.length)}.webp`
+    }
+  } catch {
+    /* keep original name */
+  }
+  return thumbFile
+}
+
 function resolveVideoSource(entry, videoName) {
   const candidates = []
   if (videoName) {
@@ -198,9 +213,10 @@ function main() {
     if (thumbFile && IMAGE_EXT.has(thumbExt)) {
       const src = join(THUMBS_SRC, thumbFile)
       if (existsSync(src)) {
-        const dest = join(THUMBS_OUT, thumbFile)
+        const outName = correctedThumbFile(src, thumbFile)
+        const dest = join(THUMBS_OUT, outName)
         copyMedia(src, dest)
-        previewImage = `${PUBLIC_THUMB}/${thumbFile}`
+        previewImage = `${PUBLIC_THUMB}/${outName}`
         mediaStats.thumbsCopied += 1
       } else {
         mediaStats.thumbMissing += 1

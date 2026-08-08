@@ -1,0 +1,665 @@
+[
+  {
+    "id": "ss-about-us-section-01",
+    "library": "Shadcn Space",
+    "demo": "about-us-section-01",
+    "name": "About Us 01 - Impact Metrics",
+    "description": "A bold about us section combining value pillars, headline messaging, and performance counters, perfect for agencies or studios to highlight expertise, achievements, and credibility at a glance.",
+    "collection": "content",
+    "tags": [
+      "about-us-section",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "about-scroll-story-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-bento-grid-01",
+    "library": "Shadcn Space",
+    "demo": "bento-grid-01",
+    "name": "Bento Grid 01 - Customer Testimonials",
+    "description": "Discover authentic feedback from satisfied customers who trust our components to build faster, streamline development workflows, and confidently launch scalable, production-ready applications.",
+    "collection": "features",
+    "tags": [
+      "bento-grid",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "features-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-bio-link-01",
+    "library": "Shadcn Space",
+    "demo": "bio-link-01",
+    "name": "Bio Link 01 - Founder Bio Link",
+    "description": "A clean founder-focused bio links layout with profile image, quick access buttons, social links, and CTA section, perfect for showcasing products and updates.",
+    "collection": "features",
+    "tags": [
+      "bio-link",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "content-richtext-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-blog-01",
+    "library": "Shadcn Space",
+    "demo": "blog-01",
+    "name": "Blog 01 - Latest Blog & News Grid",
+    "description": "A modern blog section with featured posts, large thumbnails, publish dates, and headlines, ideal for sharing agency updates, design insights, and thought leadership to keep visitors engaged.",
+    "collection": "content",
+    "tags": [
+      "blog",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "blog-card-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-contact-01",
+    "library": "Shadcn Space",
+    "demo": "contact-01",
+    "name": "Contact 01 - Project Inquiry Contact Form",
+    "description": "A conversion focused contact section with project inquiry form, contact details, and trust badges, ideal for agencies or freelancers to capture qualified leads and start meaningful client conversations.",
+    "collection": "conversion",
+    "tags": [
+      "contact",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "contact-details-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-cta-01",
+    "library": "Shadcn Space",
+    "demo": "cta-01",
+    "name": "CTA 01 - Gradient Call-to-Action Banner",
+    "description": "A minimal full width CTA section with soft gradient background, persuasive headline, and primary action button, perfect for converting visitors into leads at the end of any page.",
+    "collection": "conversion",
+    "tags": [
+      "cta",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "cta-animated-border-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-cta-02",
+    "library": "Shadcn Space",
+    "demo": "cta-02",
+    "name": "CTA 02 - Video Background CTA",
+    "description": "A high impact call-to-action section with autoplay background video, bold overlay headline, primary button, and rotating ticker text, perfect for luxury brands or real estate to capture attention instantly.",
+    "collection": "conversion",
+    "tags": [
+      "cta",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "cta-animated-border-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-download-01",
+    "library": "Shadcn Space",
+    "demo": "download-01",
+    "name": "Download 01 - Multi-Platform Download Grid",
+    "description": "A structured platform showcase featuring dedicated download cards for every device, helping users quickly access applications and extensions.",
+    "collection": "conversion",
+    "tags": [
+      "download",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "cta-animated-border-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-faq-01",
+    "library": "Shadcn Space",
+    "demo": "faq-01",
+    "name": "FAQ 01 - Expandable FAQ Section",
+    "description": "A clean accordion style FAQ section with expandable answers, ideal for agencies or SaaS sites to address common questions, reduce friction, and improve user confidence before conversion.",
+    "collection": "content",
+    "tags": [
+      "faq",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "faq-accordion-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-feature-01",
+    "library": "Shadcn Space",
+    "demo": "feature-01",
+    "name": "Feature 01 - Feature with Testimonials",
+    "description": "A trust focused feature section combining a highlighted customer testimonial with supporting benefit cards, perfect for product or SaaS pages to showcase social proof and reinforce key advantages.",
+    "collection": "features",
+    "tags": [
+      "feature",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "features-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-feature-02",
+    "library": "Shadcn Space",
+    "demo": "feature-02",
+    "name": "Feature 02 - Three Columns Feature with Icons",
+    "description": "A clean three card feature grid with icons and concise copy, built for product or SaaS pages to communicate core benefits clearly while maintaining a developer friendly, scalable layout.",
+    "collection": "features",
+    "tags": [
+      "feature",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "features-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-footer-01",
+    "library": "Shadcn Space",
+    "demo": "footer-01",
+    "name": "Footer 01 - Agency Footer Layout",
+    "description": "A clean multi column footer with brand summary, sitemap links, legal pages, contact details, and social icons, perfect for agencies to provide clarity, trust, and easy navigation.",
+    "collection": "footer",
+    "tags": [
+      "footer",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-footer-02",
+    "library": "Shadcn Space",
+    "demo": "footer-02",
+    "name": "Footer 02 - Dark Conversion Footer",
+    "description": "A bold dark themed footer with newsletter signup, strong contact CTA, navigation links, and legal pages, ideal for real estate or SaaS websites to drive engagement at the page end.",
+    "collection": "footer",
+    "tags": [
+      "footer",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "footer-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-forms-01",
+    "library": "Shadcn Space",
+    "demo": "forms-01",
+    "name": "Forms 01 - Edit Profile Form",
+    "description": "A user-friendly profile editing form with avatar upload, personal details, privacy controls, and action toggles, perfect for managing account information inside modern SaaS dashboards.",
+    "collection": "conversion",
+    "tags": [
+      "forms",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "contact-details-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-gallery-01",
+    "library": "Shadcn Space",
+    "demo": "gallery-01",
+    "name": "Gallery 01 - Destination Gallery",
+    "description": "Discover breathtaking locations and unforgettable experiences, from scenic hikes to coastal escapes—carefully curated to inspire your next journey and help you explore with confidence.",
+    "collection": "content",
+    "tags": [
+      "gallery",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "gallery-compare-slider-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-hero-01",
+    "library": "Shadcn Space",
+    "demo": "hero-01",
+    "name": "Hero 01 - Agency Hero Section",
+    "description": "Clean agency hero section designed for SaaS and startup websites, featuring bold headline, gradient background, trust badges, client logos, and high converting CTAs for lead generation.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "hero-cover-statement-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-hero-02",
+    "library": "Shadcn Space",
+    "demo": "hero-02",
+    "name": "Hero 02 - Real Estate Hero Section",
+    "description": "Luxury real estate hero section crafted for property listings, featuring immersive imagery, location highlight, key amenities, pricing details, and prominent Schedule a tour CTA for faster inquiries.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "hero-centered-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-hero-03",
+    "library": "Shadcn Space",
+    "demo": "hero-03",
+    "name": "Hero 03 - Digital Agency Hero Section",
+    "description": "High-impact digital agency hero section with cinematic background video, bold typography, brand driven headline, and clear CTA, perfect for creative studios and performance-focused marketing websites.",
+    "collection": "hero",
+    "tags": [
+      "hero",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "hero-asymmetric-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-logo-cloud-01",
+    "library": "Shadcn Space",
+    "demo": "logo-cloud-01",
+    "name": "Logo Cloud 01 - Trusted by Leading Companies",
+    "description": "A clean logo collection highlighting affiliated brands and integrations, designed to build credibility, reinforce partnerships, and visually communicate trust within modern product or SaaS interfaces.",
+    "collection": "proof",
+    "tags": [
+      "logo-cloud",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "logos-orbit-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-navbar-01",
+    "library": "Shadcn Space",
+    "demo": "navbar-01",
+    "name": "Navbar 01 - Minimal Agency Navbar",
+    "description": "A clean top navigation bar with logo, page links, and standout CTA button, ideal for agency or SaaS websites to guide users and drive collaboration effortlessly.",
+    "collection": "navigation",
+    "tags": [
+      "navbar",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "header-simple-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-newsletter-01",
+    "library": "Shadcn Space",
+    "demo": "newsletter-01",
+    "name": "Newsletter 01 - Newsletter Subscription CTA",
+    "description": "A minimal newsletter signup section with bold headline, social-proof subtext, and inline email form, ideal for capturing leads and growing your audience with a frictionless experience.",
+    "collection": "conversion",
+    "tags": [
+      "newsletter",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "cta-banner-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-portfolio-01",
+    "library": "Shadcn Space",
+    "demo": "portfolio-01",
+    "name": "Portfolio 01 - Clean Portfolio Grid",
+    "description": "A modern portfolio section displaying featured projects with tags, visuals, and categories, ideal for agencies or freelancers to showcase real-world transformations, expertise, and design impact.",
+    "collection": "features",
+    "tags": [
+      "portfolio",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "gallery-compare-slider-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-pricing-01",
+    "library": "Shadcn Space",
+    "demo": "pricing-01",
+    "name": "Pricing 01 - Startup Pricing Plans",
+    "description": "A clean two tier pricing section with feature comparison, highlighted plans, and strong CTAs, suited for agencies, Startups & SaaS to convert visitors by clearly presenting value and monthly subscription options.",
+    "collection": "pricing",
+    "tags": [
+      "pricing",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "pricing-toggle-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-pricing-02",
+    "library": "Shadcn Space",
+    "demo": "pricing-02",
+    "name": "Pricing 02 - Scalable Pricing Table",
+    "description": "A three tier pricing layout with a highlighted recommended plan, feature checklists, and clear CTAs, perfect for any website having pricing section to guide users toward the most valuable subscription option.",
+    "collection": "pricing",
+    "tags": [
+      "pricing",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "pricing-toggle-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-product-category-02",
+    "library": "Shadcn Space",
+    "demo": "product-category-02",
+    "name": "Product Category 02 - Horizontal List",
+    "description": "A horizontal category list displaying product groups with icons, item counts, and quick links, enabling users to scan categories quickly and navigate products efficiently.",
+    "collection": "conversion",
+    "tags": [
+      "product-category",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "gallery-compare-slider-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-product-category-04",
+    "library": "Shadcn Space",
+    "demo": "product-category-04",
+    "name": "Product Category 04 - Image Based",
+    "description": "A product category section built with image-driven cards and filters, enabling faster discovery through visuals and improving navigation across different product groups.",
+    "collection": "conversion",
+    "tags": [
+      "product-category",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "gallery-compare-slider-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-product-listing-01",
+    "library": "Shadcn Space",
+    "demo": "product-listing-01",
+    "name": "Product Listing 01 - Multi Column Grid",
+    "description": "A multi-column layout featuring product cards with images, reviews, and pricing details, helping users scan, compare, and select products quickly.",
+    "collection": "conversion",
+    "tags": [
+      "product-listing",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "gallery-compare-slider-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-product-overview-04",
+    "library": "Shadcn Space",
+    "demo": "product-overview-04",
+    "name": "Product Overview 04 - For Skincare Product",
+    "description": "A structured skincare layout featuring image grid previews, descriptive content, pricing details, size selection, and collapsible sections for ingredients, shipping, and product overview information.",
+    "collection": "conversion",
+    "tags": [
+      "product-overview",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "features-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-services-01",
+    "library": "Shadcn Space",
+    "demo": "services-01",
+    "name": "Services 01 - Creative Services Overview",
+    "description": "A colorful services section with icon cards and dual CTAs, perfect for agencies to present core offerings, guide visitors to portfolios, and drive collaboration with clear next steps.",
+    "collection": "features",
+    "tags": [
+      "services",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "features-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-services-02",
+    "library": "Shadcn Space",
+    "demo": "services-02",
+    "name": "Services 02 - Dark Services Animated Block",
+    "description": "A premium dark mode services section with interactive list, visual preview, and detailed descriptions, ideal for creative agencies to showcase capabilities while maintaining a bold, modern brand presence.",
+    "collection": "features",
+    "tags": [
+      "services",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "features-bento-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-statistics-01",
+    "library": "Shadcn Space",
+    "demo": "statistics-01",
+    "name": "Statistics 01 - KPI Summary Cards",
+    "description": "A compact statistics section with KPI cards highlighting earnings, expenses, weekly sales, and orders, ideal for admin dashboards to surface key business metrics at a glance.",
+    "collection": "proof",
+    "tags": [
+      "statistics",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "stats-counter-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-statistics-02",
+    "library": "Shadcn Space",
+    "demo": "statistics-02",
+    "name": "Statistics 02 - Business Metrics Bar",
+    "description": "A horizontal KPI bar displaying orders, sales, profit, and expenses with weekly change indicators, ideal for dashboards to monitor short-term performance and trends at a glance.",
+    "collection": "proof",
+    "tags": [
+      "statistics",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "stats-counter-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-team-01",
+    "library": "Shadcn Space",
+    "demo": "team-01",
+    "name": "Team 01 - Creative Team Showcase",
+    "description": "A vibrant team section featuring profile cards with roles and social links, perfect for agencies or startups to humanize their brand, highlight talent, and build authentic connections.",
+    "collection": "content",
+    "tags": [
+      "team",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "about-scroll-story-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-team-02",
+    "library": "Shadcn Space",
+    "demo": "team-02",
+    "name": "Team 02 - Modern Team Grid",
+    "description": "A clean team grid with large profile cards, roles, and social icons, ideal for agencies or SaaS companies to introduce key members and strengthen brand authenticity.",
+    "collection": "content",
+    "tags": [
+      "team",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "about-scroll-story-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-testimonial-01",
+    "library": "Shadcn Space",
+    "demo": "testimonial-01",
+    "name": "Testimonial 01 - Bento Grid Testimonials",
+    "description": "A multi card testimonial section combining customer quotes, imagery, and performance stats, ideal for showcasing social proof, building trust, and reinforcing brand credibility across product or agency websites.",
+    "collection": "proof",
+    "tags": [
+      "testimonial",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "testimonials-card-stack-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-testimonial-02",
+    "library": "Shadcn Space",
+    "demo": "testimonial-02",
+    "name": "Testimonial 02 - Testimonial Slider Showcase",
+    "description": "A clean testimonial slider with customer photo, detailed quote, navigation controls, and partner logos—perfect for highlighting success stories and building instant trust on landing pages.",
+    "collection": "proof",
+    "tags": [
+      "testimonial",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "testimonials-grid-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-timeline-01",
+    "library": "Shadcn Space",
+    "demo": "timeline-01",
+    "name": "Timeline 01 - Vertical Progress Timeline",
+    "description": "A modern two-column timeline featuring alternating content blocks, visual storytelling elements, and chronological progression—designed to highlight growth and achievements.",
+    "collection": "content",
+    "tags": [
+      "timeline",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "content-text-generate-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-timeline-02",
+    "library": "Shadcn Space",
+    "demo": "timeline-02",
+    "name": "Timeline 02 - Interactive Timeline",
+    "description": "An engaging timeline layout featuring key milestones, chronological progression, and supporting visuals, crafted to communicate company evolution effectively.",
+    "collection": "content",
+    "tags": [
+      "timeline",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "content-text-generate-01"
+    ],
+    "derivation": "layout-observed"
+  },
+  {
+    "id": "ss-timeline-03",
+    "library": "Shadcn Space",
+    "demo": "timeline-03",
+    "name": "Timeline 03 - Horizontal Journey Timeline",
+    "description": "A visually structured timeline layout highlighting key milestones, supporting content, and rich imagery, helping users explore progress year by year.",
+    "collection": "content",
+    "tags": [
+      "timeline",
+      "shadcn-space",
+      "free"
+    ],
+    "blocks": [
+      "content-text-generate-01"
+    ],
+    "derivation": "layout-observed"
+  }
+]

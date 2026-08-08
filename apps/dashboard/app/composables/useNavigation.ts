@@ -1,31 +1,60 @@
 import type { Component } from 'vue'
 import type { Permission } from '@platform/schemas'
 import {
+  Activity,
   BarChart3,
+  Boxes,
+  Briefcase,
+  Building2,
+  CreditCard,
+  FileText,
+  Filter,
   FlaskConical,
+  FolderKanban,
+  Gift,
   Globe,
   Home,
+  Image,
   LayoutGrid,
+  LayoutTemplate,
+  Link2,
+  ListOrdered,
+  Mail,
+  MapPin,
+  Megaphone,
+  MessageCircle,
+  Navigation,
+  Package,
+  Palette,
+  Percent,
+  Plug,
+  Receipt,
+  Rss,
   Settings,
   ShoppingBag,
   Sparkles,
+  Store,
+  Tags,
+  Target,
   TrendingUp,
+  Truck,
   Users,
+  Warehouse,
+  Workflow,
   Zap,
 } from '@lucide/vue'
 
 /**
  * Customer dashboard navigation — master plan §39.
  *
- * Destinations that are not shipped yet carry `phase` and still appear in the
- * sidebar so the product map is honest (labelled “soon”), never hidden.
- *
- * Icons are Lucide components. Render with
- * `<component :is="section.icon" :stroke-width="ICON_STROKE" />`.
+ * Every item carries a Lucide icon so collapsed rails stay readable (no
+ * single-letter placeholders). Destinations that are not shipped yet carry
+ * `phase` and still appear, labelled “soon”.
  */
 export interface NavItem {
   label: string
   to: string
+  icon: Component
   permission?: Permission
   /** Spec phase when the destination is not implemented yet. */
   phase?: number
@@ -54,15 +83,15 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/website/pages',
     icon: Globe,
     items: [
-      { label: 'Pages', to: '/website/pages', permission: 'page:read' },
-      { label: 'Blog', to: '/website/blog', permission: 'page:read' },
-      { label: 'Navigation', to: '/website/navigation', permission: 'site:read' },
-      { label: 'Media', to: '/website/media', permission: 'media:read' },
-      { label: 'Theme', to: '/website/theme', permission: 'site:read' },
-      { label: 'Style Guide', to: '/website/style-guide', permission: 'site:read' },
-      { label: 'Components', to: '/website/components', permission: 'site:read' },
-      { label: 'Templates', to: '/website/templates', permission: 'site:read' },
-      { label: 'All websites', to: '/sites', permission: 'site:read' },
+      { label: 'Pages', to: '/website/pages', icon: FileText, permission: 'page:read' },
+      { label: 'Blog', to: '/website/blog', icon: LayoutTemplate, permission: 'page:read' },
+      { label: 'Navigation', to: '/website/navigation', icon: Navigation, permission: 'site:read' },
+      { label: 'Media', to: '/website/media', icon: Image, permission: 'media:read' },
+      { label: 'Theme', to: '/website/theme', icon: Palette, permission: 'site:read' },
+      { label: 'Style Guide', to: '/website/style-guide', icon: Sparkles, permission: 'site:read' },
+      { label: 'Components', to: '/website/components', icon: Boxes, permission: 'site:read' },
+      { label: 'Templates', to: '/website/templates', icon: LayoutGrid, permission: 'site:read' },
+      { label: 'All websites', to: '/sites', icon: Globe, permission: 'site:read' },
     ],
   },
   {
@@ -71,17 +100,19 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/commerce',
     icon: ShoppingBag,
     items: [
-      { label: 'Overview', to: '/commerce', permission: 'commerce:read' },
-      { label: 'Products', to: '/commerce/products', permission: 'commerce:read' },
-      { label: 'Collections', to: '/commerce/collections', permission: 'commerce:read', phase: 5 },
-      { label: 'Inventory', to: '/commerce/inventory', permission: 'commerce:read', phase: 5 },
-      { label: 'Orders', to: '/commerce/orders', permission: 'order:read' },
-      { label: 'Customers', to: '/commerce/customers', permission: 'customer:read' },
-      { label: 'Discounts', to: '/commerce/discounts', permission: 'commerce:read' },
-      { label: 'Shipping', to: '/commerce/shipping', permission: 'commerce:read', phase: 5 },
-      { label: 'Payments', to: '/commerce/payments', permission: 'commerce:read', phase: 5 },
-      { label: 'Taxes', to: '/commerce/taxes', permission: 'commerce:read', phase: 5 },
-      { label: 'Settings', to: '/commerce/settings', permission: 'commerce:write' },
+      { label: 'Overview', to: '/commerce', icon: Store, permission: 'commerce:read' },
+      { label: 'Store builder', to: '/commerce/builder', icon: LayoutTemplate, permission: 'commerce:read', phase: 5 },
+      { label: 'Products', to: '/commerce/products', icon: Package, permission: 'commerce:read' },
+      { label: 'Collections', to: '/commerce/collections', icon: Tags, permission: 'commerce:read' },
+      { label: 'Inventory', to: '/commerce/inventory', icon: Warehouse, permission: 'commerce:read' },
+      { label: 'Orders', to: '/commerce/orders', icon: ListOrdered, permission: 'order:read' },
+      { label: 'Customers', to: '/commerce/customers', icon: Users, permission: 'customer:read' },
+      { label: 'Discounts', to: '/commerce/discounts', icon: Percent, permission: 'commerce:read' },
+      { label: 'Shipping', to: '/commerce/shipping', icon: Truck, permission: 'commerce:read' },
+      { label: 'Payments', to: '/commerce/payments', icon: CreditCard, permission: 'commerce:read' },
+      { label: 'Taxes', to: '/commerce/taxes', icon: Receipt, permission: 'commerce:read' },
+      { label: 'Feeds', to: '/commerce/feeds', icon: Rss, permission: 'commerce:read' },
+      { label: 'Settings', to: '/commerce/settings', icon: Settings, permission: 'commerce:write' },
     ],
   },
   {
@@ -90,12 +121,12 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/growth/seo',
     icon: TrendingUp,
     items: [
-      { label: 'SEO', to: '/growth/seo', permission: 'seo:read' },
-      { label: 'Google Ads', to: '/growth/google-ads', permission: 'ads:read' },
-      { label: 'Meta Ads', to: '/growth/meta-ads', permission: 'ads:read' },
-      { label: 'Email', to: '/growth/email', permission: 'email:read' },
-      { label: 'Campaigns', to: '/growth/campaigns', permission: 'email:read', phase: 6 },
-      { label: 'Google Business', to: '/growth/google-business', permission: 'integration:read' },
+      { label: 'SEO', to: '/growth/seo', icon: Target, permission: 'seo:read' },
+      { label: 'Google Ads', to: '/growth/google-ads', icon: Megaphone, permission: 'ads:read' },
+      { label: 'Meta Ads', to: '/growth/meta-ads', icon: Megaphone, permission: 'ads:read' },
+      { label: 'Email', to: '/growth/email', icon: Mail, permission: 'email:read' },
+      { label: 'Campaigns', to: '/growth/campaigns', icon: Mail, permission: 'email:read', phase: 6 },
+      { label: 'Google Business', to: '/growth/google-business', icon: MapPin, permission: 'integration:read' },
     ],
   },
   {
@@ -104,11 +135,13 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/crm',
     icon: Users,
     items: [
-      { label: 'Leads', to: '/crm/leads', permission: 'crm:read' },
-      { label: 'Pipeline', to: '/crm/pipeline', permission: 'crm:read' },
-      { label: 'Contacts', to: '/crm/contacts', permission: 'crm:read' },
-      { label: 'Companies', to: '/crm/companies', permission: 'crm:read', phase: 6 },
-      { label: 'Tasks', to: '/crm/tasks', permission: 'crm:read', phase: 6 },
+      { label: 'Leads', to: '/crm/leads', icon: Target, permission: 'crm:read' },
+      { label: 'Pipeline', to: '/crm/pipeline', icon: FolderKanban, permission: 'crm:read' },
+      { label: 'Contacts', to: '/crm/contacts', icon: Users, permission: 'crm:read' },
+      { label: 'Support desk', to: '/crm/support', icon: MessageCircle, permission: 'crm:read' },
+      { label: 'WhatsApp agents', to: '/crm/whatsapp-agents', icon: MessageCircle, permission: 'crm:read' },
+      { label: 'Companies', to: '/crm/companies', icon: Building2, permission: 'crm:read', phase: 6 },
+      { label: 'Tasks', to: '/crm/tasks', icon: ListOrdered, permission: 'crm:read', phase: 6 },
     ],
   },
   {
@@ -117,12 +150,14 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/analytics',
     icon: BarChart3,
     items: [
-      { label: 'Overview', to: '/analytics', permission: 'analytics:read' },
-      { label: 'Attribution', to: '/analytics/attribution', permission: 'analytics:read' },
-      { label: 'Funnels', to: '/analytics/funnels', permission: 'analytics:read', phase: 4 },
-      { label: 'Commerce', to: '/analytics/commerce', permission: 'analytics:read', phase: 5 },
-      { label: 'Ads', to: '/analytics/ads', permission: 'analytics:read', phase: 6 },
-      { label: 'Tracking', to: '/analytics/tracking', permission: 'tracking:read' },
+      { label: 'Overview', to: '/analytics', icon: BarChart3, permission: 'analytics:read' },
+      { label: 'Live View', to: '/analytics/live', icon: Activity, permission: 'analytics:read' },
+      { label: 'Google Analytics', to: '/analytics/google', icon: Globe, permission: 'analytics:read' },
+      { label: 'Attribution', to: '/analytics/attribution', icon: Link2, permission: 'analytics:read' },
+      { label: 'Funnels', to: '/analytics/funnels', icon: Filter, permission: 'analytics:read', phase: 4 },
+      { label: 'Commerce', to: '/analytics/commerce', icon: ShoppingBag, permission: 'analytics:read', phase: 5 },
+      { label: 'Ads', to: '/analytics/ads', icon: Megaphone, permission: 'analytics:read', phase: 6 },
+      { label: 'Tracking', to: '/analytics/tracking', icon: Activity, permission: 'tracking:read' },
     ],
   },
   {
@@ -131,7 +166,7 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/automations',
     icon: Zap,
     items: [
-      { label: 'Workflows', to: '/automations', permission: 'automation:read' },
+      { label: 'Workflows', to: '/automations', icon: Workflow, permission: 'automation:read' },
     ],
   },
   {
@@ -140,7 +175,7 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/experiments',
     icon: FlaskConical,
     items: [
-      { label: 'Tests', to: '/experiments', permission: 'experiment:read' },
+      { label: 'Tests', to: '/experiments', icon: FlaskConical, permission: 'experiment:read' },
     ],
   },
   {
@@ -157,7 +192,7 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/apps',
     icon: LayoutGrid,
     items: [
-      { label: 'Marketplace', to: '/apps', permission: 'app:read' },
+      { label: 'Marketplace', to: '/apps', icon: Gift, permission: 'app:read' },
     ],
   },
   {
@@ -166,24 +201,23 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/settings',
     icon: Settings,
     items: [
-      { label: 'General', to: '/settings', permission: 'tenant:read' },
-      { label: 'Team', to: '/settings/team', permission: 'member:read' },
-      { label: 'Plan', to: '/settings/plan', permission: 'billing:read' },
-      { label: 'Domains', to: '/settings/domains', permission: 'domain:read' },
-      { label: 'Integrations', to: '/settings/integrations', permission: 'integration:read' },
-      { label: 'AI models', to: '/settings/ai', permission: 'tenant:read' },
-      { label: 'Notifications', to: '/settings/notifications', permission: 'tenant:read' },
-      { label: 'Developer', to: '/settings/developer', permission: 'developer:read' },
-      { label: 'Audit log', to: '/settings/audit', permission: 'audit:read' },
-      { label: 'Data', to: '/settings/data', permission: 'tenant:read' },
-      { label: 'Onboarding', to: '/settings/onboarding', permission: 'tenant:read' },
+      { label: 'General', to: '/settings', icon: Settings, permission: 'tenant:read' },
+      { label: 'Team', to: '/settings/team', icon: Users, permission: 'member:read' },
+      { label: 'Plan', to: '/settings/plan', icon: CreditCard, permission: 'billing:read' },
+      { label: 'Domains', to: '/settings/domains', icon: Globe, permission: 'domain:read' },
+      { label: 'Integrations', to: '/settings/integrations', icon: Plug, permission: 'integration:read' },
+      { label: 'AI models', to: '/settings/ai', icon: Sparkles, permission: 'tenant:read' },
+      { label: 'Notifications', to: '/settings/notifications', icon: Mail, permission: 'tenant:read' },
+      { label: 'Developer', to: '/settings/developer', icon: Briefcase, permission: 'developer:read' },
+      { label: 'Audit log', to: '/settings/audit', icon: FileText, permission: 'audit:read' },
+      { label: 'Data', to: '/settings/data', icon: Boxes, permission: 'tenant:read' },
+      { label: 'Onboarding', to: '/settings/onboarding', icon: Sparkles, permission: 'tenant:read' },
     ],
   },
 ]
 
 /** The section that owns the current route, for rail + sidebar highlighting. */
 export function sectionForPath(path: string): NavSection | undefined {
-  // The visual editor lives at /pages/:id but belongs to Website.
   if (path.startsWith('/pages/') || path === '/pages') {
     return NAV_SECTIONS.find((section) => section.id === 'website')
   }

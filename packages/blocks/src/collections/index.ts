@@ -7,6 +7,7 @@ import { SPOTLIGHT_COLLECTION_BLOCKS } from './spotlight.js'
 import { VENDORED_BLOCKS } from './vendor/index.js'
 import { MARKETING_HERO_BLOCKS } from './marketing-heroes.js'
 import { MOTIONSITES_ISLAND_BLOCKS } from './motionsites-island.js'
+import { COMMERCE_COLLECTION_BLOCKS } from './commerce.js'
 import { CORE_BLOCK_TAGS } from './core.js'
 
 export * from './define-collection.js'
@@ -17,6 +18,7 @@ export * from './editorial.js'
 export * from './spotlight.js'
 export * from './marketing-heroes.js'
 export * from './motionsites-island.js'
+export * from './commerce.js'
 export * from './vendor/index.js'
 
 /**
@@ -100,6 +102,8 @@ export const COLLECTION_BLOCKS: CollectionBlockDefinition[] = [
   ...SPOTLIGHT_COLLECTION_BLOCKS,
   // Marketing-layout heroes — agency proof, property cover, portrait, etc.
   ...MARKETING_HERO_BLOCKS,
+  // Commerce PDP + shop chrome
+  ...COMMERCE_COLLECTION_BLOCKS,
   // MotionSites React islands (ADR-0003 escape hatch — curated builds only).
   ...MOTIONSITES_ISLAND_BLOCKS,
   ...VENDORED_BLOCKS,

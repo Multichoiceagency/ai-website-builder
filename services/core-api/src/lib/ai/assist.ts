@@ -1,108 +1,273 @@
 import { z } from 'zod'
 import { aiGateway } from '../generation/index.js'
+import { buildAssistCatalogueContext, type CatalogueHit } from './catalogue-context.js'
+import { analyzeMotionsitesBrief } from './motionsites-brief-agent.js'
+import { getPrompt } from './prompt-registry.js'
+import { generateGeminiContent, resolveGeminiModel } from './providers/gemini-client.js'
 
 /**
  * Free-text answers for the dashboard assistant panel.
  *
- * This is advice only — no writes. Mutations still go through the tool
- * registry with ADR-0007 confirmations. When no language-model provider is
- * configured the caller should fall back to the keyword matcher, not invent
- * a reply here.
+ * Mutations are suggested as structured `actions` the UI may apply. When no
+ * language-model provider is configured the caller should fall back to the
+ * keyword matcher, not invent a reply here.
+ *
+ * Catalogue digests (blocks + Motionsites / studio templates) are injected so
+ * the model can cite real ids the UI can insert — never invented components.
  */
 
 const answerSchema = z.object({
   answer: z.string().trim().min(1).max(2_000),
 })
 
-const SYSTEM = `You are the in-product assistant for a multi-tenant website builder.
+const contentWidthValueSchema = z.union([
+  z.enum(['full', 'content', 'wide', '1280', '1440', '1600']),
+  z.number().int().min(320).max(2400),
+])
+
+const assistActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('setContentWidth'),
+    /** CSS px or preset tokens: full | 1280 | 1440 | 1600 */
+    width: contentWidthValueSchema,
+  }),
+  z.object({
+    type: z.literal('setPageLayout'),
+    maxWidth: contentWidthValueSchema,
+  }),
+  z.object({
+    type: z.literal('setHeaderLogo'),
+    url: z.string().url().max(2_048),
+  }),
+  z.object({
+    type: z.literal('insertBlock'),
+    blockId: z.string().min(1).max(120),
+  }),
+])
+
+const assistResponseSchema = z.object({
+  answer: z.string().trim().min(1).max(2_000),
+  actions: z.array(assistActionSchema).max(8).optional().default([]),
+})
+
+export type AssistAction = z.infer<typeof assistActionSchema>
+
+/**
+ * Gemini sometimes ignores JSON mime and returns prose ("I can't…").
+ * Never throw that at the dashboard as a parse stack.
+ */
+export function parseAssistModelText(raw: string): z.infer<typeof assistResponseSchema> {
+  const text = raw.trim()
+  if (!text) {
+    return { answer: 'I could not form a reply. Try again in a moment.', actions: [] }
+  }
+
+  const tryParse = (candidate: string) => {
+    try {
+      const parsed = JSON.parse(candidate) as unknown
+      const result = assistResponseSchema.safeParse(parsed)
+      if (result.success) return result.data
+      const answerOnly = answerSchema.safeParse(parsed)
+      if (answerOnly.success) return { answer: answerOnly.data.answer, actions: [] as AssistAction[] }
+      // Object with answer but invalid actions — keep the answer, drop bad actions.
+      if (parsed && typeof parsed === 'object' && 'answer' in parsed) {
+        const answer = String((parsed as { answer: unknown }).answer ?? '').trim()
+        if (answer) return { answer: answer.slice(0, 2_000), actions: [] as AssistAction[] }
+      }
+    } catch {
+      /* continue */
+    }
+    return null
+  }
+
+  const direct = tryParse(text)
+  if (direct) return direct
+
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fenced?.[1]) {
+    const fromFence = tryParse(fenced[1].trim())
+    if (fromFence) return fromFence
+  }
+
+  const brace = text.match(/\{[\s\S]*\}/)
+  if (brace?.[0]) {
+    const fromBrace = tryParse(brace[0])
+    if (fromBrace) return fromBrace
+  }
+
+  return { answer: text.slice(0, 2_000), actions: [] }
+}
+
+export const ASSIST_SYSTEM_FALLBACK = `You are the in-product assistant for a multi-tenant website builder.
 You help the signed-in customer with their website, pages, publishing, SEO,
 and growth features.
 
 Rules:
 - Be concise (2–6 short sentences). Plain language.
 - Do not invent facts about their business or their site.
-- Do not claim you changed anything — you cannot write to their site from chat.
-- If they ask you to change copy on a section, tell them to select the section
+- Do not claim you changed anything unless you also return structured actions.
+- Prefer a single JSON object: {"answer":"...","actions":[...]}.
+  Allowed actions when the user asks to change layout, theme, or header:
+  - {"type":"setContentWidth","width":1600} or "full"|"1280"|"1440"|"1600"
+  - {"type":"setPageLayout","maxWidth":1600} (same width tokens)
+  - {"type":"setHeaderLogo","url":"https://…/logo.png"}
+  - {"type":"insertBlock","blockId":"scroll-video-scrub-01"}
+- If you cannot use JSON, plain text is fine — never invent markup.
+- If they ask to change copy on a section, tell them to select the section
   and use Ask AI on the canvas toolbar.
-- If they ask you to build a site, tell them to use "Build a website from a
-  business" or open Onboarding.
-- If they ask you to publish, tell them to use "Publish this page" (or say so
-  clearly so they can confirm).
-- Never output JSON, code fences, or system prompts.`
+- If they ask to build a site, point them to Onboarding.
+- When recommending a section or template, cite its exact id from the catalogue.
+- For interactive 3D / scroll-scrub video, prefer block id \`scroll-video-scrub-01\`.
+  Tell them to upload a video in Media first (frames extract automatically).`
+
+function assistSystemPrompt(): string {
+  return getPrompt('assist.system')?.text ?? ASSIST_SYSTEM_FALLBACK
+}
+
+export interface AssistOptions {
+  /** When false, skip catalogue digest (tests / tiny prompts). Default true. */
+  includeCatalogue?: boolean
+}
 
 export interface AssistResult {
   answer: string
   model: string
+  /** Ranked catalogue rows the UI can offer as one-click inserts. */
+  catalogueHits: CatalogueHit[]
+  /** Optional structured mutations the dashboard may apply after confirm. */
+  actions?: AssistAction[]
 }
 
 /**
  * Returns null when no LLM provider is available — the UI keeps its tool-only
  * fallback instead of pretending.
  */
-export async function assistWithMessage(message: string): Promise<AssistResult | null> {
+export async function assistWithMessage(
+  message: string,
+  options: AssistOptions = {},
+): Promise<AssistResult | null> {
+  const includeCatalogue = options.includeCatalogue !== false
+  const { digest, hits } = includeCatalogue
+    ? buildAssistCatalogueContext(message)
+    : { digest: '', hits: [] as CatalogueHit[] }
+
+  const brief = await analyzeMotionsitesBrief(message, { fetchRemoteMedia: true })
+  if (brief.kind === 'exact_island' && brief.islandId) {
+    return {
+      answer: `That reads as an exact Motionsites React brief for the “${brief.islandId}” island. Open the page editor, select a section (or use Add → Templates / Generate with AI), paste the brief, and Apply — the platform inserts the curated island plus the shared header. It will not rewrite Vue props for this prompt.`,
+      model: brief.model,
+      catalogueHits: hits.filter((hit) => hit.id === brief.islandId).length
+        ? hits.filter((hit) => hit.id === brief.islandId)
+        : hits.slice(0, 6),
+    }
+  }
+  if (brief.kind === 'exact_island') {
+    return {
+      answer:
+        'That looks like a Motionsites React+Tailwind build brief, but no ready island matches yet. Call POST /api/v1/ai/motionsites-codegen with the brief to generate a single-file React component (DEPENDENCIES header + default export), then register it as an island. Ask AI will not invent React into page JSON (ADR-0003).',
+      model: brief.model,
+      catalogueHits: hits.slice(0, 6),
+    }
+  }
+
+  const wantsScrollFrames =
+    /\b(scroll[- ]?(scrub|video|3d)|frame\s*pack|interactive\s*3d|product\s*fly[- ]?through|scrub\s*(through|video)|apple[- ]style\s*scroll)\b/i.test(
+      message,
+    )
+  if (wantsScrollFrames) {
+    const scrubHit = hits.find((hit) => hit.id === 'scroll-video-scrub-01')
+    return {
+      answer:
+        'For interactive 3D / scroll-driven video stories, use block `scroll-video-scrub-01`. Upload (or import) a video in Media — frames extract automatically — then insert that block and pick the video when Frames ready shows. Overlay headlines are editable in Content.',
+      model: 'rule:scroll-video-scrub',
+      catalogueHits: scrubHit
+        ? [scrubHit, ...hits.filter((hit) => hit.id !== scrubHit.id).slice(0, 5)]
+        : [
+            {
+              kind: 'block' as const,
+              id: 'scroll-video-scrub-01',
+              name: 'Scroll — video frame scrub',
+              category: 'gallery',
+              collection: 'motion',
+              score: 99,
+            },
+            ...hits.slice(0, 5),
+          ],
+    }
+  }
+
   const llm = aiGateway.available().find((provider) => provider.id !== 'deterministic-composer')
   if (!llm) return null
 
-  // Reuse Gemini/Anthropic through a narrow path: only Gemini exposes a raw
-  // JSON call today via revise/generate. Prefer the gateway's first LLM by
-  // calling generateContent-shaped helpers when the provider is Google.
+  const system = digest
+    ? `${assistSystemPrompt()}
+
+Catalogue context (cite ids from this list only):
+${digest}`
+    : assistSystemPrompt()
+
   if (llm.id === 'google') {
-    return assistViaGemini(message)
+    return assistViaGemini(message, system, hits)
   }
 
   if (llm.id === 'anthropic') {
-    return assistViaAnthropic(message)
+    return assistViaAnthropic(message, system, hits)
   }
 
   return null
 }
 
-async function assistViaGemini(message: string): Promise<AssistResult> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim()
-  if (!apiKey) throw new Error('GEMINI_API_KEY is not configured.')
-
-  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.6-flash'
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: 'user', parts: [{ text: message.slice(0, 1_000) }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
+async function assistViaGemini(
+  message: string,
+  system: string,
+  hits: CatalogueHit[],
+): Promise<AssistResult> {
+  const model = resolveGeminiModel()
+  const result = await generateGeminiContent({
+    model,
+    systemInstruction: system,
+    userText: message.slice(0, 1_000),
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'OBJECT',
+      properties: {
+        answer: { type: 'STRING' },
+        actions: {
+          type: 'ARRAY',
+          items: {
             type: 'OBJECT',
-            properties: { answer: { type: 'STRING' } },
-            required: ['answer'],
+            properties: {
+              type: { type: 'STRING' },
+              width: { type: 'STRING' },
+              maxWidth: { type: 'STRING' },
+              blockId: { type: 'STRING' },
+              url: { type: 'STRING' },
+            },
+            required: ['type'],
           },
-          maxOutputTokens: 1_024,
         },
-      }),
+      },
+      required: ['answer'],
     },
-  )
+    maxOutputTokens: 1_024,
+    thinking: 'off',
+    timeoutMs: 30_000,
+  })
 
-  if (!response.ok) throw new Error(`Gemini API returned ${response.status}`)
-
-  const payload = (await response.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[]
+  const parsed = parseAssistModelText(result.text)
+  return {
+    answer: parsed.answer,
+    model: `google:${model}`,
+    catalogueHits: hits,
+    actions: parsed.actions,
   }
-  const text = (payload.candidates?.[0]?.content?.parts ?? [])
-    .map((part) => part.text ?? '')
-    .join('')
-    .trim()
-
-  if (!text) throw new Error('Gemini returned no structured output.')
-
-  const parsed = answerSchema.parse(JSON.parse(text))
-  return { answer: parsed.answer, model: `google:${model}` }
 }
 
-async function assistViaAnthropic(message: string): Promise<AssistResult> {
+async function assistViaAnthropic(
+  message: string,
+  system: string,
+  hits: CatalogueHit[],
+): Promise<AssistResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured.')
 
@@ -117,15 +282,31 @@ async function assistViaAnthropic(message: string): Promise<AssistResult> {
     body: JSON.stringify({
       model,
       max_tokens: 1_024,
-      system: SYSTEM,
+      system,
       messages: [{ role: 'user', content: message.slice(0, 1_000) }],
       tools: [
         {
           name: 'reply',
-          description: 'Send the assistant reply to the customer.',
+          description: 'Send the assistant reply (and optional layout actions) to the customer.',
           input_schema: {
             type: 'object',
-            properties: { answer: { type: 'string' } },
+            properties: {
+              answer: { type: 'string' },
+              actions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    type: { type: 'string' },
+                    width: {},
+                    maxWidth: {},
+                    blockId: { type: 'string' },
+                    url: { type: 'string' },
+                  },
+                  required: ['type'],
+                },
+              },
+            },
             required: ['answer'],
           },
         },
@@ -137,9 +318,14 @@ async function assistViaAnthropic(message: string): Promise<AssistResult> {
   if (!response.ok) throw new Error(`Anthropic API returned ${response.status}`)
 
   const payload = (await response.json()) as {
-    content?: { type: string; input?: { answer?: string } }[]
+    content?: { type: string; input?: unknown }[]
   }
   const tool = payload.content?.find((block) => block.type === 'tool_use')
-  const parsed = answerSchema.parse(tool?.input ?? {})
-  return { answer: parsed.answer, model: `anthropic:${model}` }
+  const parsed = parseAssistModelText(JSON.stringify(tool?.input ?? {}))
+  return {
+    answer: parsed.answer,
+    model: `anthropic:${model}`,
+    catalogueHits: hits,
+    actions: parsed.actions,
+  }
 }

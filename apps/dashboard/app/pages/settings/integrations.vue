@@ -8,7 +8,16 @@ import { ref } from 'vue'
  * `reason` a provider is unconfigured is shown verbatim: an operator who cannot
  * see *why* a connector is dark will open a ticket instead of fixing the
  * environment variable.
+ *
+ * `scopeCatalog` is what Google will ask for on Connect — shown before the
+ * redirect so the workspace knows why each permission is requested.
  */
+interface ScopeCatalogEntry {
+  scope: string
+  label: string
+  purpose: string
+}
+
 interface ProviderRow {
   id: string
   name: string
@@ -16,10 +25,13 @@ interface ProviderRow {
   configured: boolean
   reason: string | null
   scopes: string[]
+  scopeCatalog?: ScopeCatalogEntry[]
+  broker?: 'nango' | 'native'
   connection: {
     id: string
     provider: string
     accountLabel?: string
+    scopes?: string[]
     lastError?: string | null
     createdAt?: string
   } | null
@@ -39,13 +51,18 @@ async function connect(providerId: string) {
   busy.value = providerId
   error.value = ''
   try {
-    const result = await api.post<{ authorizeUrl: string }>(
+    const result = await api.post<{ authorizeUrl?: string; url?: string }>(
       `/api/v1/integrations/${providerId}/authorize`,
       { redirectTo: '/settings/integrations' },
     )
-    // A full navigation, not a fetch: the consent screen belongs to the user's
-    // browser, not to this XHR.
-    window.location.href = result.authorizeUrl
+    // Full navigation into Nango Connect (or legacy Google consent).
+    const href = result.authorizeUrl || result.url
+    if (!href) {
+      error.value = 'No authorize URL returned. Check NANGO_SECRET_KEY on the API.'
+      busy.value = ''
+      return
+    }
+    window.location.href = href
   } catch (cause) {
     error.value = cause instanceof ApiError ? cause.message : 'Could not start that connection.'
     busy.value = ''
@@ -59,8 +76,9 @@ async function connect(providerId: string) {
       <header class="border-b border-line px-5 py-4">
         <h2 class="type-button text-ink">Connections</h2>
         <p class="type-caption-12 mt-1 max-w-xl text-soft">
-          Third-party accounts this workspace can act on. Tokens are stored encrypted server-side and are
-          never sent to your browser.
+          Third-party accounts this workspace can act on. Connections are brokered
+          by Nango when configured (Connect UI + encrypted tokens server-side).
+          Google still lists the scopes it will request on consent.
         </p>
       </header>
 
@@ -74,12 +92,14 @@ async function connect(providerId: string) {
           :key="provider.id"
           class="flex flex-wrap items-start gap-4 px-5 py-4"
         >
+          <ConnectorIcon :id="provider.id" size="sm" />
           <div class="min-w-0 flex-1">
             <p class="type-button-12 flex flex-wrap items-center gap-2 text-ink">
               {{ provider.name }}
               <UiBadge :tone="provider.connection ? 'positive' : provider.configured ? 'neutral' : 'warning'">
                 {{ provider.connection ? 'Connected' : provider.configured ? 'Available' : 'Unavailable' }}
               </UiBadge>
+              <UiBadge v-if="provider.broker === 'nango'" tone="neutral">Nango</UiBadge>
             </p>
             <p class="type-caption-12 mt-1 text-soft">{{ provider.description }}</p>
 
@@ -91,8 +111,26 @@ async function connect(providerId: string) {
               Connected as {{ provider.connection.accountLabel }}
             </p>
 
-            <ul v-if="!provider.connection" class="mt-2 flex flex-wrap gap-1">
-              <li v-for="scope in provider.scopes.slice(0, 4)" :key="scope">
+            <div
+              v-if="provider.scopeCatalog?.length"
+              class="mt-3 rounded-lg border border-line bg-canvas/60 px-3 py-2.5"
+            >
+              <p class="type-caption-12 font-medium text-ink">
+                {{ provider.connection ? 'Granted permissions' : 'Google will ask for' }}
+              </p>
+              <ul class="mt-2 space-y-2">
+                <li
+                  v-for="entry in provider.scopeCatalog"
+                  :key="entry.scope"
+                  class="flex gap-2"
+                >
+                  <UiBadge class="shrink-0">{{ entry.label }}</UiBadge>
+                  <span class="type-caption-12 text-soft">{{ entry.purpose }}</span>
+                </li>
+              </ul>
+            </div>
+            <ul v-else-if="!provider.connection" class="mt-2 flex flex-wrap gap-1">
+              <li v-for="scope in provider.scopes.slice(0, 6)" :key="scope">
                 <UiBadge>{{ scope.split('/').pop() }}</UiBadge>
               </li>
             </ul>

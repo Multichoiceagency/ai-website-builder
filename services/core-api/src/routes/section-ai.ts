@@ -15,6 +15,9 @@ import { findPageById, listPages, updatePage } from '../db/repositories/pages.js
 import { findSiteById } from '../db/repositories/sites.js'
 import { aiGateway, composePage } from '../lib/generation/index.js'
 import { UnsupportedInstructionError, type RevisionField } from '../lib/ai/gateway.js'
+import { recordAiUsage } from '../lib/ai/usage.js'
+import { analyzeMotionsitesBrief } from '../lib/ai/motionsites-brief-agent.js'
+import { retrieveCatalogueHits } from '../lib/ai/catalogue-context.js'
 import { deriveSiteProfile, goalForPath } from '../lib/ai/site-profile.js'
 import { buildEvent, eventBus } from '../lib/event-bus.js'
 import { AppError, NotFoundError } from '../lib/errors.js'
@@ -351,6 +354,54 @@ const sectionAiRoutes: FastifyPluginAsync = async (app) => {
 
     const section = findSection(loaded.page, sectionId)
     const definition = requireBlock(section.block)
+    const catalogueHits = retrieveCatalogueHits(input.instruction, 12)
+    const catalogueHint =
+      catalogueHits.length > 0
+        ? `\n\nRelated catalogue entries (cite ids only; do not invent):\n${catalogueHits
+            .slice(0, 8)
+            .map((hit) => `- ${hit.kind} ${hit.id} — ${hit.name} (${hit.category})`)
+            .join('\n')}`
+        : ''
+
+    const brief = await analyzeMotionsitesBrief(input.instruction, { fetchRemoteMedia: true })
+    if (brief.kind === 'exact_island' && brief.islandId) {
+      const event = buildEvent({
+        name: 'ai.proposal_created',
+        tenantId: context.tenantId,
+        actor: {
+          type: 'agent',
+          id: 'section-editor',
+          label: brief.model,
+          onBehalfOfUserId: context.user.id,
+        },
+        resource: { type: 'page', id: pageId },
+        payload: {
+          sectionId,
+          blockId: section.block,
+          model: brief.model,
+          islandId: brief.islandId,
+          changedFields: [],
+        },
+      })
+      await withTenant(context.tenantId, (tx) => recordAuditEvent(tx, event))
+
+      return reply.send(
+        ok({
+          sectionId,
+          blockId: section.block,
+          blockName: definition.name,
+          instruction: input.instruction,
+          model: brief.model,
+          notes: brief.notes,
+          islandId: brief.islandId,
+          catalogueHits,
+          current: validateBlockProps(section.block, input.props ?? section.props),
+          proposed: validateBlockProps(section.block, input.props ?? section.props),
+          changedFields: [],
+          refusedFields: [],
+        }),
+      )
+    }
 
     const currentProps = validateBlockProps(section.block, input.props ?? section.props)
     const fields = editableFields(definition, currentProps)
@@ -367,7 +418,7 @@ const sectionAiRoutes: FastifyPluginAsync = async (app) => {
       .reviseCopy({
         blockId: section.block,
         blockName: definition.name,
-        instruction: input.instruction,
+        instruction: `${input.instruction}${catalogueHint}`,
         locale: loaded.site?.locale ?? 'nl',
         fields,
         profile: loaded.site ? profileForSite(loaded.site) : null,
@@ -386,6 +437,16 @@ const sectionAiRoutes: FastifyPluginAsync = async (app) => {
       values: revision.values,
     })
 
+    const catalogueNotes =
+      catalogueHits.length > 0
+        ? [
+            `Related catalogue: ${catalogueHits
+              .slice(0, 5)
+              .map((hit) => `${hit.id} (${hit.kind})`)
+              .join(', ')}.`,
+          ]
+        : []
+
     const event = buildEvent({
       name: 'ai.proposal_created',
       tenantId: context.tenantId,
@@ -403,7 +464,17 @@ const sectionAiRoutes: FastifyPluginAsync = async (app) => {
         changedFields: proposal.changedFields.map((change) => change.path),
       },
     })
-    await withTenant(context.tenantId, (tx) => recordAuditEvent(tx, event))
+    await withTenant(context.tenantId, async (tx) => {
+      await recordAuditEvent(tx, event)
+      await recordAiUsage(tx, {
+        tenantId: context.tenantId,
+        feature: 'section.revise',
+        model: revision.model,
+        inputTokens: revision.usage.inputTokens,
+        outputTokens: revision.usage.outputTokens,
+        costUsd: revision.usage.costUsd,
+      })
+    })
 
     return reply.send(
       ok({
@@ -414,7 +485,8 @@ const sectionAiRoutes: FastifyPluginAsync = async (app) => {
         // Named plainly: the user is entitled to know a rule wrote this, not a
         // language model.
         model: revision.model,
-        notes: revision.notes,
+        notes: [...revision.notes, ...catalogueNotes],
+        catalogueHits,
         current: proposal.current,
         proposed: proposal.proposed,
         changedFields: proposal.changedFields,

@@ -119,6 +119,13 @@ export const field = {
     type: 'image',
     ...extra,
   }),
+  /** Alias of `image` — MediaField / MediaPicker in the section form. */
+  media: (key: string, label: string, extra: Partial<BlockField> = {}): BlockField => ({
+    key,
+    label,
+    type: 'media',
+    ...extra,
+  }),
   boolean: (key: string, label: string, extra: Partial<BlockField> = {}): BlockField => ({
     key,
     label,
@@ -148,6 +155,13 @@ export const field = {
 export const ALIGN_OPTIONS = [
   { label: 'Left', value: 'left' },
   { label: 'Centre', value: 'center' },
+]
+
+/** Header chrome layouts: logo/nav/cta arrangement. */
+export const HEADER_LAYOUT_OPTIONS = [
+  { label: 'Left', value: 'left' },
+  { label: 'Centre', value: 'center' },
+  { label: 'Split', value: 'split' },
 ]
 
 export const TONE_OPTIONS = [

@@ -39,6 +39,7 @@ const error = ref('')
 const selected = ref<string[]>([])
 const active = ref<MediaAsset | null>(null)
 const dropZone = ref<{ browse: () => void } | null>(null)
+const stockOpen = ref(false)
 
 const bulkFolder = ref('')
 const bulkTags = ref('')
@@ -80,7 +81,11 @@ async function load() {
     // see. It does not survive.
     const visible = new Set(library.value.assets.map((asset) => asset.id))
     selected.value = selected.value.filter((id) => visible.has(id))
-  } catch (caught) {
+
+    // Keep the open detail panel in sync (e.g. pending → ready while polling).
+    if (active.value) {
+      active.value = library.value.assets.find((asset) => asset.id === active.value!.id) ?? active.value
+    }  } catch (caught) {
     error.value = caught instanceof ApiError ? caught.message : 'Could not load the media library.'
   } finally {
     loading.value = false
@@ -96,9 +101,27 @@ watch(search, () => {
 })
 watch([folder, tag, mime, sizeBand, dateBand, sort, missingOnly, unusedOnly], () => void load())
 
+/** Refresh while any video is still extracting scroll frames. */
+let framePoll: ReturnType<typeof setInterval> | undefined
+watch(
+  () => library.value?.assets.some((asset) => asset.frameStatus === 'pending') ?? false,
+  (pending) => {
+    clearInterval(framePoll)
+    if (!pending) return
+    framePoll = setInterval(() => void load(), 2500)
+  },
+  { immediate: true },
+)
+
 async function afterUpload(uploaded: MediaAsset[]) {
   await load()
   if (uploaded.length === 1) active.value = uploaded[0]!
+}
+
+async function afterStockImport(asset: MediaAsset) {
+  stockOpen.value = false
+  await load()
+  active.value = asset
 }
 
 function onUpdated(asset: MediaAsset) {
@@ -240,6 +263,7 @@ function clearFilters() {
           {{ density === 'compact' ? 'Larger' : 'Smaller' }}
         </UiButton>
 
+        <UiButton v-if="can('media:write')" size="sm" @click="stockOpen = true">Mixkit stock</UiButton>
         <UiButton v-if="can('media:write')" size="sm" variant="primary" @click="dropZone?.browse()">Upload</UiButton>
       </template>
     </UiPageHeader>
@@ -381,6 +405,13 @@ function clearFilters() {
         >
           Add
         </UiButton>
+      </template>
+    </UiDialog>
+
+    <UiDialog v-model:open="stockOpen" title="Mixkit stock" wide>
+      <MediaStockPanel folder="stock" @imported="afterStockImport" />
+      <template #footer>
+        <UiButton @click="stockOpen = false">Close</UiButton>
       </template>
     </UiDialog>
   </div>

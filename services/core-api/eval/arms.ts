@@ -410,6 +410,6 @@ export const ALL_ARMS: EvalArm[] = [
  * is the same one the platform would get.
  */
 export function availableProviderIds(): Set<string> {
-  const providers = [new AnthropicCopyProvider(), new GeminiCopyProvider(), new DeterministicCopyProvider()]
+  const providers = [new GeminiCopyProvider(), new AnthropicCopyProvider(), new DeterministicCopyProvider()]
   return new Set(providers.filter((provider) => provider.isAvailable()).map((provider) => provider.id))
 }

@@ -21,9 +21,9 @@ dist/
 npm-debug.log*
 .DS_Store
 
-# local data
-infrastructure/docker/data/
-coverage/
+# Agent memory (procedural / episodic store — local to the install)
+**/services/core-api/.agent-memory/
+
 
 # MotionSites preview videos are large; thumbs + prompt markdown stay tracked
 **/motionsites/**/videos/
@@ -41,6 +41,8 @@ reference/
 /.claude-flow
 /.swarm
 /.claude
+/.impeccable
+**/.impeccable/
 ruvector.db
 
 # local API upload/runtime data

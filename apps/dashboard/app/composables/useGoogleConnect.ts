@@ -1,9 +1,8 @@
 /**
  * Start the Integration Gateway Google OAuth flow (§18).
  *
- * Returns a URL rather than redirecting from the API, because a `fetch` would
- * follow the 302 itself and the user would never see Google's consent screen.
- * Callers navigate with a full browser load once they have the URL.
+ * When Nango is configured the API returns a Connect link; otherwise the
+ * legacy Google authorize URL. Callers navigate with a full browser load.
  */
 export function useGoogleConnect() {
   const api = useApi()
@@ -14,12 +13,13 @@ export function useGoogleConnect() {
     busy.value = true
     error.value = ''
     try {
-      const result = await api.post<{ authorizeUrl: string }>('/api/v1/integrations/google/authorize', {
-        redirectTo,
-      })
+      const result = await api.post<{ authorizeUrl: string; broker?: string }>(
+        '/api/v1/integrations/google/authorize',
+        { redirectTo },
+      )
       if (!result.authorizeUrl) {
         error.value =
-          'Google OAuth did not return an authorization URL. Check GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_OAUTH_REDIRECT_URI on the API.'
+          'Google OAuth did not return an authorization URL. Check NANGO_SECRET_KEY (preferred) or GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET on the API.'
         return
       }
       window.location.href = result.authorizeUrl

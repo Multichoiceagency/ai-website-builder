@@ -50,8 +50,13 @@ const STATUS_TONE = {
 
 <template>
   <div>
-    <UiPageHeader title="Commerce" description="Catalogue, orders and customers for this workspace.">
+    <UiPageHeader
+      title="Commerce"
+      description="Catalogue, orders and customers for this workspace. Websites are separate — manage them under Website → All websites."
+    >
       <template #actions>
+        <UiButton size="sm" to="/commerce/builder">Store builder</UiButton>
+        <UiButton size="sm" to="/commerce/feeds">Feeds</UiButton>
         <UiButton size="sm" to="/commerce/products">Products</UiButton>
         <UiButton size="sm" variant="primary" to="/commerce/orders">Orders</UiButton>
       </template>
@@ -88,11 +93,38 @@ const STATUS_TONE = {
             :key="provider.id"
             class="flex items-center justify-between gap-4 px-4 py-3"
           >
-            <div class="min-w-0">
-              <p class="text-sm font-medium capitalize text-ink">{{ provider.id }}</p>
-              <p class="truncate text-[0.8125rem] text-faint">
-                {{ provider.reason ?? provider.capabilities.join(' · ') }}
-              </p>
+            <div class="flex min-w-0 items-start gap-3">
+              <ConnectorIcon :id="provider.id" size="sm" />
+              <div class="min-w-0">
+                <p class="text-sm font-medium capitalize text-ink">{{ provider.id }}</p>
+                <p class="truncate text-[0.8125rem] text-faint">
+                  {{ provider.reason ?? provider.capabilities.join(' · ') }}
+                </p>
+                <div
+                  v-if="!provider.configured && ['mollie', 'stripe', 'paypal'].includes(provider.id)"
+                  class="mt-1 flex flex-wrap gap-x-3 gap-y-1"
+                >
+                <NuxtLink
+                  to="/commerce/payments#credentials"
+                  class="text-[0.75rem] font-medium text-brand no-underline hover:underline"
+                >
+                  Open Payments to install
+                </NuxtLink>
+                  <NuxtLink
+                    to="/settings/integrations"
+                    class="text-[0.75rem] text-soft no-underline hover:text-ink hover:underline"
+                  >
+                    Integrations
+                  </NuxtLink>
+                </div>
+                <NuxtLink
+                  v-else-if="!provider.configured && provider.id === 'carrier'"
+                  to="/commerce/shipping"
+                  class="mt-1 inline-block text-[0.75rem] font-medium text-brand no-underline hover:underline"
+                >
+                  Configure shipping
+                </NuxtLink>
+              </div>
             </div>
             <UiBadge :tone="provider.configured ? 'positive' : 'neutral'">
               {{ provider.configured ? 'Connected' : 'Not configured' }}
@@ -115,7 +147,7 @@ const STATUS_TONE = {
         title="No orders yet"
         description="Add a product and place a test order to see it here."
       >
-        <UiButton variant="primary" to="/commerce/products">Add a product</UiButton>
+        <UiButton variant="primary" to="/commerce/products/new">Add a product</UiButton>
       </UiEmptyState>
 
       <UiCard v-else :padded="false">

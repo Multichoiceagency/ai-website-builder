@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { DnsInstruction, DomainSetting, Site } from '@platform/schemas'
 
 /**
@@ -31,6 +31,7 @@ const addOpen = ref(false)
 const hostname = ref('')
 const siteId = ref('')
 const busy = ref(false)
+const verifying = ref('')
 const error = ref('')
 const expanded = ref<string | null>(null)
 
@@ -39,6 +40,24 @@ const siteOptions = computed(() =>
 )
 
 const atLimit = computed(() => (data.value?.domains.length ?? 0) >= (data.value?.limits.domains ?? 0))
+
+const pendingDomains = computed(
+  () => (data.value?.domains ?? []).filter((domain) => domain.state !== 'verified'),
+)
+
+const hasPending = computed(() => pendingDomains.value.length > 0)
+
+watch(
+  () => data.value?.domains,
+  (domains) => {
+    if (!domains?.length) return
+    const firstPending = domains.find((domain) => domain.state !== 'verified')
+    if (firstPending && !expanded.value) {
+      expanded.value = firstPending.id
+    }
+  },
+  { immediate: true },
+)
 
 async function add() {
   busy.value = true
@@ -58,9 +77,14 @@ async function add() {
   }
 }
 
-async function act(path: string) {
-  await api.post(path)
-  await refresh()
+async function act(path: string, domainId?: string) {
+  if (domainId) verifying.value = domainId
+  try {
+    await api.post(path)
+    await refresh()
+  } finally {
+    verifying.value = ''
+  }
 }
 
 function copy(value: string) {
@@ -74,8 +98,10 @@ function copy(value: string) {
       <header class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
         <div>
           <h2 class="type-button text-ink">Connected domains</h2>
-          <p class="type-caption-12 mt-1 text-soft">
+          <p class="type-caption-12 mt-1 max-w-xl text-soft">
             {{ data?.domains.length ?? 0 }} of {{ data?.limits.domains ?? 0 }} used.
+            Add the records below wherever your DNS is hosted (registrar, Cloudflare, Google Cloud DNS, …).
+            Point traffic at our platform edge; we verify ownership with the TXT record.
           </p>
         </div>
         <UiButton
@@ -90,11 +116,37 @@ function copy(value: string) {
         </UiButton>
       </header>
 
+      <div
+        v-if="hasPending"
+        class="border-b border-line bg-warning/5 px-5 py-3"
+        role="status"
+      >
+        <p class="type-button-12 text-ink">
+          {{ pendingDomains.length }} domain{{ pendingDomains.length === 1 ? '' : 's' }} awaiting DNS
+        </p>
+        <ol class="mt-2 list-decimal space-y-1 pl-4 text-[0.8125rem] leading-relaxed text-soft">
+          <li>Open DNS records for the domain below (or expand them).</li>
+          <li>At your DNS host, add each Type / Name / Value exactly as shown.</li>
+          <li>Wait a few minutes for propagation, then click Check verification.</li>
+          <li>Once Verified, set it as Primary if this should be the live hostname.</li>
+        </ol>
+      </div>
+
       <UiEmptyState
         v-if="!data?.domains.length"
         title="No domains yet"
-        description="Your sites are reachable on their preview URLs until you connect a domain."
-      />
+        description="Your sites stay on preview URLs until you connect a custom domain."
+      >
+        <template v-if="can('domain:write')">
+          <UiButton variant="primary" :disabled="atLimit" @click="addOpen = true">
+            Connect a domain
+          </UiButton>
+        </template>
+        <p class="mt-4 text-left text-[0.8125rem] leading-relaxed text-soft">
+          Next steps: connect a hostname → copy the DNS records we show → add them at your registrar →
+          check verification here.
+        </p>
+      </UiEmptyState>
 
       <ul v-else class="divide-y divide-line">
         <li v-for="domain in data.domains" :key="domain.id">
@@ -106,6 +158,12 @@ function copy(value: string) {
               </p>
               <p class="type-caption-12 text-faint">
                 {{ sites?.find((site) => site.id === domain.siteId)?.name ?? 'Unassigned site' }}
+              </p>
+              <p
+                v-if="domain.state !== 'verified'"
+                class="type-caption-12 mt-1 text-warning"
+              >
+                Next: add the DNS records, wait for propagation, then check verification.
               </p>
             </div>
 
@@ -121,7 +179,9 @@ function copy(value: string) {
               <UiButton
                 v-if="domain.state !== 'verified'"
                 size="sm"
-                @click="act(`/api/v1/settings/domains/${domain.id}/verify`)"
+                variant="primary"
+                :loading="verifying === domain.id"
+                @click="act(`/api/v1/settings/domains/${domain.id}/verify`, domain.id)"
               >
                 Check verification
               </UiButton>
@@ -145,7 +205,13 @@ function copy(value: string) {
 
           <div v-if="expanded === domain.id" class="border-t border-line bg-sunken/40 px-5 py-4">
             <p class="type-caption-12 mb-3 text-soft">
-              Add these at your DNS provider. Propagation usually takes minutes, occasionally hours.
+              <template v-if="domain.state !== 'verified'">
+                Incomplete setup — add every row at your DNS provider, then use Check verification.
+                Propagation usually takes minutes, occasionally hours.
+              </template>
+              <template v-else>
+                These records should already be live. Keep them in place so the domain stays verified.
+              </template>
             </p>
             <div class="overflow-x-auto">
               <table class="w-full min-w-[34rem] border-separate border-spacing-y-1 text-left">

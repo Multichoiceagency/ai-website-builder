@@ -44,6 +44,17 @@ function setValue(key: string, value: unknown) {
   emit('update', { ...values.value, [key]: value })
 }
 
+function onScrollVideoSelect(key: string, asset: import('@platform/schemas').MediaAsset) {
+  if (props.block.id !== 'scroll-video-scrub-01' || key !== 'video') return
+  emit('update', {
+    ...values.value,
+    video: asset.url,
+    mediaId: asset.id,
+    frameCount: asset.frameCount,
+    frameFps: asset.frameFps || 24,
+  })
+}
+
 // --- visual selects ---------------------------------------------------------
 
 /**
@@ -56,10 +67,11 @@ function setValue(key: string, value: unknown) {
  * that is a word rather than a picture.
  */
 const VISUAL_OPTION_ICONS: Record<string, string> = {
-  // alignment
+  // alignment / header layout
   left: 'align-left',
   center: 'align-center',
   right: 'align-right',
+  split: 'layout-split',
   // surface tone
   light: 'tone-light',
   muted: 'tone-muted',
@@ -94,6 +106,14 @@ function visualOptions(field: Pick<BlockField, 'type' | 'options'>): VisualOptio
 function gridColumns(count: number): number {
   return count <= 3 ? count : 4
 }
+
+const iconSearch = ref('')
+
+const filteredIconNames = computed(() => {
+  const term = iconSearch.value.trim().toLowerCase()
+  if (!term) return [...ICON_NAMES]
+  return ICON_NAMES.filter((name) => name.includes(term) || name.replace(/-/g, ' ').includes(term))
+})
 
 function iconValue(value: unknown): string {
   return isIconName(value) ? value : 'check'
@@ -287,9 +307,16 @@ function itemSummary(field: BlockField, item: Record<string, unknown>): string {
 
                 <div v-else-if="sub.type === 'icon'">
                   <p class="type-caption mb-1.5 text-soft">{{ sub.label }}</p>
+                  <UiInput
+                    v-model="iconSearch"
+                    type="search"
+                    placeholder="Search icons…"
+                    class="mb-1.5"
+                    aria-label="Search icons"
+                  />
                   <div class="grid max-h-40 grid-cols-6 gap-1 overflow-y-auto rounded-md border border-line p-1.5">
                     <button
-                      v-for="name in ICON_NAMES"
+                      v-for="name in filteredIconNames"
                       :key="name"
                       type="button"
                       class="grid h-8 place-items-center rounded-md transition-colors"
@@ -306,6 +333,7 @@ function itemSummary(field: BlockField, item: Record<string, unknown>): string {
                       <UiIcon :name="name" class="h-4 w-4" />
                     </button>
                   </div>
+                  <p v-if="!filteredIconNames.length" class="mt-1 type-caption-12 text-faint">No icons match.</p>
                 </div>
 
                 <UiField v-else v-slot="{ id }" :label="sub.label">
@@ -324,7 +352,7 @@ function itemSummary(field: BlockField, item: Record<string, unknown>): string {
                     @update:model-value="updateItem(field, index, sub.key, $event)"
                   />
                   <MediaField
-                    v-else-if="sub.type === 'image'"
+                    v-else-if="sub.type === 'image' || sub.type === 'media'"
                     :id="id"
                     :model-value="asText(item[sub.key])"
                     :placeholder="sub.placeholder"
@@ -373,13 +401,20 @@ function itemSummary(field: BlockField, item: Record<string, unknown>): string {
         @update:model-value="setValue(field.key, $event)"
       />
 
-      <!-- icon picker — full set; not limited to OptionGrid's 12-tile ceiling -->
+      <!-- icon picker — searchable Lucide-aligned set -->
       <div v-else-if="field.type === 'icon'">
         <p class="type-caption mb-1.5 text-soft">{{ field.label }}</p>
         <p v-if="field.help" class="type-caption-12 mb-2 text-faint">{{ field.help }}</p>
+        <UiInput
+          v-model="iconSearch"
+          type="search"
+          placeholder="Search icons…"
+          class="mb-1.5"
+          aria-label="Search icons"
+        />
         <div class="grid max-h-48 grid-cols-6 gap-1 overflow-y-auto rounded-md border border-line p-1.5">
           <button
-            v-for="name in ICON_NAMES"
+            v-for="name in filteredIconNames"
             :key="name"
             type="button"
             class="grid h-8 place-items-center rounded-md transition-colors"
@@ -396,6 +431,7 @@ function itemSummary(field: BlockField, item: Record<string, unknown>): string {
             <UiIcon :name="name" class="h-4 w-4" />
           </button>
         </div>
+        <p v-if="!filteredIconNames.length" class="mt-1 type-caption-12 text-faint">No icons match.</p>
       </div>
 
       <!-- single value -->
@@ -425,13 +461,15 @@ function itemSummary(field: BlockField, item: Record<string, unknown>): string {
           @update:model-value="setValue(field.key, $event)"
         />
         <MediaField
-          v-else-if="field.type === 'image'"
+          v-else-if="field.type === 'image' || field.type === 'media'"
           :id="id"
           :described-by="describedBy"
           :model-value="asText(values[field.key])"
           :placeholder="field.placeholder"
-          folder="blocks"
+          :folder="field.key === 'logo' ? 'brand' : 'blocks'"
+          :scroll-ready-only="block.id === 'scroll-video-scrub-01' && field.key === 'video'"
           @update:model-value="setValue(field.key, $event)"
+          @select="onScrollVideoSelect(field.key, $event)"
         />
         <PageLinkField
           v-else-if="field.type === 'url'"

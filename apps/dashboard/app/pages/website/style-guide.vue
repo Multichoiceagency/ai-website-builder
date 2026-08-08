@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { createSection } from '@platform/blocks'
-import type { Section, Site, Theme, ThemeTokens } from '@platform/schemas'
+import type { Section, SeoSettings, Site, Theme, ThemeTokens } from '@platform/schemas'
 import {
   getPreset,
   resolveLightTokens,
@@ -13,6 +13,7 @@ import {
 /**
  * Site Style Guide — live theme surface with Colors / Typography / Buttons /
  * Spacing / Preview. Patches `site.theme` immediately; save persists via PATCH.
+ * Brand logo lives on SEO business settings and feeds header fallbacks.
  */
 const api = useApi()
 const activeSiteId = useActiveSiteId()
@@ -36,10 +37,58 @@ const { data: site } = await useAsyncData(
   { watch: [activeSiteId] },
 )
 
+const { data: seoSettings, refresh: refreshSeo } = await useAsyncData(
+  () => `website:style-guide:seo:${activeSiteId.value}`,
+  () =>
+    activeSiteId.value
+      ? api.get<SeoSettings>(`/api/v1/seo/sites/${activeSiteId.value}/settings`)
+      : Promise.resolve(null),
+  { watch: [activeSiteId] },
+)
+
+const brandLogo = ref('')
+watch(
+  seoSettings,
+  (value) => {
+    brandLogo.value = value?.business.logo?.trim() ?? ''
+  },
+  { immediate: true },
+)
+
+const logoMissing = computed(() => !brandLogo.value.trim())
+const savingLogo = ref(false)
+const logoSaved = ref(false)
+const logoError = ref('')
+
+async function saveBrandLogo() {
+  if (!activeSiteId.value || !seoSettings.value) return
+  savingLogo.value = true
+  logoError.value = ''
+  logoSaved.value = false
+  try {
+    await api.put(`/api/v1/seo/sites/${activeSiteId.value}/settings`, {
+      business: { ...seoSettings.value.business, logo: brandLogo.value.trim() },
+    })
+    await refreshSeo()
+    logoSaved.value = true
+    setTimeout(() => (logoSaved.value = false), 2500)
+  } catch (error) {
+    logoError.value = error instanceof Error ? error.message : 'Could not save the brand logo.'
+  } finally {
+    savingLogo.value = false
+  }
+}
+
 const saving = ref(false)
 const saved = ref(false)
 const tab = ref<'colors' | 'typography' | 'buttons' | 'spacing' | 'preview'>('colors')
 const editing = ref<'light' | 'dark'>('light')
+
+const importUrl = ref('')
+const importing = ref(false)
+const importNote = ref('')
+const importError = ref('')
+const importedColors = ref<string[]>([])
 
 const theme = computed<Theme | null>(() => site.value?.theme ?? null)
 const light = computed<ThemeTokens | null>(() => (theme.value ? resolveLightTokens(theme.value) : null))
@@ -74,6 +123,14 @@ const RADIUS = [
   { label: 'Medium', value: 'md' },
   { label: 'Round', value: 'lg' },
   { label: 'Pill', value: 'full' },
+]
+
+const CONTENT_WIDTH = [
+  { label: 'Full', value: 'full' },
+  { label: '1280px', value: '1280' },
+  { label: '1440px', value: '1440' },
+  { label: '1600px', value: '1600' },
+  { label: 'Custom', value: 'custom' },
 ]
 
 const SPACING_STEPS = [
@@ -136,6 +193,84 @@ function applySeed(seed: string) {
   apply(themeFromSeed(theme.value, seed, theme.value.mode))
 }
 
+/**
+ * Crawl a public website and apply discovered brand colours (and fonts when
+ * present) onto the live style guide — same discovery door as onboarding.
+ */
+async function importFromWebsite() {
+  if (!theme.value || !site.value) return
+  const website = importUrl.value.trim()
+  if (!website) {
+    importError.value = 'Enter a website URL.'
+    return
+  }
+
+  importing.value = true
+  importError.value = ''
+  importNote.value = ''
+  importedColors.value = []
+  try {
+    const result = await api.post<{
+      profile: {
+        company: { name: string }
+        brand: {
+          colors: string[]
+          primaryColor: string
+          fonts: string[]
+          logo: string
+        }
+      }
+      pagesCrawled: number
+    }>('/api/v1/onboarding/discover', {
+      website,
+      maxPages: 6,
+    })
+
+    const brand = result.profile.brand
+    const hexes = [brand.primaryColor, ...brand.colors]
+      .map((entry) => entry.trim())
+      .filter((entry) => /^#[0-9a-fA-F]{6}$/.test(entry))
+    const unique = [...new Set(hexes)]
+    importedColors.value = unique
+
+    if (!unique.length) {
+      importError.value =
+        'No usable brand colours were found on that site. Try another URL or pick a seed below.'
+      return
+    }
+
+    const seed = unique[0]!
+    let next = themeFromSeed(theme.value, seed, theme.value.mode)
+    if (unique[1]) {
+      const tokens = resolveLightTokens(next)
+      next = writeLightTokens(next, { ...tokens, accent: unique[1]! })
+    }
+
+    const fonts = brand.fonts.map((font) => font.trim()).filter(Boolean)
+    if (fonts[0]) {
+      ensureLoaded(fonts[0])
+      next = { ...next, fontHeading: fonts[0]! }
+    }
+    if (fonts[1] || fonts[0]) {
+      const body = fonts[1] || fonts[0]!
+      ensureLoaded(body)
+      next = { ...next, fontBody: body }
+    }
+
+    apply(next)
+    tab.value = 'colors'
+    const name = result.profile.company.name?.trim()
+    importNote.value = name
+      ? `Applied palette from ${name} (${result.pagesCrawled} pages). Save to persist.`
+      : `Applied palette (${result.pagesCrawled} pages). Save to persist.`
+  } catch (error) {
+    importError.value =
+      error instanceof Error ? error.message : 'Could not read that website.'
+  } finally {
+    importing.value = false
+  }
+}
+
 function setToken(key: keyof ThemeTokens, value: string) {
   const current = theme.value
   if (!current) return
@@ -148,10 +283,49 @@ function setToken(key: keyof ThemeTokens, value: string) {
   apply({ ...writeLightTokens(current, { ...tokens, [key]: value }), presetId: null })
 }
 
+function setThemeFill(
+  key: 'colorPrimary' | 'colorSurface' | 'colorSurfaceAlt' | 'gradientPrimary' | 'gradientSurface' | 'gradientSurfaceAlt',
+  value: string | null,
+) {
+  if (!theme.value) return
+  apply({ ...theme.value, [key]: value, presetId: null })
+}
+
 function setFont(slot: 'fontHeading' | 'fontBody', family: string) {
   if (!theme.value || !site.value) return
   ensureLoaded(family)
   apply({ ...theme.value, [slot]: family })
+}
+
+function setContentWidth(value: string) {
+  if (!theme.value) return
+  if (value === 'custom') {
+    apply({
+      ...theme.value,
+      contentWidth: 'custom',
+      contentWidthPx: theme.value.contentWidthPx ?? 1600,
+      presetId: null,
+    })
+    return
+  }
+  apply({
+    ...theme.value,
+    contentWidth: value as Theme['contentWidth'],
+    contentWidthPx: null,
+    presetId: null,
+  })
+}
+
+function setContentWidthPx(raw: string) {
+  if (!theme.value) return
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n)) return
+  apply({
+    ...theme.value,
+    contentWidth: 'custom',
+    contentWidthPx: Math.min(2400, Math.max(320, n)),
+    presetId: null,
+  })
 }
 
 async function save() {
@@ -189,6 +363,8 @@ const previewSections = computed<Section[]>(() => {
   return [
     build('header-simple-01', {
       brand: site.value?.name ?? 'Your company',
+      logo: '',
+      layout: 'left',
       links: [
         { label: 'Services', href: '/services' },
         { label: 'About', href: '/about' },
@@ -243,6 +419,30 @@ const previewSections = computed<Section[]>(() => {
     <div v-else class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_26rem] xl:items-start">
       <div class="flex flex-col gap-5">
         <UiCard>
+          <div class="mb-1 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="type-body-20-500 text-ink">Brand logo</h2>
+              <p class="mt-1 type-body-12 text-soft">
+                Site-wide mark used when a header has no logo of its own. Also powers SEO structured data.
+              </p>
+            </div>
+            <UiButton size="sm" variant="primary" :loading="savingLogo" @click="saveBrandLogo">
+              Save logo
+            </UiButton>
+          </div>
+          <p
+            v-if="logoMissing"
+            class="mb-3 rounded-lg border border-warning/40 bg-warning-soft/40 px-3 py-2 type-body-12 text-warning"
+            role="status"
+          >
+            No brand logo yet. Headers will show the brand name as text until you pick one here (or on the section).
+          </p>
+          <MediaField v-model="brandLogo" folder="brand" placeholder="https://…/logo.svg" />
+          <p v-if="logoSaved" class="mt-2 type-body-12 text-positive">Brand logo saved.</p>
+          <p v-if="logoError" class="mt-2 type-body-12 text-danger" role="alert">{{ logoError }}</p>
+        </UiCard>
+
+        <UiCard>
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-1">
               <button
@@ -275,6 +475,37 @@ const previewSections = computed<Section[]>(() => {
           <!-- Colors -->
           <div v-show="tab === 'colors'" class="flex flex-col gap-6">
             <div>
+              <h3 class="mb-3 type-caption uppercase tracking-[0.08em] text-faint">From another website</h3>
+              <p class="mb-3 type-body-12 text-soft">
+                Paste a public URL. We crawl brand colours (and fonts when declared) the same way onboarding does.
+              </p>
+              <form class="flex flex-col gap-2 sm:flex-row sm:items-end" @submit.prevent="importFromWebsite">
+                <label class="min-w-0 flex-1">
+                  <span class="sr-only">Website URL</span>
+                  <UiInput
+                    v-model="importUrl"
+                    type="url"
+                    placeholder="https://example.com"
+                    aria-label="Website URL to import style from"
+                  />
+                </label>
+                <UiButton variant="primary" type="submit" :loading="importing" :disabled="!importUrl.trim()">
+                  Generate from URL
+                </UiButton>
+              </form>
+              <p v-if="importNote" class="mt-2 type-body-12 text-positive">{{ importNote }}</p>
+              <p v-if="importError" class="mt-2 type-body-12 text-danger" role="alert">{{ importError }}</p>
+              <div v-if="importedColors.length" class="mt-3 flex flex-wrap gap-1.5">
+                <span
+                  v-for="color in importedColors.slice(0, 8)"
+                  :key="color"
+                  class="h-7 w-7 rounded-md border border-line shadow-sm"
+                  :style="{ background: color }"
+                  :title="color"
+                />
+              </div>
+            </div>
+            <div>
               <p class="mb-3 type-body-12 text-soft">
                 Presets and a seed palette. Fine-grained tokens live on the
                 <NuxtLink to="/website/theme" class="text-brand underline-offset-2 hover:underline">Theme</NuxtLink>
@@ -289,6 +520,33 @@ const previewSections = computed<Section[]>(() => {
                 :seed="theme.palette?.seed ?? theme.colorPrimary"
                 :palette="theme.palette"
                 @apply="applySeed"
+              />
+            </div>
+            <div v-if="editing === 'light' && theme" class="flex flex-col gap-3">
+              <h3 class="type-caption uppercase tracking-[0.08em] text-faint">Fills</h3>
+              <p class="type-body-12 text-soft">
+                Stacked solid or gradient fills — same controls as Theme, live on the canvas.
+              </p>
+              <ColorFillField
+                :hex="theme.colorPrimary"
+                :gradient="theme.gradientPrimary"
+                label="Primary"
+                @update:hex="setThemeFill('colorPrimary', $event)"
+                @update:gradient="setThemeFill('gradientPrimary', $event)"
+              />
+              <ColorFillField
+                :hex="theme.colorSurface"
+                :gradient="theme.gradientSurface"
+                label="Background"
+                @update:hex="setThemeFill('colorSurface', $event)"
+                @update:gradient="setThemeFill('gradientSurface', $event)"
+              />
+              <ColorFillField
+                :hex="theme.colorSurfaceAlt"
+                :gradient="theme.gradientSurfaceAlt"
+                label="Surface"
+                @update:hex="setThemeFill('colorSurfaceAlt', $event)"
+                @update:gradient="setThemeFill('gradientSurfaceAlt', $event)"
               />
             </div>
             <div v-if="shown">
@@ -418,6 +676,33 @@ const previewSections = computed<Section[]>(() => {
             <UiField v-slot="{ id }" label="Corner radius">
               <UiSelect :id="id" v-model="site.theme.radius" :options="RADIUS" />
             </UiField>
+            <UiField
+              v-slot="{ id, describedBy }"
+              label="Content width"
+              help="Site measure for Wide sections. Motionsites stay full-bleed."
+            >
+              <UiSelect
+                :id="id"
+                :described-by="describedBy"
+                :model-value="site.theme.contentWidth ?? 'full'"
+                :options="CONTENT_WIDTH"
+                @update:model-value="setContentWidth"
+              />
+            </UiField>
+            <UiField
+              v-if="site.theme.contentWidth === 'custom'"
+              v-slot="{ id }"
+              label="Custom width (px)"
+            >
+              <UiInput
+                :id="id"
+                type="number"
+                :model-value="String(site.theme.contentWidthPx ?? 1600)"
+                min="320"
+                max="2400"
+                @update:model-value="setContentWidthPx"
+              />
+            </UiField>
             <div>
               <h3 class="mb-3 type-caption uppercase tracking-[0.08em] text-faint">Spacing scale</h3>
               <ul class="flex flex-col gap-2">
@@ -467,6 +752,7 @@ const previewSections = computed<Section[]>(() => {
                 device="desktop"
                 :zoom="35"
                 :mode="editing"
+                :brand-logo="brandLogo"
               />
             </div>
           </div>
@@ -485,6 +771,7 @@ const previewSections = computed<Section[]>(() => {
               device="desktop"
               :zoom="28"
               :mode="editing"
+              :brand-logo="brandLogo"
             />
           </div>
         </UiCard>

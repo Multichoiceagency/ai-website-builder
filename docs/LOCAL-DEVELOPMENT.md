@@ -12,6 +12,9 @@ service is required for Phase 1.
 | Node           | ≥ 22    | `node -v`                                      |
 | pnpm           | ≥ 10    | `corepack enable pnpm`                         |
 | Docker         | any     | For Postgres, Redis and MinIO — see the alternative below if you already run Postgres locally |
+| ffmpeg         | any     | `brew install ffmpeg` — required for media-library video → scroll-frame packs (`ffprobe` included) |
+
+Video uploads auto-extract a capped PNG frame pack (~24 fps, max 120 frames from the first 5s, max 1080px wide) for `scroll-video-scrub-01` — the usual Apple-style scrub range (~90–150 frames). Without ffmpeg, the video still uploads but `frameStatus` becomes `failed` until you install it and hit **Retry frames** in Media.
 
 ---
 
@@ -57,6 +60,13 @@ pnpm --filter @platform/storefront dev    # http://localhost:3001
 | Storefront  | http://localhost:3001   | The published site, rendered from block ids. |
 | Core API    | http://localhost:4000   | `GET /health` to check it is up.             |
 | MinIO       | http://localhost:9101   | Object storage console.                      |
+
+Both dashboard and storefront are Progressive Web Apps (`@vite-pwa/nuxt`). In
+Chrome/Edge on `localhost` (or HTTPS in prod): open DevTools → Application →
+Manifest / Service Workers, then use **Install** from the address bar or the
+in-app banner. Offline: the app shell and previously visited pages stay
+available; live API writes still need a network. Regenerate icons with
+`node scripts/generate-pwa-icons.mjs`.
 
 The seed prints its demo credentials when it runs. Re-print them with
 `pnpm db:seed` (it is idempotent) or read them at the top of
@@ -159,12 +169,60 @@ SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'app_user';
 ```
 
 **Storefront returns 404** — no verified domain matches the hostname. The seed
-registers `localhost` and `demo.localhost`; add others in the `domains` table
-with `verified_at` set.
+registers `localhost` and `demo.localhost`; open **http://localhost:3001** (not
+`127.0.0.1`, which used to miss the domain — both now alias to `localhost`).
+Add other hosts in the `domains` table with `verified_at` set, or use
+`http://{siteSlug}.localhost:3001` after mapping in `/etc/hosts`.
 
 **Port already in use** — the compose file uses 5433/6380/9100 precisely to stay
 out of the way of a local Postgres, Redis or MinIO. Change the `*_PORT`
 variables in `.env` if they still clash.
+
+**Google OAuth redirect URIs** — register both on the Google Cloud OAuth client
+(Web application):
+
+- `http://localhost:4000/api/v1/auth/google/callback` — dashboard Sign-In / Sign-Up
+- `http://localhost:4000/api/v1/integrations/google/callback` — Business Profile /
+  Search Console / Analytics connect
+
+Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and optionally
+`GOOGLE_AUTH_REDIRECT_URI` in `.env` (see `.env.example`).
+
+**Nango (integrations OAuth broker)** — optional self-host for **Connectors**
+(Google, Slack, Stripe, Shopify, HubSpot, Meta, …). Dashboard Sign-In still uses
+direct Google OAuth. Generate an encryption key, then start:
+
+```bash
+openssl rand -base64 32   # NANGO_ENCRYPTION_KEY
+pnpm infra:nango
+# Dashboard: http://localhost:3003  · Connect UI: http://localhost:3009
+```
+
+In the Nango UI, create integrations whose unique keys match the catalog
+(`google`, `slack`, `stripe`, … — see `.env.example`). Use the same Google OAuth
+client for `google`. Set the environment webhook to
+`http://localhost:4000/api/v1/integrations/nango/webhook`, copy the secret key
+into `NANGO_SECRET_KEY`, and restart core-api. Connectors then open Nango Connect
+links. Without `NANGO_SECRET_KEY` only legacy Google PKCE remains.
+
+**Custom domains / DNS** — customers keep DNS at their registrar (or Cloudflare /
+Google Cloud DNS). Settings → Domains shows A/CNAME + TXT records that point at
+`PLATFORM_EDGE_HOSTNAME` / `PLATFORM_EDGE_IPV4`. The platform does not become
+their nameserver in local/dev.
+
+**WhatsApp / OpenWA** — optional gateway for CRM Support desk + AI agents
+([OpenWA](https://github.com/rmyndharis/OpenWA)). First build is slow (clones
+GitHub). Then set `OPENWA_BASE_URL=http://localhost:2785` and `OPENWA_API_KEY`
+in `.env` and restart core-api.
+
+```bash
+pnpm infra:openwa
+# Dashboard / Swagger: http://localhost:2785
+# Webhook URL (per tenant):
+#   http://localhost:4000/api/v1/crm/whatsapp/webhook?tenantId=<tenant-uuid>
+```
+
+Use a **dedicated** WhatsApp number only — unofficial clients can be banned.
 
 ---
 

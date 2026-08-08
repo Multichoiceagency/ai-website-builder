@@ -8,6 +8,7 @@ import {
   uuidSchema,
 } from './common.js'
 import { pageDocumentSchema } from './blocks.js'
+import { componentTargetsMapSchema } from './component-generator.js'
 import { paletteSchema, themeModeSchema, themeTokensSchema } from './theming.js'
 
 // region Theme
@@ -24,7 +25,49 @@ const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #rrggbb 
  * nullable with a `null` default, meaning "not set, fall back to what the
  * renderer did before", so `themeSchema.parse(oldRow)` still succeeds and still
  * produces the same page.
+ *
+ * Site-wide content measure presets emit `--site-content-width` (and
+ * `--site-content-max` as an alias). Full-bleed Motionsites / heroes stay
+ * edge-to-edge; sections that opt into `maxWidth: wide` consume the token.
  */
+export const CONTENT_WIDTH_PRESETS = ['full', '1280', '1440', '1600', 'custom'] as const
+export const contentWidthPresetSchema = z.enum(CONTENT_WIDTH_PRESETS)
+export type ContentWidthPreset = z.infer<typeof contentWidthPresetSchema>
+
+export const CONTENT_WIDTH_PRESET_PX: Record<Exclude<ContentWidthPreset, 'full' | 'custom'>, number> = {
+  '1280': 1280,
+  '1440': 1440,
+  '1600': 1600,
+}
+
+/** Resolve theme content width to a CSS length for `--site-content-width`. */
+export function resolveContentWidthCss(theme: {
+  contentWidth?: ContentWidthPreset | null
+  contentWidthPx?: number | null
+}): string {
+  const preset = theme.contentWidth ?? 'full'
+  if (preset === 'full') return '100%'
+  if (preset === 'custom') {
+    const px = theme.contentWidthPx
+    return typeof px === 'number' && px >= 320 ? `${px}px` : '1440px'
+  }
+  return `${CONTENT_WIDTH_PRESET_PX[preset]}px`
+}
+
+/** Numeric px for editor canvas sizing; `null` when edge-to-edge (full). */
+export function resolveContentWidthPx(theme: {
+  contentWidth?: ContentWidthPreset | null
+  contentWidthPx?: number | null
+}): number | null {
+  const preset = theme.contentWidth ?? 'full'
+  if (preset === 'full') return null
+  if (preset === 'custom') {
+    const px = theme.contentWidthPx
+    return typeof px === 'number' && px >= 320 ? px : 1440
+  }
+  return CONTENT_WIDTH_PRESET_PX[preset]
+}
+
 export const themeSchema = z.object({
   colorPrimary: hexColorSchema.default('#1d4ed8'),
   colorAccent: hexColorSchema.default('#0f766e'),
@@ -35,6 +78,14 @@ export const themeSchema = z.object({
   fontHeading: z.string().min(1).max(120).default('Figtree'),
   fontBody: z.string().min(1).max(120).default('Rubik'),
   radius: z.enum(['none', 'sm', 'md', 'lg', 'full']).default('md'),
+  /**
+   * Default content column for the site. `full` = unconstrained (legacy).
+   * Pixel presets and `custom` set `--site-content-width`; sections with
+   * `style.maxWidth: wide` follow it. Full-bleed blocks ignore the measure.
+   */
+  contentWidth: contentWidthPresetSchema.default('full'),
+  /** Used when `contentWidth` is `custom`. Null otherwise. */
+  contentWidthPx: z.number().int().min(320).max(2400).nullable().default(null),
   /**
    * Optional CSS gradients for primary fill / page surface / alt surface.
    * Null → solid `color*` tokens only. Hex fields stay authoritative for
@@ -103,6 +154,11 @@ export const siteSchema = z.object({
   slug: slugSchema,
   locale: localeSchema,
   theme: themeSchema,
+  /**
+   * System UX slots → registry block + props (ADR-0003). Populated by the
+   * components generator (header, product card, section, …).
+   */
+  componentTargets: componentTargetsMapSchema,
   /** Hostname the site is served from; null until a domain is connected. */
   primaryHostname: hostnameSchema.nullable(),
   createdAt: isoTimestampSchema,
@@ -123,6 +179,7 @@ export const updateSiteInputSchema = z
     name: z.string().min(1).max(200),
     locale: localeSchema,
     theme: themeSchema.partial(),
+    componentTargets: componentTargetsMapSchema,
   })
   .partial()
 export type UpdateSiteInput = z.infer<typeof updateSiteInputSchema>
@@ -214,6 +271,11 @@ export const publicPageSchema = z.object({
     name: z.string(),
     locale: localeSchema,
     theme: themeSchema,
+    /**
+     * Site brand / SEO business logo. Headers fall back to this when their own
+     * logo prop is empty (`header-simple-01`).
+     */
+    logo: z.string().max(2048).default(''),
   }),
   page: z.object({
     path: pathSchema,

@@ -104,7 +104,7 @@ jobs:
       # The list grows as adapters land in later phases.
       - name: Check adapter boundaries
         run: |
-          violations=$(grep -rlE "from '(medusa|@medusajs|stripe|googleapis|@anthropic-ai|openai)" \
+          violations=$(grep -rlE "from '(medusa|@medusajs|stripe|googleapis|@anthropic-ai|openai|@nangohq/node)" \
             --include='*.ts' --include='*.vue' apps packages services 2>/dev/null \
             | grep -v '/adapters/' || true)
           if [ -n "$violations" ]; then

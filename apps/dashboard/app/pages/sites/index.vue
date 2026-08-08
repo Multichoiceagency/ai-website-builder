@@ -43,7 +43,10 @@ async function createSite() {
 
 <template>
   <div>
-    <UiPageHeader title="Websites" description="Each website has its own pages, theme and domain.">
+    <UiPageHeader
+      title="Websites"
+      description="Each website has its own pages, theme and domain. One workspace can own several sites. Commerce (products and orders) lives in its own section."
+    >
       <template #actions>
         <UiButton v-if="can('site:write')" size="sm" variant="primary" @click="creating = true">
           New website

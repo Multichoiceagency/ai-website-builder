@@ -7,8 +7,10 @@ import {
   type SocialProfile,
 } from '@platform/schemas'
 import { BlockedUrlError, fetchDocument, normalizeUrl } from './fetch.js'
+import { enrichFromPlaces, isPlacesConfigured } from './places.js'
 import { isAllowed, loadRobots } from './robots.js'
 import { extractColors, extractPage, type ExtractedPage } from './extract.js'
+import { extractColorsFromSvg, pickBestLogo } from './logo.js'
 
 /**
  * Business discovery (§8 and §47).
@@ -204,6 +206,23 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
     )
   }
 
+  const needsPlaces =
+    Boolean(input.businessName?.trim()) &&
+    (!input.website || Boolean(input.city) || Boolean(input.googleLocationId))
+
+  let places = needsPlaces && isPlacesConfigured()
+    ? await enrichFromPlaces({
+        businessName: input.businessName!,
+        city: input.city,
+        locale: input.locale,
+      })
+    : null
+
+  if (needsPlaces && !isPlacesConfigured()) {
+    warnings.push('Set GOOGLE_API_KEY to enrich incomplete profiles via Places + Geocoding.')
+  }
+  if (places) warnings.push(...places.warnings)
+
   if (input.website) {
     const origin = normalizeUrl(input.website)
     const robots = await loadRobots(origin.origin)
@@ -277,9 +296,13 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
   }
 
   const industry = pages.length ? deriveIndustry(pages) : (input.industry ?? 'local')
-  const companyName = deriveCompanyName(pages, input.businessName ?? '')
+  const companyName =
+    deriveCompanyName(pages, input.businessName ?? '') || places?.companyName || input.businessName || ''
 
   const locations = pages.flatMap((page) => page.locations)
+  if (places?.location && !locations.some((entry) => entry.city || entry.street)) {
+    locations.unshift(places.location)
+  }
   if (input.city && !locations.length) {
     locations.push({
       label: '', street: '', postalCode: '', city: input.city,
@@ -292,9 +315,38 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
     ...extractColors(rawHtml.join('\n')),
   ]).slice(0, 8)
 
+  const logoCandidate = pickBestLogo([
+    ...pages.flatMap((page) => page.logos),
+    ...(places?.media[0]
+      ? [{ url: places.media[0], score: 35, source: 'places' }]
+      : []),
+  ])
+
+  let logo = logoCandidate?.url ?? ''
+  const logoColors: string[] = []
+
+  // SVG logos often encode the brand palette in fills — pull those in when safe.
+  if (logo && /\.svg($|\?)/i.test(logo)) {
+    try {
+      const doc = await fetchDocument(logo)
+      if (doc?.body && /<svg[\s>]/i.test(doc.body)) {
+        logoColors.push(...extractColorsFromSvg(doc.body))
+      }
+    } catch {
+      // Logo colour enrichment is best-effort; HTML theme colours remain.
+    }
+  }
+
+  if (!logo) {
+    warnings.push('No logo found on the website. Upload one so we can match your brand colours.')
+  }
+
+  const brandColors = unique([...logoColors, ...colors]).slice(0, 8)
+
   const description =
     pages.find((page) => page.description.length > 60)?.description ??
     pages.flatMap((page) => page.paragraphs).find((paragraph) => paragraph.length > 80) ??
+    places?.description ??
     ''
 
   const profile = businessProfileSchema.parse({
@@ -304,20 +356,25 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
       description: description.slice(0, 2000),
       shortDescription: description.slice(0, 300),
       industry,
-      categories: unique(pages.flatMap((page) => page.headings.filter((h) => h.level === 2).map((h) => h.text))).slice(0, 8),
+      categories: unique([
+        ...pages.flatMap((page) => page.headings.filter((h) => h.level === 2).map((h) => h.text)),
+        ...(places?.categories ?? []),
+      ]).slice(0, 8),
     },
     locations: locations.slice(0, 10),
     contact: {
-      phone: unique(pages.flatMap((page) => page.phones))[0] ?? '',
+      phone: unique(pages.flatMap((page) => page.phones))[0] ?? places?.phone ?? '',
       email: unique(pages.flatMap((page) => page.emails))[0] ?? '',
-      website: input.website ? normalizeUrl(input.website).origin : '',
+      website: input.website
+        ? normalizeUrl(input.website).origin
+        : places?.website ?? '',
       whatsapp: socials.find((social) => social.platform === 'whatsapp')?.url ?? '',
     },
-    services: deriveServices(pages),
+    services: deriveServices(pages).length ? deriveServices(pages) : places?.services ?? [],
     brand: {
-      logo: pages[0]?.ogImage ?? '',
-      colors,
-      primaryColor: colors[0] ?? '',
+      logo,
+      colors: brandColors,
+      primaryColor: brandColors[0] ?? '',
       fonts: unique(pages.flatMap((page) => page.fonts)).slice(0, 4),
       tone: deriveTone(industry),
       adjectives: [],
@@ -325,12 +382,15 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
       positioning: '',
       prohibitedWords: [],
     },
-    reviews: pages.flatMap((page) => page.reviews).slice(0, 12),
+    reviews: [...pages.flatMap((page) => page.reviews), ...(places?.reviews ?? [])].slice(0, 12),
     socials,
-    media: unique(pages.flatMap((page) => page.images)).slice(0, 24),
+    media: unique([...pages.flatMap((page) => page.images), ...(places?.media ?? [])]).slice(0, 24),
     locale: input.locale,
     sources: [
       ...(input.website ? [{ source: 'website' as const, reference: input.website, confidence: 0.9 }] : []),
+      ...(places?.placeId
+        ? [{ source: 'google_business_profile' as const, reference: places.placeId, confidence: 0.85 }]
+        : []),
       ...(socials.some((social) => social.fetched) ? [{ source: 'social' as const, confidence: 0.5 }] : []),
       ...(input.businessName ? [{ source: 'manual' as const, confidence: 1 }] : []),
     ],

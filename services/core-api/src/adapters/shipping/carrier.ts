@@ -18,9 +18,10 @@ export class CarrierShippingProvider implements ShippingProvider {
       id: this.id,
       configured: this.#apiKey.length > 0,
       capabilities: ['live-rates', 'labels', 'tracking'],
+      // Merchant-facing: never expose env var names in the dashboard.
       reason: this.#apiKey
         ? null
-        : 'SHIPPING_CARRIER_API_KEY is not set; live carrier rates are unavailable.',
+        : 'Live carrier rates are not set up yet — configure shipping under Commerce → Shipping.',
     }
   }
 

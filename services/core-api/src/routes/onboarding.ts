@@ -4,13 +4,17 @@ import {
   discoveryInputSchema,
   generationRequestSchema,
   GENERATION_PHASE_LABELS,
+  onboardingFunnelSchema,
+  updateOnboardingFunnelSchema,
   type GenerationResult,
+  type OnboardingFunnel,
 } from '@platform/schemas'
 import { withTenant } from '../db/client.js'
 import { recordAuditEvent } from '../db/repositories/audit.js'
 import { upsertNavigation } from '../db/repositories/navigation.js'
 import { insertPage, publishPage } from '../db/repositories/pages.js'
 import { countSites, insertDomain, insertSite } from '../db/repositories/sites.js'
+import { findSettingsDocument, upsertSettingsDocument } from '../db/repositories/settings.js'
 import { discoverBusiness } from '../lib/discovery/index.js'
 import { BlockedUrlError } from '../lib/discovery/fetch.js'
 import {
@@ -22,6 +26,7 @@ import {
   themeFromBrand,
 } from '../lib/generation/index.js'
 import { resolveTemplate } from '../lib/generation/templates.js'
+import { isPageSpeedConfigured, runPageSpeed } from '../lib/seo/pagespeed.js'
 import { buildEvent, eventBus } from '../lib/event-bus.js'
 import { BadRequestError, PlanLimitError } from '../lib/errors.js'
 import { googleConfigurationProblem, isGoogleConfigured } from '../lib/integrations/google.js'
@@ -29,7 +34,53 @@ import { listConnections } from '../db/repositories/integrations.js'
 import { ok } from '../lib/response.js'
 import { uniqueSlug } from '../lib/slug.js'
 import { parseOrThrow } from '../lib/validate.js'
-import { requireTenant } from '../plugins/auth.js'
+import { requireTenant, type TenantContext } from '../plugins/auth.js'
+
+const FUNNEL_SCOPE = 'platform' as const
+const FUNNEL_KEY = 'onboarding-funnel'
+
+async function readFunnelProgress(context: TenantContext): Promise<OnboardingFunnel> {
+  const stored = await withTenant(context.tenantId, (tx) =>
+    findSettingsDocument(tx, context.tenantId, FUNNEL_SCOPE, FUNNEL_KEY),
+  )
+  const parsed = onboardingFunnelSchema.safeParse(stored?.value ?? {})
+  return parsed.success ? parsed.data : onboardingFunnelSchema.parse({})
+}
+
+async function writeFunnelProgress(
+  context: TenantContext,
+  patch: Partial<OnboardingFunnel>,
+): Promise<OnboardingFunnel> {
+  const current = await readFunnelProgress(context)
+  const completedSteps =
+    patch.completedSteps != null
+      ? Array.from(new Set([...current.completedSteps, ...patch.completedSteps]))
+      : current.completedSteps
+  const skippedLater =
+    patch.skippedLater != null
+      ? Array.from(new Set([...current.skippedLater, ...patch.skippedLater]))
+      : current.skippedLater
+  const merged = {
+    ...current,
+    ...patch,
+    completedSteps,
+    skippedLater,
+    updatedAt: new Date().toISOString(),
+  }
+  const value = parseOrThrow(onboardingFunnelSchema, merged, 'onboarding funnel progress')
+
+  await withTenant(context.tenantId, (tx) =>
+    upsertSettingsDocument(tx, {
+      tenantId: context.tenantId,
+      scope: FUNNEL_SCOPE,
+      key: FUNNEL_KEY,
+      value,
+      updatedBy: context.user.email,
+    }),
+  )
+
+  return value
+}
 
 /**
  * Onboarding: the flow the whole product is named after.
@@ -39,8 +90,24 @@ import { requireTenant } from '../plugins/auth.js'
  * Discovery and generation are separate calls on purpose. The user sees, and
  * can correct, what we found before anything is built from it — a generator
  * that silently acts on bad data produces a site nobody trusts.
+ *
+ * Progress for the §80–85 funnel lives in settings (`onboarding-funnel`) and is
+ * exposed via GET/PATCH `/progress` so the blank-layout wizard can resume.
  */
 const onboardingRoutes: FastifyPluginAsync = async (app) => {
+  /** Resume point for the signup → go-live funnel. */
+  app.get('/progress', async (request, reply) => {
+    const context = requireTenant(request, 'site:read')
+    return reply.send(ok(await readFunnelProgress(context)))
+  })
+
+  /** Partial update — merge semantics, never wipe unset fields. */
+  app.patch('/progress', async (request, reply) => {
+    const context = requireTenant(request, 'site:write')
+    const patch = parseOrThrow(updateOnboardingFunnelSchema, request.body, 'onboarding progress')
+    return reply.send(ok(await writeFunnelProgress(context, patch)))
+  })
+
   /** What the platform can currently draw on. Honest about what is missing. */
   app.get('/capabilities', async (request, reply) => {
     const context = requireTenant(request, 'site:read')
@@ -231,6 +298,21 @@ const onboardingRoutes: FastifyPluginAsync = async (app) => {
       throw new BadRequestError('Generation produced no pages.')
     }
 
+    // Advance funnel progress so soft-gates and resume know a site exists.
+    try {
+      const current = await readFunnelProgress(context)
+      const completed = current.completedSteps.includes('generate')
+        ? current.completedSteps
+        : [...current.completedSteps, 'generate' as const]
+      await writeFunnelProgress(context, {
+        step: 'preview',
+        siteId: result.site.id,
+        completedSteps: completed,
+      })
+    } catch {
+      // Generation succeeded — progress is secondary.
+    }
+
     const payload: GenerationResult = {
       siteId: result.site.id,
       siteName: result.site.name,
@@ -243,6 +325,25 @@ const onboardingRoutes: FastifyPluginAsync = async (app) => {
       model: copy.model,
       published: input.publish,
       generatedAt: new Date().toISOString(),
+    }
+
+    // Post-generate PageSpeed QA when the site is public and an API key exists.
+    // Failures are recorded as quality issues — never block generation.
+    if (input.publish && isPageSpeedConfigured() && result.site.primaryHostname) {
+      try {
+        const speed = await runPageSpeed(`https://${result.site.primaryHostname}`, 'mobile')
+        if (speed.performanceScore != null && speed.performanceScore < 50) {
+          quality.performance.issues.push(
+            `PageSpeed mobile performance is ${speed.performanceScore}/100 — check LCP and unused JS.`,
+          )
+        }
+        if (speed.seoScore != null && speed.seoScore < 80) {
+          quality.seo.issues.push(`PageSpeed SEO score is ${speed.seoScore}/100.`)
+        }
+        for (const warning of speed.warnings) quality.performance.issues.push(warning)
+      } catch {
+        // Best-effort QA only.
+      }
     }
 
     return reply.status(201).send(ok(payload))
@@ -263,5 +364,3 @@ const onboardingRoutes: FastifyPluginAsync = async (app) => {
 }
 
 export default onboardingRoutes
-
-

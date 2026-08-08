@@ -167,6 +167,21 @@ function thumbClass(extra: string): string {
             />
             <UiBadge v-if="asset.mime === 'image/gif'" tone="neutral" class="absolute right-2 top-2">GIF</UiBadge>
             <UiBadge v-else-if="asset.mime.startsWith('video/')" tone="neutral" class="absolute right-2 top-2">Video</UiBadge>
+            <UiBadge
+              v-if="asset.frameStatus === 'ready'"
+              tone="positive"
+              class="absolute bottom-2 left-2"
+            >Frames {{ asset.frameCount }}</UiBadge>
+            <UiBadge
+              v-else-if="asset.frameStatus === 'pending'"
+              tone="neutral"
+              class="absolute bottom-2 left-2"
+            >Preparing frames…</UiBadge>
+            <UiBadge
+              v-else-if="asset.frameStatus === 'failed'"
+              tone="danger"
+              class="absolute bottom-2 left-2"
+            >Frames failed</UiBadge>
             <UiBadge v-if="asset.needsAlt" tone="warning" class="absolute left-2 top-2">No alt</UiBadge>
           </span>
           <span class="block px-3 py-2">

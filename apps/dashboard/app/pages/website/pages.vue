@@ -53,8 +53,9 @@ const needsPublishing = computed(() => (pages.value ?? []).filter((page) => page
     <UiEmptyState
       v-if="!activeSiteId"
       title="No website selected"
-      description="Create a website first, or let the builder make one for you."
+      description="Pick a site in the sidebar, open All websites, or let the builder make one."
     >
+      <UiButton to="/sites">All websites</UiButton>
       <UiButton variant="primary" to="/onboarding">Build a website</UiButton>
     </UiEmptyState>
 
@@ -69,7 +70,10 @@ const needsPublishing = computed(() => (pages.value ?? []).filter((page) => page
           :key="page.id"
           class="flex items-center justify-between gap-4 px-4 py-3.5 transition-colors hover:bg-sunken/60"
         >
-          <NuxtLink :to="`/pages/${page.id}`" class="min-w-0 flex-1 no-underline">
+          <NuxtLink
+            :to="`/pages/${page.id}`"
+            class="min-w-0 flex-1 no-underline"
+          >
             <p class="truncate text-sm font-medium text-ink">{{ page.title }}</p>
             <p class="truncate text-[0.8125rem] text-faint">
               {{ page.path }} · {{ page.sectionCount }} section{{ page.sectionCount === 1 ? '' : 's' }}
@@ -79,7 +83,7 @@ const needsPublishing = computed(() => (pages.value ?? []).filter((page) => page
             <UiBadge v-if="page.status === 'published' && !page.hasUnpublishedChanges" tone="positive">Live</UiBadge>
             <UiBadge v-else-if="page.status === 'published'" tone="warning">Edited</UiBadge>
             <UiBadge v-else>Draft</UiBadge>
-            <UiButton size="sm" :to="`/pages/${page.id}`">Edit</UiButton>
+            <UiButton size="sm" variant="primary" :to="`/pages/${page.id}`">Edit page</UiButton>
           </div>
         </li>
       </ul>

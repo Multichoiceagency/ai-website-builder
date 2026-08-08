@@ -25,7 +25,7 @@ import {
   upsertSeoSettings,
 } from '../db/repositories/seo.js'
 import { findSiteById } from '../db/repositories/sites.js'
-import { NotFoundError } from '../lib/errors.js'
+import { BadRequestError, NotFoundError } from '../lib/errors.js'
 import { ok } from '../lib/response.js'
 import {
   auditSite,
@@ -37,6 +37,7 @@ import {
   serpGateway,
   siteOrigin,
 } from '../lib/seo/index.js'
+import { isPageSpeedConfigured, runPageSpeed } from '../lib/seo/pagespeed.js'
 import { parseOrThrow } from '../lib/validate.js'
 import { requireTenant } from '../plugins/auth.js'
 
@@ -72,13 +73,84 @@ const contentGateInputSchema = z.object({
 const seoRoutes: FastifyPluginAsync = async (app) => {
   /** What can and cannot be measured on this installation, and why. */
   app.get('/providers', async (request, reply) => {
-    requireTenant(request, 'seo:read')
+    const context = requireTenant(request, 'seo:read')
 
     const providers: SeoProviders = {
-      searchConsole: searchConsole.status(),
+      searchConsole: await searchConsole.status(context.tenantId),
       serp: serpGateway.status(),
     }
-    return reply.send(ok(providers))
+    return reply.send(
+      ok({
+        ...providers,
+        pageSpeed: {
+          provider: 'pagespeed_insights',
+          configured: isPageSpeedConfigured(),
+          connected: isPageSpeedConfigured(),
+          reason: isPageSpeedConfigured()
+            ? 'PageSpeed Insights is ready (GOOGLE_API_KEY).'
+            : 'Set GOOGLE_API_KEY to run PageSpeed on published URLs.',
+        },
+      }),
+    )
+  })
+
+  app.get('/sites/:siteId/search-console/sites', async (request, reply) => {
+    const context = requireTenant(request, 'seo:read')
+    parseOrThrow(siteParamsSchema, request.params, 'site id')
+    const sites = await searchConsole.listSites(context.tenantId)
+    return reply.send(ok({ sites }))
+  })
+
+  app.get('/sites/:siteId/search-console/performance', async (request, reply) => {
+    const context = requireTenant(request, 'seo:read')
+    parseOrThrow(siteParamsSchema, request.params, 'site id')
+    const query = parseOrThrow(
+      z.object({
+        siteUrl: z.string().min(1).max(500),
+        days: z.coerce.number().int().min(1).max(90).default(28),
+        dimension: z.enum(['query', 'page']).default('query'),
+        limit: z.coerce.number().int().min(1).max(100).default(25),
+      }),
+      request.query ?? {},
+      'query',
+    )
+    const end = new Date()
+    const start = new Date(end.getTime() - query.days * 86_400_000)
+    const iso = (date: Date) => date.toISOString().slice(0, 10)
+    const rows = await searchConsole.queryPerformance(context.tenantId, {
+      siteUrl: query.siteUrl,
+      startDate: iso(start),
+      endDate: iso(end),
+      dimension: query.dimension,
+      limit: query.limit,
+    })
+    return reply.send(ok({ rows, siteUrl: query.siteUrl, days: query.days, dimension: query.dimension }))
+  })
+
+  app.post('/sites/:siteId/pagespeed', async (request, reply) => {
+    const context = requireTenant(request, 'seo:read')
+    const { siteId } = parseOrThrow(siteParamsSchema, request.params, 'site id')
+    const body = parseOrThrow(
+      z.object({
+        url: z.string().url().max(2048).optional(),
+        strategy: z.enum(['mobile', 'desktop']).default('mobile'),
+      }),
+      request.body ?? {},
+      'body',
+    )
+
+    const target = await withTenant(context.tenantId, async (tx) => {
+      const site = await findSiteById(tx, context.tenantId, siteId)
+      if (!site) throw new NotFoundError('Site')
+      if (body.url) return body.url
+      if (!site.primaryHostname) {
+        throw new BadRequestError('Pass a public url, or publish the site on a hostname first.')
+      }
+      return siteOrigin(site)
+    })
+
+    const result = await runPageSpeed(target, body.strategy)
+    return reply.send(ok(result))
   })
 
   // region Settings

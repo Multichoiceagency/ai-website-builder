@@ -2,7 +2,7 @@ import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { sql } from './db/client.js'
-import { env, isTest } from './config/env.js'
+import { env, isProduction, isTest } from './config/env.js'
 import authPlugin from './plugins/auth.js'
 import errorHandlerPlugin from './plugins/error-handler.js'
 import adminRoutes from './routes/admin.js'
@@ -27,6 +27,7 @@ import publicRoutes from './routes/public.js'
 import settingsRoutes from './routes/settings.js'
 import sectionAiRoutes from './routes/section-ai.js'
 import sitesRoutes from './routes/sites.js'
+import stockRoutes from './routes/stock.js'
 import templatesRoutes from './routes/templates.js'
 import tenantsRoutes from './routes/tenants.js'
 import { ok } from './lib/response.js'
@@ -47,7 +48,32 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(errorHandlerPlugin)
   await app.register(cookie, { secret: env.SESSION_SECRET })
   await app.register(cors, {
-    origin: env.CORS_ORIGINS,
+    // Exact allow-list, plus local `{slug}.localhost` tenant hosts in non-prod
+    // so onboarding previews work without editing CORS_ORIGINS per site.
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true)
+        return
+      }
+      if (env.CORS_ORIGINS.includes(origin)) {
+        callback(null, true)
+        return
+      }
+      if (!isProduction) {
+        try {
+          const url = new URL(origin)
+          const localHost =
+            url.hostname === 'localhost' || url.hostname.endsWith('.localhost')
+          if (localHost && (url.protocol === 'http:' || url.protocol === 'https:')) {
+            callback(null, true)
+            return
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      callback(null, false)
+    },
     // Sessions are cookie-based, so the browser must be allowed to send them.
     credentials: true,
   })
@@ -55,11 +81,17 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   app.get('/health', async (_request, reply) => {
     const [row] = await sql<{ ok: number }[]>`SELECT 1 AS ok`
+    const { ffmpegAvailable } = await import('./lib/media/frames.js')
+    const ffmpeg = await ffmpegAvailable()
+    if (!ffmpeg) {
+      app.log.warn('ffmpeg/ffprobe not found — video scroll-frame extraction will fail until installed')
+    }
     return reply.send(
       ok({
         status: 'ok',
         database: row?.ok === 1 ? 'up' : 'down',
         environment: env.NODE_ENV,
+        ffmpeg: ffmpeg ? 'up' : 'missing',
       }),
     )
   })
@@ -77,6 +109,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(sectionAiRoutes, { prefix: '/api/v1' })
 
   await app.register(contentRoutes, { prefix: '/api/v1/content' })
+
+  // Stock search / import — vendor adapters only (ADR-0006).
+  await app.register(stockRoutes, { prefix: '/api/v1/stock' })
 
   await app.register(onboardingRoutes, { prefix: '/api/v1/onboarding' })
 

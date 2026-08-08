@@ -53,13 +53,22 @@ export const AI_MODELS: AiModel[] = [
     isDefault: false,
   },
   {
+    id: 'gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash',
+    provider: 'google',
+    costMultiplier: 0.3,
+    minimumPlan: 'launch',
+    description: 'Fast and reliable. Default for copy and Motionsites codegen.',
+    isDefault: false,
+  },
+  {
     id: 'gemini-3.6-flash',
     label: 'Gemini 3.6 Flash',
     provider: 'google',
     // $1.50/$7.50 per MTok — half of Sonnet's rate, hence half its multiplier.
     costMultiplier: 0.3,
     minimumPlan: 'launch',
-    description: 'Fast and inexpensive. Writes a full website well at a low price.',
+    description: 'Newer flash model. Set GEMINI_MODEL to use it.',
     isDefault: false,
   },
   {

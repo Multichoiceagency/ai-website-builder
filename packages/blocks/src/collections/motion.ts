@@ -260,6 +260,73 @@ export const aboutScrollStory01 = defineCollectionBlock({
   }),
 })
 
+/**
+ * Apple-style scroll scrub: paints a media-library WebP frame pack on a sticky
+ * canvas as the user scrolls. Frames are extracted server-side on video upload.
+ */
+export const scrollVideoScrub01 = defineCollectionBlock({
+  collection: 'motion',
+  tags: ['scroll', 'video', 'frames', 'scrub', '3d', 'canvas', 'sticky', 'frame-pack', 'scrollytelling'],
+  id: 'scroll-video-scrub-01',
+  name: 'Scroll — video frame scrub',
+  description:
+    'A tall scroll section that scrubs through extracted video frames on a sticky canvas (Apple-style 3D product scrub). Pick a library video with frames ready; overlay copy fades in by progress.',
+  category: 'gallery',
+  capabilities: ['video', 'motion', 'scroll', 'sticky', 'headline', 'text'],
+  industries: ['*', 'creative', 'agency', 'saas', 'product'],
+  style: ['bold', 'premium', 'cinematic'],
+  performanceClass: 'C',
+  scores: { performance: 82, accessibility: 94, mobile: 88 },
+  defaultMotion: { preset: 'none', trigger: 'none' },
+  fields: [
+    field.image('video', 'Scroll video', {
+      help: 'Library video with scroll frames ready (auto-extracted after upload).',
+    }),
+    field.text('mediaId', 'Media id', {
+      help: 'Filled automatically when you pick a video.',
+    }),
+    field.text('frameCount', 'Frame count'),
+    field.text('frameFps', 'Frame fps'),
+    field.select('scrollHeightVh', 'Scroll length', [
+      { label: '200vh', value: '200' },
+      { label: '300vh', value: '300' },
+      { label: '400vh', value: '400' },
+      { label: '500vh', value: '500' },
+    ]),
+    field.items(
+      'steps',
+      'Overlay steps',
+      [
+        { key: 'at', label: 'At progress (0–1)', type: 'text' },
+        { key: 'headline', label: 'Headline', type: 'text' },
+        { key: 'body', label: 'Body', type: 'textarea' },
+      ],
+      { itemLabel: 'Step', maxItems: 6 },
+    ),
+  ],
+  schema: z.object({
+    video: imageUrl(''),
+    mediaId: text(''),
+    frameCount: z.coerce.number().int().min(0).max(500).default(0),
+    frameFps: z.coerce.number().min(0).max(60).default(24),
+    scrollHeightVh: z.enum(['200', '300', '400', '500']).default('300'),
+    steps: z
+      .array(
+        z.object({
+          at: text('0'),
+          headline: text(''),
+          body: longText(''),
+        }),
+      )
+      .max(6)
+      .default([
+        { at: '0', headline: 'Scroll to explore', body: 'Move through the story one frame at a time.' },
+        { at: '0.45', headline: 'Every angle matters', body: 'The product reveals itself as you go.' },
+        { at: '0.85', headline: 'Ready when you are', body: 'End on the detail that sells.' },
+      ]),
+  }),
+})
+
 export const MOTION_COLLECTION_BLOCKS = [
   heroMaskReveal01,
   contentScrollReveal01,
@@ -267,4 +334,5 @@ export const MOTION_COLLECTION_BLOCKS = [
   galleryPinnedSequence01,
   galleryHorizontalScroll01,
   aboutScrollStory01,
+  scrollVideoScrub01,
 ]

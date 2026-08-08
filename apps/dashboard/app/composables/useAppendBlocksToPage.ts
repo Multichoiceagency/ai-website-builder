@@ -23,12 +23,12 @@ export function useAppendBlocksToPage() {
   const busy = ref(false)
   const error = ref('')
 
-  async function appendBlockIds(pageId: string, blockIds: string[]): Promise<string | null> {
+  async function appendSections(pageId: string, sections: Section[]): Promise<string | null> {
     if (!can('page:write')) {
       error.value = 'You need edit access to add sections to a page.'
       return null
     }
-    if (!blockIds.length) {
+    if (!sections.length) {
       error.value = 'Nothing to add.'
       return null
     }
@@ -37,21 +37,8 @@ export function useAppendBlocksToPage() {
     error.value = ''
     try {
       const page = await api.get<Page>(`/api/v1/pages/${pageId}`)
-      const added: Section[] = []
-      for (const id of blockIds) {
-        try {
-          added.push(createSection(id))
-        } catch {
-          // Skip ids the registry no longer has.
-        }
-      }
-      if (!added.length) {
-        error.value = 'None of those sections exist in the registry anymore.'
-        return null
-      }
-
       await api.patch(`/api/v1/pages/${pageId}`, {
-        sections: [...page.sections, ...added],
+        sections: [...page.sections, ...sections],
       })
       await navigateTo(`/pages/${pageId}`)
       return pageId
@@ -61,6 +48,28 @@ export function useAppendBlocksToPage() {
     } finally {
       busy.value = false
     }
+  }
+
+  async function appendBlockIds(pageId: string, blockIds: string[]): Promise<string | null> {
+    if (!blockIds.length) {
+      error.value = 'Nothing to add.'
+      return null
+    }
+
+    const added: Section[] = []
+    for (const id of blockIds) {
+      try {
+        added.push(createSection(id))
+      } catch {
+        // Skip ids the registry no longer has.
+      }
+    }
+    if (!added.length) {
+      error.value = 'None of those sections exist in the registry anymore.'
+      return null
+    }
+
+    return appendSections(pageId, added)
   }
 
   /** Prefer the home page (`/`), else the first page in the list. */
@@ -83,6 +92,7 @@ export function useAppendBlocksToPage() {
     refreshPages,
     busy,
     error,
+    appendSections,
     appendBlockIds,
     appendToDefaultPage,
     defaultPageId,

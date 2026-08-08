@@ -1,0 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Playfair+Display:ital,wght@0;400;0;700;1;400&display=swap');
+
+@font-face {
+  font-family: 'Dirtyline';
+  src: url('https://fonts.cdnfonts.com/s/15011/Dirtyline36DaysofType.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+.wanderful {
+  font-family: 'Barlow', ui-sans-serif, system-ui, sans-serif;
+}
+
+.wanderful-heading {
+  font-family: 'Dirtyline', 'Playfair Display', ui-serif, Georgia, serif;
+}

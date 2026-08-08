@@ -19,7 +19,8 @@ export const registerInputSchema = z.object({
    * character-class requirements that push people toward `Passw0rd!`.
    */
   password: z.string().min(12).max(200),
-  organizationName: z.string().min(1).max(200),
+  /** Optional — defaults to the user's name / e-mail local-part. Rename later in Settings. */
+  organizationName: z.string().trim().min(1).max(200).optional(),
 })
 export type RegisterInput = z.infer<typeof registerInputSchema>
 

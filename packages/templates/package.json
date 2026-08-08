@@ -17,6 +17,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "import:motionsites": "node scripts/import-motionsites.mjs",
+    "import:shadcnspace": "node scripts/import-shadcnspace.mjs",
+    "import:shadcnspace-landings": "node scripts/import-shadcnspace-landings.mjs",
+    "import:magicui": "node scripts/import-magicui.mjs",
+    "import:studio-layouts": "node scripts/import-studio-layouts.mjs",
     "import:backgrounds": "node scripts/import-backgrounds.mjs"
   },
   "dependencies": {

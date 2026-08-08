@@ -20,6 +20,8 @@ export interface ChartLineSeries {
   label: string
   /** The filled, accent-coloured series. At most one. */
   emphasis?: boolean
+  /** Dashed stroke (previous-period compare). */
+  dashed?: boolean
 }
 
 export interface ChartLinePoint {
@@ -178,7 +180,8 @@ function strokeFor(series: DrawnSeries, index: number): string {
   return index === 1 ? 'var(--ink-soft)' : 'var(--ink-faint)'
 }
 
-function dashFor(index: number): string | undefined {
+function dashFor(series: DrawnSeries, index: number): string | undefined {
+  if (series.dashed) return '5 4'
   return index >= 2 ? '5 4' : undefined
 }
 </script>
@@ -246,7 +249,7 @@ function dashFor(index: number): string | undefined {
         <template v-if="hasData">
           <g v-for="(entry, index) in drawn" :key="entry.key">
             <path
-              v-if="(entry.emphasis || index === 0) && entry.area"
+              v-if="(entry.emphasis || index === 0) && !entry.dashed && entry.area"
               :d="entry.area"
               :fill="strokeFor(entry, index)"
               opacity="0.08"
@@ -255,13 +258,14 @@ function dashFor(index: number): string | undefined {
               :d="entry.line"
               fill="none"
               :stroke="strokeFor(entry, index)"
-              :stroke-dasharray="dashFor(index)"
+              :stroke-dasharray="dashFor(entry, index)"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
             />
             <circle
               v-for="(dot, dotIndex) in entry.dots"
+              v-show="!entry.dashed"
               :key="dotIndex"
               :cx="dot.cx"
               :cy="dot.cy"

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, provide, ref, shallowRef, watch } from 'vue'
 import { createSection } from '@platform/blocks'
 import { resolveLightTokens, siteColorVariables, siteShapeVariables } from '@platform/theming'
 import { sectionMotionSchema, themeSchema, type Section, type Theme } from '@platform/schemas'
+
+/** Fixed-position blocks (e.g. liquid-glass header) must not escape this frame. */
+provide('platformBlockPreview', true)
 
 /**
  * A live miniature of what a template actually inserts.

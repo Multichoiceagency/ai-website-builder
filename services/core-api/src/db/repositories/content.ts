@@ -16,6 +16,7 @@ import {
   type BlogPostStatus,
   type BlogPostSummary,
   type MediaAsset,
+  type MediaFrameStatus,
   type MediaLibrary,
   type MediaListQuery,
   type MediaMime,
@@ -55,6 +56,11 @@ interface MediaRow {
   alt_source: 'none' | 'derived' | 'human'
   tags: string[]
   checksum: string
+  frame_status?: MediaFrameStatus
+  frame_count?: number
+  frame_fps?: number
+  frame_width?: number
+  frame_error?: string
   created_by: string
   created_at: Date
   updated_at: Date
@@ -79,6 +85,11 @@ function toAsset(row: MediaRow, usageCount = 0): MediaAsset {
     tags: row.tags ?? [],
     checksum: row.checksum,
     url: mediaPublicUrl(row.id),
+    frameStatus: row.frame_status ?? 'none',
+    frameCount: Number(row.frame_count ?? 0),
+    frameFps: Number(row.frame_fps ?? 0),
+    frameWidth: Number(row.frame_width ?? 0),
+    frameError: row.frame_error ?? '',
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -101,17 +112,21 @@ export async function insertMediaAsset(
     tags: string[]
     checksum: string
     createdBy: string
+    frameStatus?: MediaFrameStatus
   },
 ): Promise<MediaAsset> {
+  const frameStatus = input.frameStatus ?? (input.mime.startsWith('video/') ? 'pending' : 'none')
   const [row] = await tx<MediaRow[]>`
     INSERT INTO media_assets (
       tenant_id, folder, filename, storage_key, mime, size_bytes,
-      width, height, alt, alt_source, tags, checksum, created_by
+      width, height, alt, alt_source, tags, checksum, created_by,
+      frame_status
     )
     VALUES (
       ${tenantId}, ${input.folder}, ${input.filename}, ${input.storageKey}, ${input.mime}, ${input.sizeBytes},
       ${input.width}, ${input.height}, ${input.alt}, ${input.altSource},
-      ${input.tags}, ${input.checksum}, ${input.createdBy}
+      ${input.tags}, ${input.checksum}, ${input.createdBy},
+      ${frameStatus}
     )
     RETURNING *
   `
@@ -300,6 +315,7 @@ export async function replaceMediaBytes(
     filename: string
   },
 ): Promise<MediaAsset | null> {
+  const frameStatus = input.mime.startsWith('video/') ? 'pending' : 'none'
   const [row] = await tx<MediaRow[]>`
     UPDATE media_assets SET
       storage_key = ${input.storageKey},
@@ -308,7 +324,37 @@ export async function replaceMediaBytes(
       width       = ${input.width},
       height      = ${input.height},
       checksum    = ${input.checksum},
-      filename    = ${input.filename}
+      filename    = ${input.filename},
+      frame_status = ${frameStatus},
+      frame_count  = 0,
+      frame_fps    = 0,
+      frame_width  = 0,
+      frame_error  = ''
+    WHERE tenant_id = ${tenantId} AND id = ${mediaId}
+    RETURNING *
+  `
+  return row ? toAsset(row) : null
+}
+
+export async function updateMediaFramePack(
+  tx: Tx,
+  tenantId: string,
+  mediaId: string,
+  pack: {
+    frameStatus: MediaFrameStatus
+    frameCount: number
+    frameFps: number
+    frameWidth: number
+    frameError: string
+  },
+): Promise<MediaAsset | null> {
+  const [row] = await tx<MediaRow[]>`
+    UPDATE media_assets SET
+      frame_status = ${pack.frameStatus},
+      frame_count  = ${pack.frameCount},
+      frame_fps    = ${pack.frameFps},
+      frame_width  = ${pack.frameWidth},
+      frame_error  = ${pack.frameError}
     WHERE tenant_id = ${tenantId} AND id = ${mediaId}
     RETURNING *
   `
@@ -487,13 +533,34 @@ export async function findMediaUsage(tx: Tx, tenantId: string, mediaId: string):
 export async function resolvePublicMedia(
   tx: Tx,
   mediaId: string,
-): Promise<{ tenantId: string; storageKey: string; mime: MediaMime; filename: string } | null> {
+): Promise<{
+  tenantId: string
+  storageKey: string
+  mime: MediaMime
+  filename: string
+  frameStatus: MediaFrameStatus
+  frameCount: number
+} | null> {
   const [row] = await tx<
-    { tenant_id: string; storage_key: string; mime: MediaMime; filename: string }[]
+    {
+      tenant_id: string
+      storage_key: string
+      mime: MediaMime
+      filename: string
+      frame_status: MediaFrameStatus
+      frame_count: number
+    }[]
   >`SELECT * FROM resolve_public_media(${mediaId})`
 
   if (!row) return null
-  return { tenantId: row.tenant_id, storageKey: row.storage_key, mime: row.mime, filename: row.filename }
+  return {
+    tenantId: row.tenant_id,
+    storageKey: row.storage_key,
+    mime: row.mime,
+    filename: row.filename,
+    frameStatus: row.frame_status ?? 'none',
+    frameCount: Number(row.frame_count ?? 0),
+  }
 }
 
 // endregion

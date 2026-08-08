@@ -101,11 +101,11 @@ function parseStops(value: string | null | undefined): [string, string] | null {
     <div v-else class="flex flex-col gap-2">
       <div class="flex items-center gap-2">
         <input v-model="stopA" type="color" class="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-line bg-raised p-1" />
-        <UiInput v-model="stopA" class="font-mono" aria-label={`${label} gradient start`} />
+        <UiInput v-model="stopA" class="font-mono" :aria-label="`${label} gradient start`" />
       </div>
       <div class="flex items-center gap-2">
         <input v-model="stopB" type="color" class="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-line bg-raised p-1" />
-        <UiInput v-model="stopB" class="font-mono" aria-label={`${label} gradient end`} />
+        <UiInput v-model="stopB" class="font-mono" :aria-label="`${label} gradient end`" />
       </div>
       <p class="text-[0.6875rem] text-faint">Solid {{ label.toLowerCase() }} still uses the first stop for contrast checks.</p>
     </div>

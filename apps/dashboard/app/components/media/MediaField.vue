@@ -19,16 +19,20 @@ import { Image } from '@lucide/vue'
  */
 const url = defineModel<string>({ default: '' })
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     id?: string
     describedBy?: string
     placeholder?: string
     /** Folder new uploads land in, so editor uploads stay grouped. */
     folder?: string
+    /** Restrict picker to videos with a ready scroll frame pack. */
+    scrollReadyOnly?: boolean
   }>(),
-  { id: undefined, describedBy: undefined, placeholder: 'https://…', folder: '' },
+  { id: undefined, describedBy: undefined, placeholder: 'https://…', folder: '', scrollReadyOnly: false },
 )
+
+const emit = defineEmits<{ select: [asset: MediaAsset] }>()
 
 const config = useRuntimeConfig()
 
@@ -60,6 +64,7 @@ function onSelect(asset: MediaAsset) {
   altWarning.value = asset.needsAlt
     ? 'This image has no alt text yet. Add one in the media library so screen readers can describe it.'
     : ''
+  emit('select', asset)
 }
 </script>
 
@@ -88,9 +93,9 @@ function onSelect(asset: MediaAsset) {
 
     <button
       v-else
-      :id="id"
+      :id="props.id"
       type="button"
-      :aria-describedby="describedBy"
+      :aria-describedby="props.describedBy"
       class="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-line-strong bg-sunken/40 px-4 py-5 text-[0.8125rem] font-medium text-soft transition-colors hover:border-brand hover:text-ink"
       @click="pickerOpen = true"
     >
@@ -106,11 +111,18 @@ function onSelect(asset: MediaAsset) {
     <details :open="Boolean(url) && !isLibraryAsset" class="group">
       <summary class="cursor-pointer list-none text-[0.75rem] text-faint transition-colors hover:text-soft">
         <span class="group-open:hidden">Use a URL instead</span>
-        <span class="hidden group-open:inline">Image URL</span>
+        <span class="hidden group-open:inline">Media URL</span>
       </summary>
       <UiInput v-model="url" :placeholder="placeholder" class="mt-1.5 font-mono text-[0.75rem]" />
     </details>
 
-    <MediaPicker v-model:open="pickerOpen" v-model:url="url" :folder="folder" @select="onSelect" />
+    <MediaPicker
+      v-model:open="pickerOpen"
+      v-model:url="url"
+      :folder="props.folder"
+      :scroll-ready-only="props.scrollReadyOnly"
+      :video-only="props.scrollReadyOnly"
+      @select="onSelect"
+    />
   </div>
 </template>

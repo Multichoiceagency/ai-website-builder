@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { SiteTemplate, TemplateCollection } from '@platform/schemas'
 import { Plus } from '@lucide/vue'
+import { isPageRecipe } from '../utils/catalog-split'
 
 /**
  * The template browser, as a component.
@@ -27,6 +28,11 @@ const props = withDefaults(
     cacheKey?: string
     /** Active site theme so card miniatures match the customer's colours. */
     theme?: import('@platform/schemas').Theme | null
+    /**
+     * When true, only full-page / multi-section recipes (Templates store).
+     * Motionsites islands stay on Components.
+     */
+    pageRecipesOnly?: boolean
   }>(),
   {
     modelValue: null,
@@ -35,6 +41,7 @@ const props = withDefaults(
     showRail: true,
     cacheKey: 'templates',
     theme: null,
+    pageRecipesOnly: false,
   },
 )
 
@@ -54,7 +61,7 @@ const query = computed(() => ({
   search: search.value.trim() || undefined,
   maxPerformanceClass: props.maxPerformanceClass,
   freeOnly: freeOnly.value ? 'true' : undefined,
-  limit: 300,
+  limit: 500,
 }))
 
 // Lazy, and deliberately not awaited: this component mounts *after* hydration
@@ -66,11 +73,17 @@ const { data: collections } = useAsyncData(
   { lazy: true, default: () => [] as TemplateCollection[] },
 )
 
-const { data: templates, refresh, status } = useAsyncData(
+const { data: templatesRaw, refresh, status } = useAsyncData(
   `${props.cacheKey}:list`,
   () => api.get<SiteTemplate[]>('/api/v1/templates', query.value),
   { lazy: true, default: () => [] as SiteTemplate[] },
 )
+
+const templates = computed(() => {
+  const list = templatesRaw.value ?? []
+  if (!props.pageRecipesOnly) return list
+  return list.filter(isPageRecipe)
+})
 
 // Debounced so typing does not fire a request per keystroke.
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -79,7 +92,22 @@ watch(query, () => {
   timer = setTimeout(() => refresh(), 180)
 })
 
-const total = computed(() => collections.value?.reduce((sum, entry) => sum + entry.count, 0) ?? 0)
+const railCollections = computed(() => {
+  if (!props.pageRecipesOnly) return collections.value ?? []
+  const counts = new Map<string, number>()
+  for (const template of templates.value) {
+    counts.set(template.collection, (counts.get(template.collection) ?? 0) + 1)
+  }
+  return (collections.value ?? [])
+    .map((entry) => ({ ...entry, count: counts.get(entry.id) ?? 0 }))
+    .filter((entry) => entry.count > 0)
+})
+
+const total = computed(() =>
+  props.pageRecipesOnly
+    ? templates.value.length
+    : (collections.value?.reduce((sum, entry) => sum + entry.count, 0) ?? 0),
+)
 
 function choose(id: string | null) {
   emit('update:modelValue', props.modelValue === id ? null : id)
@@ -121,7 +149,7 @@ const MOTION_LABELS: Record<string, string> = {
             <span class="tabular-nums text-faint">{{ total }}</span>
           </button>
         </li>
-        <li v-for="entry in collections" :key="entry.id">
+        <li v-for="entry in railCollections" :key="entry.id">
           <button
             type="button"
             class="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left type-button-12 transition-colors"
@@ -147,7 +175,7 @@ const MOTION_LABELS: Record<string, string> = {
           Free only
         </label>
         <span class="type-caption-12 text-faint" role="status" aria-live="polite">
-          {{ status === 'pending' ? 'Searching…' : `${templates?.length ?? 0} shown` }}
+          {{ status === 'pending' ? 'Searching…' : `${templates.length} shown` }}
         </span>
       </div>
 
@@ -223,7 +251,8 @@ const MOTION_LABELS: Record<string, string> = {
 
             <p class="type-caption-12 text-faint">
               {{ template.category }} ·
-              {{ template.pageType === 'landing' ? 'whole page' : 'section' }} ·
+              {{ template.pageType === 'landing' || template.blockRecipe.length >= 3 ? 'whole page' : 'section' }} ·
+              {{ template.blockRecipe.length }} sections ·
               {{ template.style[0] }}
             </p>
 
@@ -244,7 +273,7 @@ const MOTION_LABELS: Record<string, string> = {
       </div>
 
       <UiEmptyState
-        v-if="!templates?.length && status !== 'pending'"
+        v-if="!templates.length && status !== 'pending'"
         title="Nothing matches"
         description="Try a different collection, or clear the search."
       />

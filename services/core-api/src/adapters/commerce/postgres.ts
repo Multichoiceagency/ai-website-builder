@@ -89,8 +89,8 @@ import {
   upsertCartItem,
 } from '../../db/repositories/commerce-orders.js'
 import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.js'
+import { resolveTenantPayments } from '../../lib/payments/resolve.js'
 import { slugify, uniqueSlug } from '../../lib/slug.js'
-import { activePaymentProvider, paymentProviderById } from '../payments/index.js'
 import { quoteShipping } from '../shipping/index.js'
 import {
   assembleCart,
@@ -420,7 +420,8 @@ export class PostgresCommerceProvider implements CommerceProvider {
         },
       )
 
-      const payments = activePaymentProvider()
+      const resolved = await resolveTenantPayments(ctx.tenantId)
+      const payments = resolved.active
       const paymentStatus = payments.status()
 
       const payment = await payments.createSession(
@@ -469,7 +470,8 @@ export class PostgresCommerceProvider implements CommerceProvider {
         ? await findShippingRateById(tx, ctx.tenantId, record.shippingRateId)
         : null
 
-      const provider = activePaymentProvider()
+      const resolved = await resolveTenantPayments(ctx.tenantId)
+      const provider = resolved.active
       const number = await nextOrderNumber(tx, ctx.tenantId)
 
       const newOrderId = await insertOrder(tx, {
@@ -582,12 +584,14 @@ export class PostgresCommerceProvider implements CommerceProvider {
   }
 
   async capturePayment(ctx: CommerceContext, orderId: string): Promise<Order | null> {
+    const resolved = await resolveTenantPayments(ctx.tenantId)
     const captured = await withTenant(ctx.tenantId, async (tx) => {
       const order = await findOrderById(tx, ctx.tenantId, orderId)
       if (!order) return null
       if (order.paymentStatus === 'captured') return order
 
-      const provider = paymentProviderById(order.paymentProviderId ?? '') ?? activePaymentProvider()
+      const provider =
+        resolved.providers.find((entry) => entry.id === order.paymentProviderId) ?? resolved.active
       const session = await provider.capture({ tenantId: ctx.tenantId }, this.#sessionFor(order, provider.id))
 
       await updateOrderPayment(tx, ctx.tenantId, orderId, {

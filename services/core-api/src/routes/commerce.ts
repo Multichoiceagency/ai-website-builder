@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { randomBytes } from 'node:crypto'
+import { buildStoreFromPrompt } from '../lib/ai/store-builder-agent.js'
 import {
   addLineItemInputSchema,
   completeCheckoutInputSchema,
@@ -11,21 +13,29 @@ import {
   createRefundInputSchema,
   createShippingRateInputSchema,
   customerQuerySchema,
+  feedSettingsSchema,
   orderQuerySchema,
   productQuerySchema,
   setInventoryInputSchema,
   startCheckoutInputSchema,
+  storeBuildInputSchema,
   transitionOrderInputSchema,
   updateDiscountInputSchema,
   updateLineItemInputSchema,
   updateProductInputSchema,
-  uuidSchema,
+  commerceIdSchema,
   type DomainEventName,
+  type FeedSettings,
+  type Product,
 } from '@platform/schemas'
-import { commerceProvider, commerceStatus, type CommerceContext } from '../adapters/commerce/index.js'
+import { commerceProvider, commerceStatusForTenant, type CommerceContext } from '../adapters/commerce/index.js'
 import { withTenant } from '../db/client.js'
 import { recordAuditEvent } from '../db/repositories/audit.js'
+import { findSettingsDocument, upsertSettingsDocument } from '../db/repositories/settings.js'
+import { listSites } from '../db/repositories/sites.js'
+import { env } from '../config/env.js'
 import { buildEvent, eventBus } from '../lib/event-bus.js'
+import { buildFeed, FEED_CHANNELS, feedChannelMeta, feedOptionsFromSettings, type FeedChannel } from '../lib/commerce/feeds.js'
 import { NotFoundError } from '../lib/errors.js'
 import { ok } from '../lib/response.js'
 import { parseOrThrow } from '../lib/validate.js'
@@ -39,14 +49,87 @@ import { requireTenant, type TenantContext } from '../plugins/auth.js'
  * exactly the same code whether Postgres or Medusa is answering (ADR-0006).
  */
 
-const productParams = z.object({ productId: uuidSchema })
-const cartParams = z.object({ cartId: uuidSchema })
-const orderParams = z.object({ orderId: uuidSchema })
+const productParams = z.object({ productId: commerceIdSchema })
+const cartParams = z.object({ cartId: commerceIdSchema })
+const orderParams = z.object({ orderId: commerceIdSchema })
 
 /** Provider calls take the tenant and a label for order timelines, nothing more. */
 function commerceContext(context: TenantContext): CommerceContext {
   return { tenantId: context.tenantId, actorLabel: context.user.email }
 }
+
+/** Full product rows for feed builders (summary list → getProduct). Caps at 500. */
+async function loadActiveProducts(ctx: CommerceContext): Promise<Product[]> {
+  const products: Product[] = []
+  let page = 1
+  const limit = 100
+  const maxPages = 5
+
+  while (page <= maxPages) {
+    const batch = await commerceProvider.listProducts(ctx, { status: 'active', page, limit })
+    for (const summary of batch.items) {
+      const product = await commerceProvider.getProduct(ctx, summary.id)
+      if (product) products.push(product)
+    }
+    if (batch.items.length < limit || products.length >= batch.meta.total) break
+    page += 1
+  }
+
+  return products
+}
+
+async function resolveShopName(tenantId: string): Promise<string> {
+  const sites = await withTenant(tenantId, (tx) => listSites(tx, tenantId))
+  return sites[0]?.name?.trim() || 'Shop'
+}
+
+function storefrontBaseUrl(): string {
+  return env.CORS_ORIGINS.find((origin) => origin.includes('3001')) ?? env.CORS_ORIGINS[0] ?? 'http://localhost:3001'
+}
+
+function publicApiBase(request: { headers: Record<string, unknown>; protocol?: string }): string {
+  const forwardedProto = request.headers['x-forwarded-proto']
+  const proto =
+    (typeof forwardedProto === 'string' ? forwardedProto.split(',')[0]?.trim() : null) ||
+    request.protocol ||
+    'http'
+  const forwardedHost = request.headers['x-forwarded-host']
+  const hostHeader = request.headers.host
+  const host =
+    (typeof forwardedHost === 'string' ? forwardedHost.split(',')[0]?.trim() : null) ||
+    (typeof hostHeader === 'string' ? hostHeader : null) ||
+    `localhost:${env.CORE_API_PORT}`
+  return `${proto}://${host}`
+}
+
+async function loadFeedSettings(tenantId: string, updatedBy: string): Promise<FeedSettings> {
+  const stored = await withTenant(tenantId, (tx) => findSettingsDocument(tx, tenantId, 'commerce', 'feeds'))
+  const settings = feedSettingsSchema.parse(stored?.value ?? {})
+  if (settings.publicToken) return settings
+
+  const minted: FeedSettings = {
+    ...settings,
+    publicToken: randomBytes(24).toString('base64url'),
+  }
+  await withTenant(tenantId, (tx) =>
+    upsertSettingsDocument(tx, {
+      tenantId,
+      scope: 'commerce',
+      key: 'feeds',
+      value: minted,
+      updatedBy,
+    }),
+  )
+  return minted
+}
+
+const feedChannelParams = z.object({
+  channel: z.enum(['google', 'meta', 'amazon', 'ebay', 'marktplaats']),
+})
+
+const updateFeedSettingsSchema = feedSettingsSchema
+  .pick({ includeOutOfStock: true, currency: true, titleSuffix: true })
+  .partial()
 
 /**
  * Audit row and event publication, in that order — the audit trail is written
@@ -77,8 +160,116 @@ const commerceRoutes: FastifyPluginAsync = async (app) => {
    * discovered at checkout.
    */
   app.get('/status', async (request, reply) => {
-    requireTenant(request, 'commerce:read')
-    return reply.send(ok(commerceStatus()))
+    const context = requireTenant(request, 'commerce:read')
+    return reply.send(ok(await commerceStatusForTenant(context.tenantId)))
+  })
+
+  /**
+   * One-prompt ecommerce store builder.
+   * Seeds catalog + shipping + discount + theme + /shop pages (Medusa/Shopify/Payload-shaped).
+   */
+  app.post('/store/build', async (request, reply) => {
+    const context = requireTenant(request, 'commerce:write')
+    const body = parseOrThrow(storeBuildInputSchema, request.body)
+    const { plan, result } = await buildStoreFromPrompt(commerceContext(context), body)
+    await emit(
+      context,
+      'product.created',
+      { type: 'store', id: body.siteId },
+      {
+        shopName: result.shopName,
+        productCount: result.productIds.length,
+        collectionCount: result.collectionIds.length,
+      },
+    )
+    return reply.send(ok({ plan, result }))
+  })
+
+  // region Product feeds (Google / Meta / Amazon / eBay / Marktplaats)
+
+  app.get('/feeds', async (request, reply) => {
+    const context = requireTenant(request, 'commerce:read')
+    const settings = await loadFeedSettings(context.tenantId, context.user.email)
+    const base = publicApiBase(request)
+    const productPage = await commerceProvider.listProducts(commerceContext(context), {
+      status: 'active',
+      page: 1,
+      limit: 1,
+    })
+    const productCount = productPage.meta.total
+    const exportStatus = productCount > 0 ? 'ready' : 'needs_products'
+
+    return reply.send(
+      ok({
+        settings: {
+          includeOutOfStock: settings.includeOutOfStock,
+          currency: settings.currency,
+          titleSuffix: settings.titleSuffix,
+        },
+        productCount,
+        channels: FEED_CHANNELS.map((channel) => ({
+          id: channel.id,
+          name: channel.name,
+          description: channel.description,
+          format: channel.format,
+          docsUrl: channel.docsUrl,
+          connectMode: channel.connectMode,
+          connectHint: channel.connectHint,
+          exportStatus,
+          downloadPath: `/api/v1/commerce/feeds/${channel.id}/download`,
+          publicUrl: `${base}/public/v1/commerce/feeds/${settings.publicToken}/${channel.id}`,
+        })),
+      }),
+    )
+  })
+
+  app.put('/feeds/settings', async (request, reply) => {
+    const context = requireTenant(request, 'commerce:write')
+    const patch = parseOrThrow(updateFeedSettingsSchema, request.body ?? {}, 'feed settings')
+    const current = await loadFeedSettings(context.tenantId, context.user.email)
+    const next = feedSettingsSchema.parse({
+      ...current,
+      ...patch,
+      publicToken: current.publicToken,
+    })
+    await withTenant(context.tenantId, (tx) =>
+      upsertSettingsDocument(tx, {
+        tenantId: context.tenantId,
+        scope: 'commerce',
+        key: 'feeds',
+        value: next,
+        updatedBy: context.user.email,
+      }),
+    )
+    return reply.send(
+      ok({
+        includeOutOfStock: next.includeOutOfStock,
+        currency: next.currency,
+        titleSuffix: next.titleSuffix,
+      }),
+    )
+  })
+
+  app.get('/feeds/:channel/download', async (request, reply) => {
+    const context = requireTenant(request, 'commerce:read')
+    const { channel: channelId } = parseOrThrow(feedChannelParams, request.params, 'feed channel')
+    const meta = feedChannelMeta(channelId)
+    if (!meta) throw new NotFoundError('Feed channel')
+
+    const [products, shopName, settings] = await Promise.all([
+      loadActiveProducts(commerceContext(context)),
+      resolveShopName(context.tenantId),
+      loadFeedSettings(context.tenantId, context.user.email),
+    ])
+    const body = buildFeed(
+      channelId as FeedChannel,
+      products,
+      feedOptionsFromSettings({ storefrontUrl: storefrontBaseUrl(), shopName }, settings),
+    )
+
+    reply.header('content-type', meta.contentType)
+    reply.header('content-disposition', `attachment; filename="${meta.filename}"`)
+    return reply.send(body)
   })
 
   // region Products
@@ -169,14 +360,14 @@ const commerceRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/variants/:variantId/inventory', async (request, reply) => {
     const context = requireTenant(request, 'commerce:read')
-    const { variantId } = parseOrThrow(z.object({ variantId: uuidSchema }), request.params, 'variant id')
+    const { variantId } = parseOrThrow(z.object({ variantId: commerceIdSchema }), request.params, 'variant id')
 
     return reply.send(ok(await commerceProvider.listInventory(commerceContext(context), variantId)))
   })
 
   app.put('/variants/:variantId/inventory', async (request, reply) => {
     const context = requireTenant(request, 'commerce:write')
-    const { variantId } = parseOrThrow(z.object({ variantId: uuidSchema }), request.params, 'variant id')
+    const { variantId } = parseOrThrow(z.object({ variantId: commerceIdSchema }), request.params, 'variant id')
     const input = parseOrThrow(setInventoryInputSchema, request.body, 'inventory level')
 
     const level = await commerceProvider.setInventory(commerceContext(context), variantId, input)
@@ -202,7 +393,7 @@ const commerceRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch('/discounts/:discountId', async (request, reply) => {
     const context = requireTenant(request, 'commerce:write')
-    const { discountId } = parseOrThrow(z.object({ discountId: uuidSchema }), request.params, 'discount id')
+    const { discountId } = parseOrThrow(z.object({ discountId: commerceIdSchema }), request.params, 'discount id')
     const patch = parseOrThrow(updateDiscountInputSchema, request.body, 'discount')
 
     const discount = await commerceProvider.updateDiscount(commerceContext(context), discountId, patch)
@@ -213,7 +404,7 @@ const commerceRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete('/discounts/:discountId', async (request, reply) => {
     const context = requireTenant(request, 'commerce:write')
-    const { discountId } = parseOrThrow(z.object({ discountId: uuidSchema }), request.params, 'discount id')
+    const { discountId } = parseOrThrow(z.object({ discountId: commerceIdSchema }), request.params, 'discount id')
 
     const deleted = await commerceProvider.deleteDiscount(commerceContext(context), discountId)
     if (!deleted) throw new NotFoundError('Discount')
@@ -240,7 +431,7 @@ const commerceRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete('/shipping/rates/:rateId', async (request, reply) => {
     const context = requireTenant(request, 'commerce:write')
-    const { rateId } = parseOrThrow(z.object({ rateId: uuidSchema }), request.params, 'rate id')
+    const { rateId } = parseOrThrow(z.object({ rateId: commerceIdSchema }), request.params, 'rate id')
 
     const deleted = await commerceProvider.deleteShippingRate(commerceContext(context), rateId)
     if (!deleted) throw new NotFoundError('Shipping rate')
@@ -284,7 +475,7 @@ const commerceRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/carts/:cartId/items/:itemId', async (request, reply) => {
     const context = requireTenant(request, 'order:write')
     const { cartId } = parseOrThrow(cartParams, request.params, 'cart id')
-    const { itemId } = parseOrThrow(z.object({ itemId: uuidSchema }), request.params, 'item id')
+    const { itemId } = parseOrThrow(z.object({ itemId: commerceIdSchema }), request.params, 'item id')
     const { quantity } = parseOrThrow(updateLineItemInputSchema, request.body, 'line item')
 
     const cart = await commerceProvider.updateLineItem(commerceContext(context), cartId, itemId, quantity)
@@ -294,7 +485,7 @@ const commerceRoutes: FastifyPluginAsync = async (app) => {
   app.delete('/carts/:cartId/items/:itemId', async (request, reply) => {
     const context = requireTenant(request, 'order:write')
     const { cartId } = parseOrThrow(cartParams, request.params, 'cart id')
-    const { itemId } = parseOrThrow(z.object({ itemId: uuidSchema }), request.params, 'item id')
+    const { itemId } = parseOrThrow(z.object({ itemId: commerceIdSchema }), request.params, 'item id')
 
     const cart = await commerceProvider.updateLineItem(commerceContext(context), cartId, itemId, 0)
     return reply.send(ok(cart))
@@ -442,7 +633,7 @@ const commerceRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/customers/:customerId', async (request, reply) => {
     const context = requireTenant(request, 'customer:read')
-    const { customerId } = parseOrThrow(z.object({ customerId: uuidSchema }), request.params, 'customer id')
+    const { customerId } = parseOrThrow(z.object({ customerId: commerceIdSchema }), request.params, 'customer id')
 
     const customer = await commerceProvider.getCustomer(commerceContext(context), customerId)
     if (!customer) throw new NotFoundError('Customer')

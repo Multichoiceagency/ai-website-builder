@@ -1,5 +1,13 @@
 import { z } from 'zod'
-import { isoTimestampSchema, slugSchema, uuidSchema } from './common.js'
+import { isoTimestampSchema, slugSchema } from './common.js'
+
+/**
+ * Opaque commerce resource id.
+ * Platform / Medusa use UUIDs; Shopify / WooCommerce use numeric (or gid) strings.
+ * Kept under 128 chars so route params stay predictable.
+ */
+export const commerceIdSchema = z.string().trim().min(1).max(128)
+export type CommerceId = z.infer<typeof commerceIdSchema>
 
 /**
  * Commerce contracts (§12, §13). Owned by the commerce phase.
@@ -99,8 +107,8 @@ export const productImageSchema = z.object({
 export type ProductImage = z.infer<typeof productImageSchema>
 
 export const productVariantSchema = z.object({
-  id: uuidSchema,
-  productId: uuidSchema,
+  id: commerceIdSchema,
+  productId: commerceIdSchema,
   title: z.string().min(1).max(200),
   sku: z.string().max(80).nullable().default(null),
   barcode: z.string().max(80).nullable().default(null),
@@ -117,7 +125,7 @@ export const productVariantSchema = z.object({
 export type ProductVariant = z.infer<typeof productVariantSchema>
 
 export const productSummarySchema = z.object({
-  id: uuidSchema,
+  id: commerceIdSchema,
   title: z.string().min(1).max(200),
   handle: slugSchema,
   status: productStatusSchema,
@@ -137,7 +145,7 @@ export const productSchema = productSummarySchema.extend({
   options: z.array(productOptionSchema).max(3).default([]),
   images: z.array(productImageSchema).max(20).default([]),
   variants: z.array(productVariantSchema).default([]),
-  collectionIds: z.array(uuidSchema).default([]),
+  collectionIds: z.array(commerceIdSchema).default([]),
   createdAt: isoTimestampSchema,
 })
 export type Product = z.infer<typeof productSchema>
@@ -162,7 +170,7 @@ export const createProductInputSchema = z.object({
   options: z.array(productOptionSchema).max(3).optional(),
   images: z.array(productImageSchema).max(20).optional(),
   variants: z.array(createProductVariantInputSchema).min(1).max(100),
-  collectionIds: z.array(uuidSchema).max(20).optional(),
+  collectionIds: z.array(commerceIdSchema).max(20).optional(),
 })
 export type CreateProductInput = z.infer<typeof createProductInputSchema>
 
@@ -176,8 +184,8 @@ export const updateProductInputSchema = z
     options: z.array(productOptionSchema).max(3),
     images: z.array(productImageSchema).max(20),
     /** Replaces the variant set wholesale — send every variant you want kept. */
-    variants: z.array(createProductVariantInputSchema.extend({ id: uuidSchema.optional() })).min(1).max(100),
-    collectionIds: z.array(uuidSchema).max(20),
+    variants: z.array(createProductVariantInputSchema.extend({ id: commerceIdSchema.optional() })).min(1).max(100),
+    collectionIds: z.array(commerceIdSchema).max(20),
   })
   .partial()
 export type UpdateProductInput = z.infer<typeof updateProductInputSchema>
@@ -185,14 +193,14 @@ export type UpdateProductInput = z.infer<typeof updateProductInputSchema>
 export const productQuerySchema = z.object({
   status: productStatusSchema.optional(),
   search: z.string().max(200).optional(),
-  collectionId: uuidSchema.optional(),
+  collectionId: commerceIdSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
 })
 export type ProductQuery = z.infer<typeof productQuerySchema>
 
 export const collectionSchema = z.object({
-  id: uuidSchema,
+  id: commerceIdSchema,
   title: z.string().min(1).max(200),
   handle: slugSchema,
   description: z.string().max(5000).default(''),
@@ -213,7 +221,7 @@ export type CreateCollectionInput = z.infer<typeof createCollectionInputSchema>
 // region Inventory
 
 export const inventoryLocationSchema = z.object({
-  id: uuidSchema,
+  id: commerceIdSchema,
   name: z.string().min(1).max(200),
   code: slugSchema,
   isDefault: z.boolean().default(false),
@@ -229,8 +237,8 @@ export const createLocationInputSchema = z.object({
 export type CreateLocationInput = z.infer<typeof createLocationInputSchema>
 
 export const inventoryLevelSchema = z.object({
-  variantId: uuidSchema,
-  locationId: uuidSchema,
+  variantId: commerceIdSchema,
+  locationId: commerceIdSchema,
   locationName: z.string().max(200).default(''),
   available: z.number().int().default(0),
   /** Held by open carts and unfulfilled orders. Never negative. */
@@ -239,7 +247,7 @@ export const inventoryLevelSchema = z.object({
 export type InventoryLevel = z.infer<typeof inventoryLevelSchema>
 
 export const setInventoryInputSchema = z.object({
-  locationId: uuidSchema,
+  locationId: commerceIdSchema,
   available: z.number().int().min(0),
 })
 export type SetInventoryInput = z.infer<typeof setInventoryInputSchema>
@@ -252,7 +260,7 @@ export const discountTypeSchema = z.enum(['percentage', 'fixed', 'free_shipping'
 export type DiscountType = z.infer<typeof discountTypeSchema>
 
 export const discountSchema = z.object({
-  id: uuidSchema,
+  id: commerceIdSchema,
   code: z.string().min(2).max(40),
   type: discountTypeSchema,
   /** Basis points for `percentage`. 1000 = 10%. */
@@ -317,7 +325,7 @@ export type UpdateDiscountInput = z.infer<typeof updateDiscountInputSchema>
 
 /** What a single discount took off a specific cart, after the stacking rules. */
 export const appliedDiscountSchema = z.object({
-  discountId: uuidSchema,
+  discountId: commerceIdSchema,
   code: z.string().max(40),
   type: discountTypeSchema,
   amountOff: moneySchema,
@@ -333,9 +341,9 @@ export const cartStatusSchema = z.enum(['open', 'completed', 'abandoned'])
 export type CartStatus = z.infer<typeof cartStatusSchema>
 
 export const lineItemSchema = z.object({
-  id: uuidSchema,
-  variantId: uuidSchema,
-  productId: uuidSchema,
+  id: commerceIdSchema,
+  variantId: commerceIdSchema,
+  productId: commerceIdSchema,
   title: z.string().max(200),
   variantTitle: z.string().max(200),
   sku: z.string().max(80).nullable().default(null),
@@ -358,15 +366,15 @@ export const cartTotalsSchema = z.object({
 export type CartTotals = z.infer<typeof cartTotalsSchema>
 
 export const cartSchema = z.object({
-  id: uuidSchema,
+  id: commerceIdSchema,
   status: cartStatusSchema,
   currency: currencyCodeSchema,
   email: z.string().max(320).nullable().default(null),
-  customerId: uuidSchema.nullable().default(null),
+  customerId: commerceIdSchema.nullable().default(null),
   items: z.array(lineItemSchema).default([]),
   discountCodes: z.array(z.string().max(40)).default([]),
   appliedDiscounts: z.array(appliedDiscountSchema).default([]),
-  shippingRateId: uuidSchema.nullable().default(null),
+  shippingRateId: commerceIdSchema.nullable().default(null),
   totals: cartTotalsSchema,
   createdAt: isoTimestampSchema,
   updatedAt: isoTimestampSchema,
@@ -376,12 +384,12 @@ export type Cart = z.infer<typeof cartSchema>
 export const createCartInputSchema = z.object({
   currency: currencyCodeSchema.default('EUR'),
   email: z.string().email().max(320).optional(),
-  customerId: uuidSchema.optional(),
+  customerId: commerceIdSchema.optional(),
 })
 export type CreateCartInput = z.infer<typeof createCartInputSchema>
 
 export const addLineItemInputSchema = z.object({
-  variantId: uuidSchema,
+  variantId: commerceIdSchema,
   quantity: z.number().int().min(1).max(10_000).default(1),
 })
 export type AddLineItemInput = z.infer<typeof addLineItemInputSchema>
@@ -410,7 +418,7 @@ export const commerceAddressSchema = z.object({
 export type CommerceAddress = z.infer<typeof commerceAddressSchema>
 
 export const shippingRateSchema = z.object({
-  id: uuidSchema,
+  id: commerceIdSchema,
   name: z.string().min(1).max(120),
   description: z.string().max(300).default(''),
   price: moneySchema,
@@ -434,7 +442,7 @@ export type CreateShippingRateInput = z.infer<typeof createShippingRateInputSche
 
 /** A quote is a rate priced for one specific cart. */
 export const shippingQuoteSchema = z.object({
-  rateId: uuidSchema,
+  rateId: commerceIdSchema,
   name: z.string().max(120),
   description: z.string().max(300).default(''),
   price: moneySchema,
@@ -474,7 +482,7 @@ export const startCheckoutInputSchema = z.object({
   email: z.string().email().max(320),
   shippingAddress: commerceAddressSchema.partial().optional(),
   billingAddress: commerceAddressSchema.partial().optional(),
-  shippingRateId: uuidSchema.nullable().optional(),
+  shippingRateId: commerceIdSchema.nullable().optional(),
 })
 export type StartCheckoutInput = z.infer<typeof startCheckoutInputSchema>
 
@@ -514,7 +522,7 @@ export function canTransitionOrder(from: OrderStatus, to: OrderStatus): boolean 
 }
 
 export const orderTimelineEntrySchema = z.object({
-  id: uuidSchema,
+  id: commerceIdSchema,
   status: orderStatusSchema,
   note: z.string().max(500).default(''),
   actorLabel: z.string().max(200).default('system'),
@@ -523,8 +531,8 @@ export const orderTimelineEntrySchema = z.object({
 export type OrderTimelineEntry = z.infer<typeof orderTimelineEntrySchema>
 
 export const refundSchema = z.object({
-  id: uuidSchema,
-  orderId: uuidSchema,
+  id: commerceIdSchema,
+  orderId: commerceIdSchema,
   amount: moneySchema,
   reason: z.string().max(300).default(''),
   createdBy: z.string().max(200).default('system'),
@@ -539,11 +547,11 @@ export const createRefundInputSchema = z.object({
 export type CreateRefundInput = z.infer<typeof createRefundInputSchema>
 
 export const orderSummarySchema = z.object({
-  id: uuidSchema,
+  id: commerceIdSchema,
   number: z.number().int().min(1),
   status: orderStatusSchema,
   email: z.string().max(320),
-  customerId: uuidSchema.nullable().default(null),
+  customerId: commerceIdSchema.nullable().default(null),
   currency: currencyCodeSchema,
   total: moneySchema,
   refundedTotal: moneySchema,
@@ -553,7 +561,7 @@ export const orderSummarySchema = z.object({
 export type OrderSummary = z.infer<typeof orderSummarySchema>
 
 export const orderSchema = orderSummarySchema.extend({
-  cartId: uuidSchema.nullable().default(null),
+  cartId: commerceIdSchema.nullable().default(null),
   items: z.array(lineItemSchema).default([]),
   totals: cartTotalsSchema,
   appliedDiscounts: z.array(appliedDiscountSchema).default([]),
@@ -570,7 +578,7 @@ export type Order = z.infer<typeof orderSchema>
 
 export const orderQuerySchema = z.object({
   status: orderStatusSchema.optional(),
-  customerId: uuidSchema.optional(),
+  customerId: commerceIdSchema.optional(),
   search: z.string().max(200).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -588,7 +596,7 @@ export type TransitionOrderInput = z.infer<typeof transitionOrderInputSchema>
 // region Customers
 
 export const customerSummarySchema = z.object({
-  id: uuidSchema,
+  id: commerceIdSchema,
   email: z.string().max(320),
   firstName: z.string().max(120).default(''),
   lastName: z.string().max(120).default(''),
@@ -635,6 +643,10 @@ export type ProviderStatus = z.infer<typeof providerStatusSchema>
 
 export const commerceStatusSchema = z.object({
   commerce: providerStatusSchema,
+  /** Every known commerce engine (platform, Medusa, Shopify, Woo, …). */
+  engines: z.array(providerStatusSchema).default([]),
+  /** Active engine id for this tenant. */
+  activeEngineId: z.string().max(60).default('platform'),
   /** Every known payment provider, configured or not. */
   payments: z.array(providerStatusSchema).default([]),
   shipping: z.array(providerStatusSchema).default([]),

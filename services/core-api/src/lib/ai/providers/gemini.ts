@@ -10,6 +10,11 @@ import {
   revisionValuesSchema,
 } from '../copy-contract.js'
 import type { AiProvider, CopyContext, CopyResult, RevisionContext, RevisionResult } from '../gateway.js'
+import {
+  generateGeminiContent,
+  geminiApiKey,
+  resolveGeminiModel,
+} from './gemini-client.js'
 
 /**
  * Google Gemini provider.
@@ -29,19 +34,9 @@ import type { AiProvider, CopyContext, CopyResult, RevisionContext, RevisionResu
  * which would put it in every proxy log and access log on the way.
  */
 
-const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
-
 /**
- * Verified against Google's model list rather than recalled: model ids churn.
- * `gemini-3.6-flash` is the current GA balanced model. `GEMINI_MODEL` overrides
- * it without a deploy.
- */
-const DEFAULT_MODEL = 'gemini-3.6-flash'
-
-/**
- * Generous, because on the 3.x thinking models the reasoning tokens are drawn
- * from this same budget. A tight limit truncates the JSON mid-object, which
- * costs a whole request and then falls back anyway.
+ * Generous output budget. Thinking is disabled via the shared client so this
+ * funds the JSON answer rather than silent reasoning tokens.
  */
 const MAX_OUTPUT_TOKENS = 8192
 
@@ -125,17 +120,12 @@ export class GeminiCopyProvider implements AiProvider {
    * key used by discovery; the two are separate credentials with separate
    * scopes and must not be treated as interchangeable.
    */
-  #apiKey(): string | undefined {
-    const key = process.env.GEMINI_API_KEY
-    return key && key.trim().length > 0 ? key : undefined
-  }
-
   #model(): string {
-    return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL
+    return resolveGeminiModel()
   }
 
   isAvailable(): boolean {
-    return Boolean(this.#apiKey())
+    return Boolean(geminiApiKey())
   }
 
   async generateCopy(context: CopyContext): Promise<CopyResult> {
@@ -208,34 +198,17 @@ export class GeminiCopyProvider implements AiProvider {
     userText: string
     responseSchema: unknown
   }): Promise<GeminiResponse> {
-    const apiKey = this.#apiKey()
-    if (!apiKey) throw new Error('GEMINI_API_KEY is not configured.')
-
-    const response = await fetch(`${ENDPOINT}/${encodeURIComponent(this.#model())}:generateContent`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        // In the header, never the query string: a key in a URL is a key in
-        // every access log between here and Google.
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: request.systemInstruction }] },
-        contents: [{ role: 'user', parts: [{ text: request.userText }] }],
-        generationConfig: {
-          // Prose is not an allowed answer: the model emits JSON or nothing.
-          responseMimeType: 'application/json',
-          responseSchema: request.responseSchema,
-          maxOutputTokens: MAX_OUTPUT_TOKENS,
-        },
-      }),
+    const result = await generateGeminiContent({
+      model: this.#model(),
+      systemInstruction: request.systemInstruction,
+      userText: request.userText,
+      responseMimeType: 'application/json',
+      responseSchema: request.responseSchema,
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      thinking: 'off',
+      timeoutMs: 60_000,
     })
-
-    // Status only. The body of a Gemini error can quote the request back, and
-    // an error string is exactly the kind of thing that ends up in a log.
-    if (!response.ok) throw new Error(`Gemini API returned ${response.status}`)
-
-    return (await response.json()) as GeminiResponse
+    return result.raw
   }
 
   /** The one JSON document the model was told to produce. */

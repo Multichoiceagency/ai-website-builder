@@ -55,6 +55,16 @@ export const mediaFolderSchema = z
   .max(200)
   .regex(/^$|^[a-z0-9][a-z0-9-]*(\/[a-z0-9][a-z0-9-]*)*$/, 'must be a lowercase path like `blog/2026`')
 
+/**
+ * Scroll-scrub frame pack status for videos.
+ *
+ * Images stay `none`. Videos move `pending` → `ready` (or `failed`) after the
+ * post-upload ffmpeg extract. Caps live in core-api (`frames.ts`).
+ */
+export const MEDIA_FRAME_STATUSES = ['none', 'pending', 'ready', 'failed'] as const
+export const mediaFrameStatusSchema = z.enum(MEDIA_FRAME_STATUSES)
+export type MediaFrameStatus = z.infer<typeof mediaFrameStatusSchema>
+
 export const mediaAssetSchema = z.object({
   id: uuidSchema,
   folder: mediaFolderSchema.default(''),
@@ -84,11 +94,22 @@ export const mediaAssetSchema = z.object({
    * is a counter that drifts the first time a document is edited elsewhere.
    */
   usageCount: z.number().int().min(0).default(0),
+  /** Scroll-frame pack lifecycle. Images are always `none`. */
+  frameStatus: mediaFrameStatusSchema.default('none'),
+  frameCount: z.number().int().min(0).default(0),
+  frameFps: z.number().min(0).max(60).default(0),
+  frameWidth: z.number().int().min(0).default(0),
+  frameError: z.string().max(500).default(''),
   createdBy: z.string().max(320).default(''),
   createdAt: isoTimestampSchema,
   updatedAt: isoTimestampSchema,
 })
 export type MediaAsset = z.infer<typeof mediaAssetSchema>
+
+/** True when the asset can drive a scroll-scrub canvas section. */
+export function mediaHasScrollFrames(asset: Pick<MediaAsset, 'frameStatus' | 'frameCount'>): boolean {
+  return asset.frameStatus === 'ready' && asset.frameCount > 0
+}
 
 export const mediaSortSchema = z.enum(['newest', 'oldest', 'largest', 'smallest', 'name'])
 export type MediaSort = z.infer<typeof mediaSortSchema>

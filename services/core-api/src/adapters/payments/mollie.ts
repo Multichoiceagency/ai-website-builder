@@ -43,14 +43,19 @@ interface MolliePayment {
 
 export class MolliePaymentProvider implements PaymentProvider {
   readonly id = 'mollie'
-  readonly #apiKey = process.env.MOLLIE_API_KEY ?? ''
+  readonly #apiKey: string
+
+  constructor(apiKey = process.env.MOLLIE_API_KEY ?? '') {
+    this.#apiKey = apiKey.trim()
+  }
 
   status(): ProviderStatus {
     return {
       id: this.id,
       configured: this.#apiKey.length > 0,
       capabilities: ['redirect', 'capture', 'refund', 'ideal'],
-      reason: this.#apiKey ? null : 'MOLLIE_API_KEY is not set on this installation.',
+      // Merchant-facing: never expose env var names in the dashboard.
+      reason: this.#apiKey ? null : 'Mollie needs setup — open Payments to install.',
     }
   }
 
@@ -92,14 +97,18 @@ export class MolliePaymentProvider implements PaymentProvider {
 
   #requireReference(session: PaymentSession): string {
     if (!session.providerReference) {
-      throw new PaymentUnconfiguredError(this.id, 'the session carries no provider reference.')
+      throw new PaymentUnconfiguredError(this.id, 'Mollie session is missing a provider reference.')
     }
     return session.providerReference
   }
 
   async #request<T>(path: string, init: RequestInit): Promise<T> {
     if (!this.#apiKey) {
-      throw new PaymentUnconfiguredError(this.id, 'MOLLIE_API_KEY is not set.')
+      console.warn('[mollie] Refusing request: API key is not set.')
+      throw new PaymentUnconfiguredError(
+        this.id,
+        'Mollie needs setup — open Payments to install.',
+      )
     }
 
     const response = await fetch(`${API_BASE}${path}`, {

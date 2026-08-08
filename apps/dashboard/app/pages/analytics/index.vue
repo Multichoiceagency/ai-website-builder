@@ -69,6 +69,47 @@ const { data, pending, refresh, error } = await useAsyncData(
   { watch: [days, siteId], default: () => null },
 )
 
+const ga4Busy = ref(false)
+const ga4Error = ref('')
+const ga4Property = ref('')
+const ga4Metrics = ref<{
+  sessions: number
+  totalUsers: number
+  screenPageViews: number
+  bounceRate: number | null
+} | null>(null)
+const ga4Properties = ref<{ property: string; displayName: string }[]>([])
+
+async function loadGa4() {
+  ga4Busy.value = true
+  ga4Error.value = ''
+  try {
+    const listed = await api.get<{ properties: { property: string; displayName: string }[] }>(
+      '/api/v1/analytics/ga4/properties',
+    )
+    ga4Properties.value = listed.properties
+    const property = ga4Property.value || listed.properties[0]?.property
+    if (!property) {
+      ga4Error.value = 'No GA4 properties on this Google account.'
+      return
+    }
+    ga4Property.value = property
+    const overview = await api.get<{
+      metrics: {
+        sessions: number
+        totalUsers: number
+        screenPageViews: number
+        bounceRate: number | null
+      }
+    }>('/api/v1/analytics/ga4/overview', { property, days: days.value })
+    ga4Metrics.value = overview.metrics
+  } catch (caught) {
+    ga4Error.value = caught instanceof ApiError ? caught.message : 'GA4 request failed.'
+  } finally {
+    ga4Busy.value = false
+  }
+}
+
 const siteOptions = computed(() => [
   { label: 'All websites', value: '' },
   ...(sites.value ?? []).map((site) => ({ label: site.name, value: site.id })),
@@ -176,6 +217,32 @@ const activeDimensionLabel = computed(
         Compared with {{ formatDateTime(data.range.previousFrom) }} – {{ formatDateTime(data.range.previousTo) }}
       </p>
     </div>
+
+    <UiCard class="mb-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-heading font-semibold text-ink">Google Analytics 4</h2>
+          <p class="mt-1 type-caption-12 text-soft">
+            Full GA4 reports (sessions over time, countries, sources) live on a dedicated page.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <UiButton size="sm" to="/analytics/google">Open Google Analytics</UiButton>
+          <UiButton size="sm" :loading="ga4Busy" @click="loadGa4">Quick load</UiButton>
+        </div>
+      </div>
+      <p v-if="ga4Error" class="mt-3 type-caption-12 text-danger" role="alert">{{ ga4Error }}</p>
+      <div v-else-if="ga4Metrics" class="mt-4 grid gap-3 sm:grid-cols-4">
+        <UiStat label="Sessions" :value="ga4Metrics.sessions" />
+        <UiStat label="Users" :value="ga4Metrics.totalUsers" />
+        <UiStat label="Views" :value="ga4Metrics.screenPageViews" />
+        <UiStat
+          label="Bounce rate"
+          :value="ga4Metrics.bounceRate != null ? `${Math.round(ga4Metrics.bounceRate * 100)}%` : '—'"
+        />
+      </div>
+      <p v-if="ga4Property" class="mt-3 type-caption-12 text-faint">{{ ga4Property }}</p>
+    </UiCard>
 
     <p v-if="error" class="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">
       Could not load analytics: {{ error.message }}

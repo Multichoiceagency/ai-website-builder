@@ -1,3 +1,7 @@
 <template>
-  <NuxtPage />
+  <div>
+    <NuxtPwaManifest />
+    <NuxtPage />
+    <PwaPrompt />
+  </div>
 </template>

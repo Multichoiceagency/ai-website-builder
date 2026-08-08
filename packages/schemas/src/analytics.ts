@@ -168,6 +168,11 @@ export const analyticsOverviewSchema = z.object({
   /** Revenue recorded in other currencies, reported rather than folded in. */
   otherCurrencies: z.array(analyticsRevenueSliceSchema).default([]),
   series: z.array(analyticsSeriesPointSchema),
+  /**
+   * Same length as `series`, aligned by index — previous-period daily points for
+   * Shopify-style compare charts. Empty when the previous window had no days.
+   */
+  previousSeries: z.array(analyticsSeriesPointSchema).default([]),
   breakdowns: z.array(analyticsBreakdownSchema),
   topPages: z.array(analyticsTopPageSchema),
   funnel: z.array(analyticsFunnelStepSchema),
@@ -335,5 +340,69 @@ export const analyticsTrackingHealthSchema = z.object({
   volume: z.array(analyticsVolumePointSchema),
 })
 export type AnalyticsTrackingHealth = z.infer<typeof analyticsTrackingHealthSchema>
+
+// endregion
+
+// region Live presence (globe)
+
+export const analyticsLiveChannelSchema = z.enum(['website', 'ecommerce', 'unknown'])
+export type AnalyticsLiveChannel = z.infer<typeof analyticsLiveChannelSchema>
+
+/**
+ * One active visitor on the Live View globe.
+ *
+ * `lat`/`lng` are only set when a coarse country can be derived from real
+ * session signals (browser locale region or stored country). Avatars are
+ * deterministic from `anonymousId` — never stock demo people.
+ */
+export const analyticsLiveVisitorSchema = z.object({
+  id: z.string().min(1).max(120),
+  anonymousId: z.string().min(8).max(64),
+  sessionId: z.string().min(8).max(64),
+  siteId: uuidSchema,
+  label: z.string().max(200),
+  countryCode: z.string().length(2).nullable().default(null),
+  countryName: z.string().max(80).nullable().default(null),
+  lat: z.number().min(-90).max(90).nullable().default(null),
+  lng: z.number().min(-180).max(180).nullable().default(null),
+  avatarUrl: z.string().min(1).max(500),
+  channel: analyticsLiveChannelSchema,
+  path: z.string().max(512).nullable().default(null),
+  lastSeenAt: isoTimestampSchema,
+  eventCount: z.number().int().min(0),
+})
+export type AnalyticsLiveVisitor = z.infer<typeof analyticsLiveVisitorSchema>
+
+export const analyticsLiveRecommendationSchema = z.object({
+  id: z.string().min(1).max(80),
+  title: z.string().min(1).max(120),
+  body: z.string().min(1).max(400),
+  tone: z.enum(['info', 'action', 'warning']).default('info'),
+  href: z.string().max(300).optional(),
+})
+export type AnalyticsLiveRecommendation = z.infer<typeof analyticsLiveRecommendationSchema>
+
+export const analyticsLivePresenceSchema = z.object({
+  activeCount: z.number().int().min(0),
+  windowMinutes: z.number().int().min(1),
+  asOf: isoTimestampSchema,
+  siteId: uuidSchema.nullable().default(null),
+  visitors: z.array(analyticsLiveVisitorSchema),
+  /** Country rollup for the locations list — only rows with a known country. */
+  locations: z.array(
+    z.object({
+      countryCode: z.string().length(2),
+      countryName: z.string().max(80),
+      visitors: z.number().int().min(1),
+    }),
+  ),
+  channels: z.object({
+    website: z.number().int().min(0),
+    ecommerce: z.number().int().min(0),
+    unknown: z.number().int().min(0),
+  }),
+  recommendations: z.array(analyticsLiveRecommendationSchema).default([]),
+})
+export type AnalyticsLivePresence = z.infer<typeof analyticsLivePresenceSchema>
 
 // endregion

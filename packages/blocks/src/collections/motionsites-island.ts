@@ -5,9 +5,10 @@ import { field, text } from '../fields.js'
 /**
  * MotionSites React island embed (ADR-0003 escape hatch).
  *
- * The CMS stores only `{ sectionId }` — the sandboxed iframe loads a first-party
- * Vite+React build from `/motionsites/islands/{sectionId}/`. AI site planning
- * must not select this block (class D + category `gallery` is picker-only).
+ * The CMS stores `{ sectionId }` + optional overlay copy/fonts. The sandboxed
+ * iframe loads a first-party Vite+React build that stays fully animated
+ * (video / spotlight / GSAP). Host props arrive via postMessage — never by
+ * rewriting React source into the page document.
  */
 export const motionSection01 = defineCollectionBlock({
   collection: 'spotlight',
@@ -15,7 +16,7 @@ export const motionSection01 = defineCollectionBlock({
   id: 'motion-section-01',
   name: 'MotionSites island',
   description:
-    'Exact MotionSites section as a sandboxed React island (Tailwind, framer-motion, local video). Not AI-planned — insert from the MotionSites catalogue when islandReady.',
+    'Exact MotionSites section as a sandboxed React island (Tailwind, framer-motion, local video). Overlay copy is editable; the island keeps its animation.',
   category: 'gallery',
   capabilities: ['embed', 'motion', 'video'],
   industries: ['*', 'creative', 'agency'],
@@ -30,11 +31,31 @@ export const motionSection01 = defineCollectionBlock({
       { label: 'Full viewport', value: '100vh' },
       { label: 'Auto (postMessage)', value: 'auto' },
     ]),
+    field.text('headline', 'Headline line 1', {
+      help: 'Overlay on animated media — leave blank to keep the island default.',
+    }),
+    field.text('headlineLine2', 'Headline line 2'),
+    field.textarea('bodyLeft', 'Body (left)'),
+    field.textarea('bodyRight', 'Body (right)'),
+    field.text('ctaLabel', 'CTA label'),
+    field.text('fontDisplay', 'Display font', {
+      help: 'Google Font family for the headline (e.g. Playfair Display).',
+    }),
+    field.text('fontBody', 'Body font', {
+      help: 'Google Font family for supporting copy.',
+    }),
   ],
   schema: z.object({
     sectionId: z.string().min(1).max(120).default('velorah-hero'),
     title: text(''),
     minHeight: z.enum(['100vh', 'auto']).default('100vh'),
+    headline: text(''),
+    headlineLine2: text(''),
+    bodyLeft: text(''),
+    bodyRight: text(''),
+    ctaLabel: text(''),
+    fontDisplay: text(''),
+    fontBody: text(''),
   }),
 })
 

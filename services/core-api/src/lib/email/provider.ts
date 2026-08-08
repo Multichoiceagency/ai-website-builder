@@ -28,7 +28,7 @@ export interface EmailSendResult {
 }
 
 export interface EmailProvider {
-  readonly name: 'smtp' | 'console'
+  readonly name: 'smtp' | 'console' | 'gmail'
   /**
    * True when this installation can actually deliver mail. False is a valid,
    * expected answer: the API reports it rather than pretending a send worked.

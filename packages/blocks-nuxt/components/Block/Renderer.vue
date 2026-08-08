@@ -27,6 +27,7 @@ import {
   BlockGalleryPinnedSequence01,
   BlockGalleryTiltCards01,
   BlockHeaderSimple01,
+  BlockHeaderLiquidGlass01,
   BlockHeroAurora01,
   BlockHeroAgencyProof01,
   BlockHeroAsymmetric01,
@@ -40,13 +41,17 @@ import {
   BlockHeroSaasPreview01,
   BlockHeroSplit01,
   BlockHeroSplitScreen01,
+  BlockLayoutCanvas01,
   BlockLogosOrbit01,
   BlockLogosStrip01,
   BlockMarqueeStrip01,
   BlockMotionSection01,
   BlockPricingToggle01,
+  BlockProductDetail01,
+  BlockScrollVideoScrub01,
   BlockServicesEditorialIndex01,
   BlockServicesList01,
+  BlockShopAnnouncement01,
   BlockShowcaseParallax01,
   BlockStatsBand01,
   BlockStatsCounter01,
@@ -73,6 +78,7 @@ defineProps<{ sections: Section[] }>()
 const RENDERERS: Record<string, unknown> = {
   // core
   'header-simple-01': BlockHeaderSimple01,
+  'header-liquid-glass-01': BlockHeaderLiquidGlass01,
   'hero-split-01': BlockHeroSplit01,
   'hero-centered-01': BlockHeroCentered01,
   'logos-strip-01': BlockLogosStrip01,
@@ -80,6 +86,7 @@ const RENDERERS: Record<string, unknown> = {
   'services-list-01': BlockServicesList01,
   'features-grid-01': BlockFeaturesGrid01,
   'content-richtext-01': BlockContentRichtext01,
+  'layout-canvas-01': BlockLayoutCanvas01,
   'testimonials-grid-01': BlockTestimonialsGrid01,
   'faq-accordion-01': BlockFaqAccordion01,
   'cta-banner-01': BlockCtaBanner01,
@@ -98,6 +105,7 @@ const RENDERERS: Record<string, unknown> = {
   'gallery-pinned-sequence-01': BlockGalleryPinnedSequence01,
   'gallery-horizontal-scroll-01': BlockGalleryHorizontalScroll01,
   'about-scroll-story-01': BlockAboutScrollStory01,
+  'scroll-video-scrub-01': BlockScrollVideoScrub01,
 
   // showcase — marketing primitives
   'testimonials-marquee-01': BlockTestimonialsMarquee01,
@@ -108,6 +116,8 @@ const RENDERERS: Record<string, unknown> = {
   'features-tab-switcher-01': BlockFeaturesTabSwitcher01,
   'pricing-toggle-01': BlockPricingToggle01,
   'features-bento-grid-01': BlockFeaturesBentoGrid01,
+  'product-detail-01': BlockProductDetail01,
+  'header-shop-announce-01': BlockShopAnnouncement01,
   'hero-agency-proof-01': BlockHeroAgencyProof01,
   'hero-property-01': BlockHeroProperty01,
   'hero-portrait-01': BlockHeroPortrait01,
@@ -179,9 +189,21 @@ function visibilityClass(section: Section): string {
     .join(' ')
 }
 
-/** Remap `--site-*` (and scale) on the wrapper so blocks inherit without edits. */
+/**
+ * Remap `--site-*` (and scale) on the wrapper so blocks inherit without edits.
+ *
+ * Motionsites islands stay full-bleed and fully animated — never inset them with
+ * section padding / max-width; colour + type tokens still flow through.
+ */
 function styleVars(section: Section): Record<string, string> | undefined {
   const vars = sectionStyleToCssVars(section.style)
+  if (section.block === 'motion-section-01') {
+    delete vars['padding-block']
+    delete vars['padding-inline']
+    delete vars['max-width']
+    delete vars['margin-inline']
+    delete vars.width
+  }
   return Object.keys(vars).length ? vars : undefined
 }
 </script>

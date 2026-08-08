@@ -41,13 +41,13 @@
     "licence": "mit",
     "importable": true,
     "attribution": "",
-    "notes": "CLEARED, FREE REPO ONLY. MIT verified from the LICENSE in magicuidesign/magicui. Magic UI Pro is a separate paid product (templates and premium components) that is NOT in the MIT repository and is out of scope — never derive from a Pro component. CLEARED BUT UNUSED: no preset in the catalogue derives from this source today. The clearance stands for future work; it is not a record that anything was taken.",
+    "notes": "CLEARED, FREE REPO ONLY. MIT verified from the LICENSE in magicuidesign/magicui. Magic UI Pro is a separate paid product (templates and premium components) that is NOT in the MIT repository and is out of scope — never derive from a Pro component. ACTIVE: free registry UI + docs recipes import via `pnpm --filter @platform/templates import:magicui` (layout recipes / rebuild briefs only — ADR-0003). Asset presets regenerate with `import:library-demos` after that script writes `magicui-demos.generated.json`.",
     "evidenceUrl": "https://github.com/magicuidesign/magicui/blob/main/LICENSE.md",
     "copyrightNotice": "Copyright (c) Magic UI",
     "noticeReadAt": "reference/magicui/LICENSE.md",
     "install": {
       "method": "npx",
-      "command": "npx shadcn@latest add @magicui/marquee",
+    "command": "pnpm --filter @platform/templates import:magicui",
       "docsUrl": "https://magicui.design/docs/installation",
       "referenceDir": "reference/magicui",
       "cloneUrl": "https://github.com/magicuidesign/magicui.git"
@@ -195,6 +195,24 @@
       "docsUrl": "https://www.shadcn-vue.com/docs/cli",
       "referenceDir": "reference/shadcn-vue",
       "cloneUrl": "https://github.com/unovue/shadcn-vue.git"
+    }
+  },
+  {
+    "library": "Shadcn Space",
+    "url": "https://shadcnspace.com",
+    "licence": "mit",
+    "importable": true,
+    "attribution": "",
+    "notes": "CLEARED, FREE ONLY. MIT verified from github.com/shadcnspace/shadcnspace LICENSE (Copyright (c) 2026 Shadcn Space). Scope: free blocks + public component examples from a local library checkout (`shadcnspace-library` / `shadcnspace-components`), plus full free landing-page briefs from a local templates scrape (`~/Documents/shadcnspace-templates`). Pro-locked registry items (manifest `proLocked` / `pro-forbidden.json`) are OUT OF SCOPE — never import. Importer takes layout recipes only (ADR-0003): no React/TSX, shared/ui primitives, or CDN assets into CMS pages. Templates: `pnpm --filter @platform/templates import:shadcnspace` and `import:shadcnspace-landings`. Asset presets: regenerate via `import:library-demos` after those scripts write `shadcnspace-*-demos.generated.json`.",
+    "evidenceUrl": "https://raw.githubusercontent.com/shadcnspace/shadcnspace/main/LICENSE",
+    "copyrightNotice": "Copyright (c) 2026 Shadcn Space",
+    "noticeReadAt": "https://raw.githubusercontent.com/shadcnspace/shadcnspace/main/LICENSE",
+    "install": {
+      "method": "git-clone",
+      "command": "pnpm --filter @platform/templates import:shadcnspace",
+      "docsUrl": "https://shadcnspace.com",
+      "referenceDir": "",
+      "cloneUrl": "https://github.com/shadcnspace/shadcnspace.git"
     }
   },
   {

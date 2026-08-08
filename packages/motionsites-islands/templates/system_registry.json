@@ -1,0 +1,11 @@
+[
+    {
+        "id": "nexum-hero",
+        "name": "Nexum Cinematic Hero",
+        "category": "Hero Sections",
+        "component_path": "@/templates/admin/nexum-hero.jsx",
+        "required_npm_packages": [],
+        "created_at": "2026-08-08T11:14:27.820Z",
+        "is_admin_system_wide": true
+    }
+]

@@ -27,6 +27,8 @@ const props = withDefaults(
   { scope: 'platform', description: '', readOnly: false },
 )
 
+const emit = defineEmits<{ saved: [] }>()
+
 interface SecretState {
   field: string
   configured: boolean
@@ -80,6 +82,7 @@ async function save() {
     await api.put(path.value, draft.value)
     await refresh()
     saved.value = true
+    emit('saved')
   } catch (cause) {
     // The server's message is shown verbatim: a plan gate the user cannot read
     // is a support ticket. See `PlanLimitError` in the API.

@@ -1,4 +1,11 @@
-import { siteSchema, themeSchema, type Site, type Theme } from '@platform/schemas'
+import {
+  componentTargetsMapSchema,
+  siteSchema,
+  themeSchema,
+  type ComponentTargetsMap,
+  type Site,
+  type Theme,
+} from '@platform/schemas'
 import type { Tx } from '../client.js'
 import { jsonParam, readJson } from '../json.js'
 
@@ -9,6 +16,7 @@ interface SiteRow {
   slug: string
   locale: string
   theme: unknown
+  component_targets: unknown
   primary_hostname: string | null
   created_at: Date
   updated_at: Date
@@ -24,13 +32,27 @@ function toSite(row: SiteRow): Site {
     // Parsing fills in any token added since the row was written, so an old
     // site never renders with missing theme values.
     theme: themeSchema.parse(readJson<Record<string, unknown>>(row.theme, {})),
+    componentTargets: componentTargetsMapSchema.parse(
+      readJson<Record<string, unknown>>(row.component_targets, {}),
+    ),
     primaryHostname: row.primary_hostname,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   })
 }
 
-const SITE_COLUMNS = ['id', 'tenant_id', 'name', 'slug', 'locale', 'theme', 'primary_hostname', 'created_at', 'updated_at']
+const SITE_COLUMNS = [
+  'id',
+  'tenant_id',
+  'name',
+  'slug',
+  'locale',
+  'theme',
+  'component_targets',
+  'primary_hostname',
+  'created_at',
+  'updated_at',
+]
 
 export async function listSites(tx: Tx, tenantId: string): Promise<Site[]> {
   const rows = await tx<SiteRow[]>`
@@ -55,11 +77,26 @@ export async function findSiteById(tx: Tx, tenantId: string, siteId: string): Pr
 
 export async function insertSite(
   tx: Tx,
-  input: { tenantId: string; name: string; slug: string; locale: string; theme: Theme },
+  input: {
+    tenantId: string
+    name: string
+    slug: string
+    locale: string
+    theme: Theme
+    componentTargets?: ComponentTargetsMap
+  },
 ): Promise<Site> {
+  const targets = componentTargetsMapSchema.parse(input.componentTargets ?? {})
   const [row] = await tx<SiteRow[]>`
-    INSERT INTO sites (tenant_id, name, slug, locale, theme)
-    VALUES (${input.tenantId}, ${input.name}, ${input.slug}, ${input.locale}, ${jsonParam(tx, input.theme)})
+    INSERT INTO sites (tenant_id, name, slug, locale, theme, component_targets)
+    VALUES (
+      ${input.tenantId},
+      ${input.name},
+      ${input.slug},
+      ${input.locale},
+      ${jsonParam(tx, input.theme)},
+      ${jsonParam(tx, targets)}
+    )
     RETURNING ${tx(SITE_COLUMNS)}
   `
   return toSite(row!)
@@ -69,7 +106,12 @@ export async function updateSite(
   tx: Tx,
   tenantId: string,
   siteId: string,
-  patch: { name?: string; locale?: string; theme?: Theme },
+  patch: {
+    name?: string
+    locale?: string
+    theme?: Theme
+    componentTargets?: ComponentTargetsMap
+  },
 ): Promise<Site | null> {
   // COALESCE with an explicitly cast parameter keeps this a single statement
   // for any combination of supplied fields, and the casts are required because
@@ -78,7 +120,11 @@ export async function updateSite(
     UPDATE sites SET
       name   = COALESCE(${patch.name ?? null}::text, name),
       locale = COALESCE(${patch.locale ?? null}::text, locale),
-      theme  = COALESCE(${patch.theme ? jsonParam(tx, patch.theme) : null}::jsonb, theme)
+      theme  = COALESCE(${patch.theme ? jsonParam(tx, patch.theme) : null}::jsonb, theme),
+      component_targets = COALESCE(
+        ${patch.componentTargets ? jsonParam(tx, patch.componentTargets) : null}::jsonb,
+        component_targets
+      )
     WHERE tenant_id = ${tenantId} AND id = ${siteId}
     RETURNING ${tx(SITE_COLUMNS)}
   `

@@ -24,7 +24,11 @@ export interface CreatePaymentInput {
 
 export class PaymentUnconfiguredError extends Error {
   constructor(providerId: string, reason: string) {
-    super(`The ${providerId} payment provider is not configured: ${reason}`)
+    // Merchant-facing: prefer the reason as-is when it already names the provider.
+    // Never leak env var names (e.g. MOLLIE_API_KEY) into API error bodies.
+    const trimmed = reason.trim()
+    const named = /^[A-Z]/.test(trimmed) || trimmed.toLowerCase().includes(providerId)
+    super(named ? trimmed : `${providerId} is not set up yet — ${trimmed}`)
     this.name = 'PaymentUnconfiguredError'
   }
 }

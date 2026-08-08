@@ -40,48 +40,73 @@ const CURRENCIES = ['EUR', 'GBP', 'USD', 'CHF', 'SEK', 'DKK', 'PLN'].map((code) 
       description="Who this workspace is, and the defaults every site, store and campaign inherits from it."
     >
       <template #default="{ draft, writable }">
-        <div class="grid gap-4 sm:grid-cols-2">
-          <UiField label="Workspace name" help="Shown in the switcher and on invitations.">
-            <template #default="{ id, describedBy }">
-              <UiInput
-                :id="id"
-                v-model="(draft as any).name"
-                :described-by="describedBy"
-                :disabled="!writable"
-                :placeholder="membership?.tenantName ?? ''"
-              />
-            </template>
-          </UiField>
+        <!--
+          Two-column card forms: identity on the left, regional defaults on the
+          right. One document, one save — layout only.
+        -->
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="rounded-lg border border-line bg-sunken/30 p-4">
+            <h3 class="type-button-12 mb-3 text-ink">Identity</h3>
+            <div class="grid gap-4">
+              <UiField label="Workspace name" help="Shown in the switcher and on invitations.">
+                <template #default="{ id, describedBy }">
+                  <UiInput
+                    :id="id"
+                    v-model="(draft as any).name"
+                    :described-by="describedBy"
+                    :disabled="!writable"
+                    :placeholder="membership?.tenantName ?? ''"
+                  />
+                </template>
+              </UiField>
 
-          <UiField label="Support e-mail" help="Where customers reply. Used as the reply-to on store mail.">
-            <template #default="{ id, describedBy }">
-              <UiInput :id="id" v-model="(draft as any).supportEmail" type="email" :described-by="describedBy" />
-            </template>
-          </UiField>
+              <UiField
+                label="Support e-mail"
+                help="Where customers reply. Used as the reply-to on store mail."
+              >
+                <template #default="{ id, describedBy }">
+                  <UiInput
+                    :id="id"
+                    v-model="(draft as any).supportEmail"
+                    type="email"
+                    :described-by="describedBy"
+                  />
+                </template>
+              </UiField>
+            </div>
+          </div>
 
-          <UiField label="Interface locale">
-            <template #default="{ id }">
-              <UiSelect :id="id" v-model="(draft as any).locale" :options="LOCALES" />
-            </template>
-          </UiField>
+          <div class="rounded-lg border border-line bg-sunken/30 p-4">
+            <h3 class="type-button-12 mb-3 text-ink">Defaults</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <UiField label="Interface locale">
+                <template #default="{ id }">
+                  <UiSelect :id="id" v-model="(draft as any).locale" :options="LOCALES" />
+                </template>
+              </UiField>
 
-          <UiField label="Default content language" help="The language the builder writes new pages in.">
-            <template #default="{ id }">
-              <UiSelect :id="id" v-model="(draft as any).defaultLanguage" :options="LOCALES" />
-            </template>
-          </UiField>
+              <UiField label="Default content language" help="The language the builder writes new pages in.">
+                <template #default="{ id }">
+                  <UiSelect :id="id" v-model="(draft as any).defaultLanguage" :options="LOCALES" />
+                </template>
+              </UiField>
 
-          <UiField label="Time zone" help="Reports, schedules and audit timestamps use this zone.">
-            <template #default="{ id }">
-              <UiSelect :id="id" v-model="(draft as any).timezone" :options="TIMEZONES" />
-            </template>
-          </UiField>
+              <UiField label="Time zone" help="Reports, schedules and audit timestamps use this zone.">
+                <template #default="{ id }">
+                  <UiSelect :id="id" v-model="(draft as any).timezone" :options="TIMEZONES" />
+                </template>
+              </UiField>
 
-          <UiField label="Reporting currency" help="Dashboard totals. The store's own currency is set under Commerce.">
-            <template #default="{ id }">
-              <UiSelect :id="id" v-model="(draft as any).currency" :options="CURRENCIES" />
-            </template>
-          </UiField>
+              <UiField
+                label="Reporting currency"
+                help="Dashboard totals. The store's own currency is set under Commerce."
+              >
+                <template #default="{ id }">
+                  <UiSelect :id="id" v-model="(draft as any).currency" :options="CURRENCIES" />
+                </template>
+              </UiField>
+            </div>
+          </div>
         </div>
       </template>
     </SettingsSection>

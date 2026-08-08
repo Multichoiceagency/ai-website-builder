@@ -84,10 +84,14 @@ describe('template catalogue', () => {
   it('overlays islandReady from MOTIONSITES_ISLAND_READY', () => {
     expect(getTemplate('velorah-hero')?.islandReady).toBe(true)
     expect(getTemplate('asme-hero')?.islandReady).toBe(true)
+    expect(getTemplate('wanderful-hero')?.islandReady).toBe(true)
     expect(listTemplates().filter((template) => template.islandReady).map((t) => t.id).sort()).toEqual([
       'asme-hero',
+      'interactive-discovery',
       'velorah-hero',
+      'wanderful-hero',
     ])
+    expect(getTemplate('interactive-discovery')?.islandReady).toBe(true)
   })
 
   /**
@@ -129,19 +133,54 @@ describe('template catalogue', () => {
 
 describe('searchTemplates', () => {
   it('filters by collection', () => {
-    const heroes = searchTemplates({ collection: 'hero', limit: 300 })
+    const heroes = searchTemplates({ collection: 'hero', limit: 500 })
     expect(heroes.length).toBeGreaterThan(0)
     expect(heroes.every((template) => template.collection === 'hero')).toBe(true)
   })
 
   it('never returns a template heavier than the requested ceiling', () => {
-    const light = searchTemplates({ maxPerformanceClass: 'B', limit: 300 })
+    const light = searchTemplates({ maxPerformanceClass: 'B', limit: 500 })
     expect(light.every((template) => template.performanceClass === 'A' || template.performanceClass === 'B')).toBe(true)
   })
 
   it('matches on title as well as on metadata', () => {
     const first = listTemplates()[0]!
-    expect(searchTemplates({ search: first.title, limit: 300 }).map((t) => t.id)).toContain(first.id)
+    expect(searchTemplates({ search: first.title, limit: 500 }).map((t) => t.id)).toContain(first.id)
+  })
+
+  it('includes Shadcn Space free-block recipes', () => {
+    const space = listTemplates().filter((template) => template.id.startsWith('shadcnspace-'))
+    expect(space.length).toBeGreaterThan(0)
+    expect(space.every((template) => template.isFree)).toBe(true)
+    expect(space.every((template) => template.sourcePrompt.trim().length > 0)).toBe(true)
+  })
+
+  it('includes Shadcn Space full landing-page templates', () => {
+    const landings = listTemplates().filter((template) => template.id.startsWith('shadcnspace-landing-'))
+    expect(landings.length).toBeGreaterThanOrEqual(10)
+    expect(landings.every((template) => template.pageType === 'landing')).toBe(true)
+    expect(landings.every((template) => template.blockRecipe.length >= 3)).toBe(true)
+    expect(landings.every((template) => template.sourcePrompt.trim().length > 0)).toBe(true)
+    expect(landings.every((template) => !/https?:\/\//i.test(template.sourcePrompt))).toBe(true)
+  })
+
+  it('includes Magic UI free registry recipes', () => {
+    const magic = listTemplates().filter((template) => template.id.startsWith('magicui-'))
+    expect(magic.length).toBeGreaterThan(0)
+    expect(magic.every((template) => template.isFree)).toBe(true)
+    expect(magic.every((template) => template.sourcePrompt.trim().length > 0)).toBe(true)
+    expect(magic.some((template) => template.id.includes('recipe-'))).toBe(true)
+  })
+
+  it('includes Studio layout recipes from allowlisted marketing repos', () => {
+    const studio = listTemplates().filter((template) => template.id.startsWith('studio-'))
+    expect(studio.length).toBeGreaterThanOrEqual(5)
+    expect(studio.every((template) => template.pageType === 'landing')).toBe(true)
+    expect(studio.every((template) => template.islandReady === false)).toBe(true)
+    expect(studio.every((template) => template.blockRecipe.length >= 3)).toBe(true)
+    expect(studio.every((template) => template.sourcePrompt.trim().length > 0)).toBe(true)
+    expect(studio.every((template) => !/https?:\/\//i.test(template.sourcePrompt))).toBe(true)
+    expect(studio.every((template) => !/import\s+|export\s+|className=/i.test(template.sourcePrompt))).toBe(true)
   })
 
   it('honours the limit', () => {

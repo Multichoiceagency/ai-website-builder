@@ -90,6 +90,12 @@ const sitesRoutes: FastifyPluginAsync = async (app) => {
         // Theme is patched, not replaced, so a partial update cannot silently
         // reset tokens the client did not send.
         theme: patch.theme ? themeSchema.parse({ ...existing.theme, ...patch.theme }) : undefined,
+        componentTargets: patch.componentTargets
+          ? {
+              ...existing.componentTargets,
+              ...patch.componentTargets,
+            }
+          : undefined,
       })
     })
     if (!site) throw new NotFoundError('Site')

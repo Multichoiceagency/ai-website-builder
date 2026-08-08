@@ -11,6 +11,8 @@ import { closeDatabase, withoutTenant } from '../src/db/client.js'
 import { applyDiscounts, computeTaxTotal, computeTotals } from '../src/lib/commerce/pricing.js'
 import { createCommerceProvider } from '../src/adapters/commerce/index.js'
 import { MedusaCommerceProvider } from '../src/adapters/commerce/medusa.js'
+import { ShopifyCommerceProvider } from '../src/adapters/commerce/shopify.js'
+import { WooCommerceCommerceProvider } from '../src/adapters/commerce/woocommerce.js'
 import { paymentProviderStatuses } from '../src/adapters/payments/index.js'
 
 /**
@@ -248,13 +250,18 @@ describe('provider selection (ADR-0006)', () => {
 
     expect(status.id).toBe('medusa')
     expect(status.configured).toBe(false)
-    expect(status.reason).toContain('MEDUSA_URL')
+    expect(status.reason).toMatch(/Medusa is not connected/i)
   })
 
   it('falls back to the platform provider, which works without any vendor', () => {
     const provider = createCommerceProvider()
-    expect(provider.id).toBe(process.env.MEDUSA_URL ? 'medusa' : 'postgres')
+    expect(['postgres', 'medusa', 'shopify', 'woocommerce']).toContain(provider.id)
     expect(provider.status().configured).toBe(true)
+  })
+
+  it('reports Shopify and WooCommerce as unconfigured without credentials', () => {
+    expect(new ShopifyCommerceProvider('', '').status().configured).toBe(false)
+    expect(new WooCommerceCommerceProvider('', '', '').status().configured).toBe(false)
   })
 
   it('selects Medusa the moment a URL exists — nothing else changes', () => {
@@ -267,6 +274,15 @@ describe('provider selection (ADR-0006)', () => {
     const statuses = paymentProviderStatuses()
     expect(statuses.some((status) => status.configured)).toBe(true)
     expect(statuses.map((status) => status.id)).toContain('manual')
+  })
+
+  it('exposes short merchant-facing reasons without env var names', () => {
+    const statuses = paymentProviderStatuses()
+    for (const status of statuses) {
+      if (!status.reason) continue
+      expect(status.reason).not.toMatch(/MOLLIE_|STRIPE_|PAYPAL_/)
+      expect(status.reason.length).toBeLessThan(120)
+    }
   })
 })
 
@@ -306,6 +322,57 @@ describe('commerce API', () => {
     expect(response.statusCode).toBe(200)
     expect(body(response).data.commerce.configured).toBe(true)
     expect(Array.isArray(body(response).data.payments)).toBe(true)
+  })
+
+  it('marks Mollie ready after tenant credentials are saved', async () => {
+    const putSettings = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/settings/commerce/payments',
+      headers: headers(),
+      payload: {
+        providerId: 'mollie',
+        mode: 'test',
+        methods: ['ideal', 'manual'],
+        statementDescriptor: 'TEST',
+        captureMode: 'automatic',
+      },
+    })
+    expect(putSettings.statusCode).toBe(200)
+
+    const putSecret = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/settings/commerce/payments/secrets',
+      headers: headers(),
+      payload: { field: 'apiKey', value: 'test_tenant_mollie_key_12345' },
+    })
+    expect(putSecret.statusCode).toBe(200)
+
+    const status = await app.inject({ method: 'GET', url: '/api/v1/commerce/status', headers: headers() })
+    expect(status.statusCode).toBe(200)
+    const mollie = body(status).data.payments.find((entry: { id: string }) => entry.id === 'mollie')
+    expect(mollie?.configured).toBe(true)
+    expect(mollie?.reason).toBeNull()
+    expect(JSON.stringify(body(status).data)).not.toMatch(/MOLLIE_API_KEY/)
+
+    // Restore manual so later checkout tests do not hit a fake Mollie key.
+    await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/settings/commerce/payments/secrets/apiKey',
+      headers: headers(),
+      payload: { confirm: true },
+    })
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/settings/commerce/payments',
+      headers: headers(),
+      payload: {
+        providerId: 'manual',
+        mode: 'test',
+        methods: ['manual'],
+        statementDescriptor: '',
+        captureMode: 'automatic',
+      },
+    })
   })
 
   it('creates a product with an integer price', async () => {

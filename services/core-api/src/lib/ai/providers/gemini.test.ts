@@ -12,7 +12,7 @@ import { GeminiCopyProvider } from './gemini.js'
  * model invented is refused rather than written, and the cost is real.
  */
 
-const KEY = 'test-gemini-key-not-real'
+const KEY = 'AIzaSyTestGeminiKeyNotReal00000001'
 
 /** A profile with only the fields the fact distillation reads. */
 const profile = businessProfileSchema.parse({
@@ -145,7 +145,7 @@ describe('the key travels in the header', () => {
     // The whole point: a key in a query string is a key in every access log.
     expect(url).not.toContain(KEY)
     expect(url).not.toContain('?')
-    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent')
+    expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent')
   })
 
   it('honours GEMINI_MODEL', async () => {
@@ -167,7 +167,7 @@ describe('generateCopy', () => {
 
     expect(result.slots.heroHeadline).toBe('Uw cv-ketel in goede handen')
     expect(result.slots.features).toHaveLength(3)
-    expect(result.model).toBe('google:gemini-3.6-flash')
+    expect(result.model).toBe('google:gemini-2.5-flash')
   })
 
   it('forbids prose: it asks for JSON against a response schema', async () => {
@@ -246,7 +246,7 @@ describe('reviseCopy', () => {
     const result = await new GeminiCopyProvider().reviseCopy(revisionContext)
 
     expect(result.values).toEqual({ headline: 'Korte kop' })
-    expect(result.model).toBe('google:gemini-3.6-flash')
+    expect(result.model).toBe('google:gemini-2.5-flash')
   })
 
   it('drops a field path the model invented', async () => {

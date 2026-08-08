@@ -11,6 +11,7 @@ import type { CollectionId } from '@platform/schemas'
  */
 export const CORE_BLOCK_TAGS: Record<string, string[]> = {
   'header-simple-01': ['navigation', 'sticky', 'essential'],
+  'header-liquid-glass-01': ['navigation', 'sticky', 'glass', 'motionsites', 'cinematic'],
   'footer-simple-01': ['navigation', 'contact', 'essential'],
   'hero-split-01': ['hero', 'image', 'conversion', 'essential'],
   'hero-centered-01': ['hero', 'statement', 'lightweight', 'essential'],
@@ -19,6 +20,7 @@ export const CORE_BLOCK_TAGS: Record<string, string[]> = {
   'services-list-01': ['services', 'cards', 'links'],
   'features-grid-01': ['features', 'icons', 'grid'],
   'content-richtext-01': ['text', 'editorial', 'lightweight'],
+  'layout-canvas-01': ['empty', 'manual', 'layout', 'flex', 'grid', 'canvas', 'nestable'],
   'testimonials-grid-01': ['reviews', 'social-proof', 'ratings'],
   'faq-accordion-01': ['faq', 'accordion', 'schema.org', 'interactive'],
   'cta-banner-01': ['cta', 'conversion', 'lightweight'],

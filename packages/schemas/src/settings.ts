@@ -29,14 +29,17 @@ export type SettingsScope = z.infer<typeof settingsScopeSchema>
 export const PLATFORM_SETTINGS_KEYS = [
   'workspace',
   'onboarding',
+  'onboarding-funnel',
   'notifications',
   'ai',
   'data-retention',
+  'whatsapp',
 ] as const
 export const platformSettingsKeySchema = z.enum(PLATFORM_SETTINGS_KEYS)
 export type PlatformSettingsKey = z.infer<typeof platformSettingsKeySchema>
 
 export const COMMERCE_SETTINGS_KEYS = [
+  'engine',
   'payments',
   'shipping',
   'taxes',
@@ -44,6 +47,7 @@ export const COMMERCE_SETTINGS_KEYS = [
   'inventory',
   'currencies',
   'notifications',
+  'feeds',
 ] as const
 export const commerceSettingsKeySchema = z.enum(COMMERCE_SETTINGS_KEYS)
 export type CommerceSettingsKey = z.infer<typeof commerceSettingsKeySchema>
@@ -131,6 +135,64 @@ export const onboardingSettingsSchema = z.object({
 })
 export type OnboardingSettings = z.infer<typeof onboardingSettingsSchema>
 
+/**
+ * Full signup → go-live funnel (§80–85). Distinct from `onboardingSettingsSchema`
+ * (builder defaults). Progress is tenant-scoped so refresh can resume.
+ */
+export const ONBOARDING_FUNNEL_STEPS = [
+  'account',
+  'intent',
+  'connect',
+  'select',
+  'scan',
+  'style',
+  'generate',
+  'preview',
+  'domain',
+  'go_live',
+  'seo',
+  'ads',
+  'commerce',
+  'complete',
+] as const
+export const onboardingFunnelStepSchema = z.enum(ONBOARDING_FUNNEL_STEPS)
+export type OnboardingFunnelStep = z.infer<typeof onboardingFunnelStepSchema>
+
+export const productIntentSchema = z.enum(['website', 'store', 'both'])
+export type ProductIntent = z.infer<typeof productIntentSchema>
+
+export const onboardingFunnelStyleSchema = z.enum([
+  'auto',
+  'minimal',
+  'modern',
+  'premium',
+  'bold',
+  'editorial',
+])
+
+export const onboardingFunnelSchema = z.object({
+  step: onboardingFunnelStepSchema.default('account'),
+  productIntent: productIntentSchema.nullable().default(null),
+  completedSteps: z.array(onboardingFunnelStepSchema).max(ONBOARDING_FUNNEL_STEPS.length).default([]),
+  /** Google OAuth vs paste URL / name. Empty until the connect step chooses. */
+  connectMode: z.enum(['google', 'manual']).nullable().default(null),
+  website: z.string().max(500).default(''),
+  businessName: z.string().max(200).default(''),
+  city: z.string().max(120).default(''),
+  locale: localeSchema.default('nl'),
+  style: onboardingFunnelStyleSchema.default('auto'),
+  templateId: z.string().max(120).nullable().default(null),
+  siteId: uuidSchema.nullable().default(null),
+  /** Steps the user deferred with “Do this later”. */
+  skippedLater: z.array(onboardingFunnelStepSchema).max(ONBOARDING_FUNNEL_STEPS.length).default([]),
+  updatedAt: isoTimestampSchema.nullable().default(null),
+})
+export type OnboardingFunnel = z.infer<typeof onboardingFunnelSchema>
+
+/** Partial patch for `PATCH /api/v1/onboarding/progress`. */
+export const updateOnboardingFunnelSchema = onboardingFunnelSchema.partial()
+export type UpdateOnboardingFunnel = z.infer<typeof updateOnboardingFunnelSchema>
+
 // endregion
 
 // region Platform · notifications
@@ -200,6 +262,27 @@ export const aiSettingsSchema = z.object({
   confirmMediumRisk: z.boolean().default(true),
 })
 export type AiSettings = z.infer<typeof aiSettingsSchema>
+
+// endregion
+
+// region Platform · WhatsApp (OpenWA)
+
+/**
+ * Per-tenant OpenWA gateway connection. Secrets (`apiKey`, `webhookSecret`) live
+ * in `settings_secrets`, not in this document.
+ */
+export const whatsappSettingsSchema = z.object({
+  /** OpenWA HTTP base URL, e.g. `http://localhost:2785` or a private host. */
+  baseUrl: z.string().trim().max(500).default(''),
+  /** Optional UI URL for scanning QR / managing sessions (defaults to baseUrl). */
+  dashboardUrl: z.string().trim().max(500).default(''),
+  /** User dismissed the setup checklist after connecting. */
+  onboardingComplete: z.boolean().default(false),
+})
+export type WhatsappSettings = z.infer<typeof whatsappSettingsSchema>
+
+export const WHATSAPP_SECRET_FIELDS = ['apiKey', 'webhookSecret'] as const
+export const whatsappSecretFieldSchema = z.enum(WHATSAPP_SECRET_FIELDS)
 
 // endregion
 
@@ -371,6 +454,40 @@ export const confirmInputSchema = z.object({ confirm: z.literal(true) })
 
 // endregion
 
+// region Commerce · engine (Shopify / Woo / Medusa / platform)
+
+/**
+ * Which commerce backend this tenant manages through the dashboard (ADR-0006).
+ * Credentials live in `settings_secrets` under the same key — never in this doc.
+ */
+export const COMMERCE_ENGINE_IDS = [
+  'platform',
+  'medusa',
+  'shopify',
+  'woocommerce',
+  'bigcommerce',
+] as const
+export const commerceEngineIdSchema = z.enum(COMMERCE_ENGINE_IDS)
+export type CommerceEngineId = z.infer<typeof commerceEngineIdSchema>
+
+export const commerceEngineSettingsSchema = z.object({
+  providerId: commerceEngineIdSchema.default('platform'),
+  /**
+   * Public shop hostname / base URL without credentials.
+   * Shopify: `mystore.myshopify.com`. Woo: `https://shop.example.com`.
+   */
+  storeUrl: z.string().max(500).default(''),
+  /** Shopify Admin API version pin (YYYY-MM). Ignored by other engines. */
+  apiVersion: z.string().max(20).default('2024-10'),
+})
+export type CommerceEngineSettings = z.infer<typeof commerceEngineSettingsSchema>
+
+/** Credential fields for remote commerce engines. Values never leave encrypted storage. */
+export const COMMERCE_ENGINE_SECRET_FIELDS = ['apiKey', 'apiSecret', 'storeUrl'] as const
+export const commerceEngineSecretFieldSchema = z.enum(COMMERCE_ENGINE_SECRET_FIELDS)
+
+// endregion
+
 // region Commerce · payments (§75)
 
 export const PAYMENT_METHODS = ['card', 'ideal', 'bancontact', 'paypal', 'sepa', 'klarna', 'manual'] as const
@@ -517,6 +634,32 @@ export type InventorySettings = z.infer<typeof inventorySettingsSchema>
 
 // endregion
 
+// region Commerce · feeds
+
+/**
+ * Marketplace feed options (Google / Meta / Amazon / …).
+ *
+ * `publicToken` is the unguessable path segment merchants paste into Merchant
+ * Center. Empty means "not issued yet" — the commerce feeds route mints one
+ * on first read and persists it.
+ */
+export const feedSettingsSchema = z.object({
+  /** Include active products with zero stock (marked out of stock in the feed). */
+  includeOutOfStock: z.boolean().default(false),
+  /**
+   * Force every row to this ISO currency. Empty keeps each product's own
+   * currency from the catalogue.
+   */
+  currency: currencyCodeSchema.or(z.literal('')).default(''),
+  /** Appended to every product title, e.g. ` | Acme Store`. */
+  titleSuffix: z.string().max(80).default(''),
+  /** Opaque public path token. Never a tenant id. */
+  publicToken: z.string().max(64).default(''),
+})
+export type FeedSettings = z.infer<typeof feedSettingsSchema>
+
+// endregion
+
 // region Commerce · currencies
 
 export const additionalCurrencySchema = z.object({
@@ -592,9 +735,18 @@ export interface SettingsDefinition {
 export const SETTINGS_REGISTRY: readonly SettingsDefinition[] = Object.freeze([
   { scope: 'platform', key: 'workspace', schema: workspaceSettingsSchema, minimumPlan: null, label: 'Workspace' },
   { scope: 'platform', key: 'onboarding', schema: onboardingSettingsSchema, minimumPlan: null, label: 'Onboarding' },
+  {
+    scope: 'platform',
+    key: 'onboarding-funnel',
+    schema: onboardingFunnelSchema,
+    minimumPlan: null,
+    label: 'Onboarding funnel',
+  },
   { scope: 'platform', key: 'notifications', schema: notificationSettingsSchema, minimumPlan: null, label: 'Notifications' },
   { scope: 'platform', key: 'ai', schema: aiSettingsSchema, minimumPlan: null, label: 'AI' },
   { scope: 'platform', key: 'data-retention', schema: dataRetentionSettingsSchema, minimumPlan: null, label: 'Data & privacy' },
+  { scope: 'platform', key: 'whatsapp', schema: whatsappSettingsSchema, minimumPlan: null, label: 'WhatsApp' },
+  { scope: 'commerce', key: 'engine', schema: commerceEngineSettingsSchema, minimumPlan: null, label: 'Commerce connection' },
   { scope: 'commerce', key: 'payments', schema: paymentSettingsSchema, minimumPlan: null, label: 'Payments' },
   { scope: 'commerce', key: 'shipping', schema: shippingSettingsSchema, minimumPlan: null, label: 'Shipping' },
   { scope: 'commerce', key: 'taxes', schema: taxSettingsSchema, minimumPlan: null, label: 'Taxes' },
@@ -604,6 +756,7 @@ export const SETTINGS_REGISTRY: readonly SettingsDefinition[] = Object.freeze([
   // additional ones are not.
   { scope: 'commerce', key: 'currencies', schema: currencySettingsSchema, minimumPlan: 'scale', label: 'Currencies' },
   { scope: 'commerce', key: 'notifications', schema: storeNotificationSettingsSchema, minimumPlan: null, label: 'Store notifications' },
+  { scope: 'commerce', key: 'feeds', schema: feedSettingsSchema, minimumPlan: null, label: 'Product feeds' },
 ])
 
 export function settingsDefinition(scope: SettingsScope, key: string): SettingsDefinition | null {

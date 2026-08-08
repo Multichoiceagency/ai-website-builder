@@ -2,5 +2,19 @@
 </script>
 
 <template>
-  <PhasePlaceholder title="Inventory" description="Stock levels across warehouses." :phase="5" />
+  <div>
+    <UiPageHeader
+      title="Inventory"
+      description="Stock policy, low-stock alerts, and locations for fulfilment."
+      back="/commerce"
+      back-label="Commerce"
+    >
+      <template #actions>
+        <UiButton size="sm" to="/commerce/products">Products</UiButton>
+        <UiButton size="sm" to="/commerce/settings?panel=inventory">All store settings</UiButton>
+      </template>
+    </UiPageHeader>
+
+    <SettingsCommerceInventory />
+  </div>
 </template>

@@ -1,4 +1,5 @@
 import type { ContrastReport, Theme, ThemeMode, ThemeTokens } from '@platform/schemas'
+import { resolveContentWidthCss } from '@platform/schemas'
 import { mix, oklchToHex, hexToOklch } from './color.js'
 import { AA_BODY, AA_UI, ensureContrast, readableInk } from './contrast.js'
 import { darkTokens, generatePalette, lightTokens } from './palette.js'
@@ -251,6 +252,8 @@ export function siteShapeVariables(theme: Theme): Record<string, string> {
     '--site-primary-fill': theme.gradientPrimary || theme.colorPrimary,
     '--site-surface-fill': theme.gradientSurface || theme.colorSurface,
     '--site-surface-alt-fill': theme.gradientSurfaceAlt || theme.colorSurfaceAlt,
+    '--site-content-width': resolveContentWidthCss(theme),
+    '--site-content-max': resolveContentWidthCss(theme),
   }
 }
 

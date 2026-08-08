@@ -125,7 +125,10 @@ export async function fetchDocument(input: string | URL): Promise<FetchedPage | 
       response = await fetch(url, {
         redirect: 'manual',
         signal: controller.signal,
-        headers: { 'user-agent': USER_AGENT, accept: 'text/html,application/xhtml+xml,text/plain;q=0.8' },
+        headers: {
+          'user-agent': USER_AGENT,
+          accept: 'text/html,application/xhtml+xml,image/svg+xml,text/plain;q=0.8,*/*;q=0.5',
+        },
       })
     } catch {
       clearTimeout(timer)
@@ -141,7 +144,11 @@ export async function fetchDocument(input: string | URL): Promise<FetchedPage | 
     }
 
     const contentType = response.headers.get('content-type') ?? ''
-    if (!/text\/html|text\/plain|application\/xhtml/i.test(contentType)) {
+    const acceptsBody =
+      /text\/html|text\/plain|application\/xhtml|image\/svg\+xml|text\/xml|application\/xml/i.test(
+        contentType,
+      )
+    if (!acceptsBody) {
       return { url: url.toString(), status: response.status, contentType, body: '' }
     }
 

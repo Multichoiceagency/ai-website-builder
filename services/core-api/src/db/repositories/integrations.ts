@@ -78,6 +78,7 @@ export interface ConnectionSummary {
   lastUsedAt: string | null
   lastError: string | null
   expiresAt: string | null
+  broker: 'native' | 'nango'
 }
 
 interface ConnectionRow {
@@ -92,6 +93,8 @@ interface ConnectionRow {
   last_used_at: Date | null
   last_error: string | null
   created_at: Date
+  broker?: string
+  broker_connection_id?: string | null
 }
 
 function toSummary(row: ConnectionRow): ConnectionSummary {
@@ -105,6 +108,7 @@ function toSummary(row: ConnectionRow): ConnectionSummary {
     lastUsedAt: row.last_used_at?.toISOString() ?? null,
     lastError: row.last_error,
     expiresAt: row.access_token_expires_at?.toISOString() ?? null,
+    broker: row.broker === 'nango' ? 'nango' : 'native',
   }
 }
 
@@ -120,21 +124,27 @@ export async function upsertConnection(
     refreshToken: string | null
     expiresAt: Date | null
     connectedBy: string
+    broker?: 'native' | 'nango'
+    brokerConnectionId?: string | null
   },
 ): Promise<ConnectionSummary> {
+  const broker = input.broker ?? 'native'
+  const brokerConnectionId = input.brokerConnectionId ?? null
   // Reconnecting must not lose an existing refresh token: Google only issues
   // one on first consent, so `COALESCE` keeps the old one when the new grant
   // omits it.
   const [row] = await tx<ConnectionRow[]>`
     INSERT INTO integration_connections (
       tenant_id, provider, external_account_id, account_label, scopes,
-      access_token_encrypted, refresh_token_encrypted, access_token_expires_at, connected_by, last_error
+      access_token_encrypted, refresh_token_encrypted, access_token_expires_at, connected_by, last_error,
+      broker, broker_connection_id
     )
     VALUES (
       ${input.tenantId}, ${input.provider}, ${input.externalAccountId}, ${input.accountLabel},
       ${input.scopes}, ${encryptToken(input.accessToken)},
       ${input.refreshToken ? encryptToken(input.refreshToken) : null},
-      ${input.expiresAt}, ${input.connectedBy}, NULL
+      ${input.expiresAt}, ${input.connectedBy}, NULL,
+      ${broker}, ${brokerConnectionId}
     )
     ON CONFLICT (tenant_id, provider) DO UPDATE SET
       external_account_id     = EXCLUDED.external_account_id,
@@ -144,10 +154,12 @@ export async function upsertConnection(
       refresh_token_encrypted = COALESCE(EXCLUDED.refresh_token_encrypted, integration_connections.refresh_token_encrypted),
       access_token_expires_at = EXCLUDED.access_token_expires_at,
       connected_by            = EXCLUDED.connected_by,
-      last_error              = NULL
+      last_error              = NULL,
+      broker                  = EXCLUDED.broker,
+      broker_connection_id    = EXCLUDED.broker_connection_id
     RETURNING id, provider, account_label, external_account_id, scopes,
               access_token_encrypted, refresh_token_encrypted, access_token_expires_at,
-              last_used_at, last_error, created_at
+              last_used_at, last_error, created_at, broker, broker_connection_id
   `
   return toSummary(row!)
 }
@@ -156,7 +168,7 @@ export async function listConnections(tx: Tx, tenantId: string): Promise<Connect
   const rows = await tx<ConnectionRow[]>`
     SELECT id, provider, account_label, external_account_id, scopes,
            access_token_encrypted, refresh_token_encrypted, access_token_expires_at,
-           last_used_at, last_error, created_at
+           last_used_at, last_error, created_at, broker, broker_connection_id
     FROM integration_connections
     WHERE tenant_id = ${tenantId}
     ORDER BY created_at ASC
@@ -169,11 +181,19 @@ export async function findConnectionTokens(
   tx: Tx,
   tenantId: string,
   provider: string,
-): Promise<{ id: string; accessToken: string | null; refreshToken: string | null; expiresAt: Date | null } | null> {
+): Promise<{
+  id: string
+  accessToken: string | null
+  refreshToken: string | null
+  expiresAt: Date | null
+  scopes: string[]
+  broker: 'native' | 'nango'
+  brokerConnectionId: string | null
+} | null> {
   const [row] = await tx<ConnectionRow[]>`
     SELECT id, provider, account_label, external_account_id, scopes,
            access_token_encrypted, refresh_token_encrypted, access_token_expires_at,
-           last_used_at, last_error, created_at
+           last_used_at, last_error, created_at, broker, broker_connection_id
     FROM integration_connections
     WHERE tenant_id = ${tenantId} AND provider = ${provider}
     LIMIT 1
@@ -185,6 +205,9 @@ export async function findConnectionTokens(
     accessToken: decryptToken(row.access_token_encrypted),
     refreshToken: decryptToken(row.refresh_token_encrypted),
     expiresAt: row.access_token_expires_at,
+    scopes: row.scopes ?? [],
+    broker: row.broker === 'nango' ? 'nango' : 'native',
+    brokerConnectionId: row.broker_connection_id ?? null,
   }
 }
 

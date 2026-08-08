@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @platform/templates build",
     "dev": "nuxt dev --port 3000",
     "build": "nuxt build",
     "preview": "nuxt preview",
@@ -12,6 +13,7 @@
     "test": "echo \"@platform/dashboard: covered by API tests in Phase 1\" && exit 0"
   },
   "dependencies": {
+    "@headlessui/vue": "^1.7.23",
     "@heroicons/vue": "^2.2.0",
     "@lucide/vue": "^1.29.0",
     "@platform/blocks": "workspace:*",
@@ -19,11 +21,23 @@
     "@platform/motion": "workspace:*",
     "@platform/permissions": "workspace:*",
     "@platform/schemas": "workspace:*",
+    "@platform/templates": "workspace:*",
     "@platform/ui": "workspace:*",
+    "apexcharts": "^6.7.0",
+    "clsx": "^2.1.1",
+    "flatpickr": "^4.6.13",
+    "jsvectormap": "^1.7.0",
+    "motion": "^13.0.0",
     "nuxt": "^4.0.0",
-    "vue": "^3.5.13"
+    "swiper": "^14.1.0",
+    "tailwind-merge": "^3.6.0",
+    "three": "^0.185.1",
+    "vue": "^3.5.13",
+    "vue3-apexcharts": "^1.11.1"
   },
   "devDependencies": {
+    "@types/three": "^0.185.4",
+    "@vite-pwa/nuxt": "^1.1.1",
     "typescript": "^5.7.2",
     "vue-tsc": "^2.2.0"
   }

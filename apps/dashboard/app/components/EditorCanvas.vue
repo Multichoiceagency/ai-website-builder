@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
-import type { Section, Theme } from '@platform/schemas'
+import { computed, onBeforeUnmount, provide, ref } from 'vue'
+import { resolveContentWidthCss, resolveContentWidthPx, type Section, type Theme } from '@platform/schemas'
 import {
   hasLibraryDrag,
   parseLibraryDrag,
@@ -27,6 +27,9 @@ import {
  * panel → canvas boundary. Reorder and library-drop share the same insert
  * indicator; they never run at the same time.
  */
+/** Keep viewport-fixed blocks (liquid-glass header) inside the canvas frame. */
+provide('platformBlockPreview', true)
+
 const props = withDefaults(
   defineProps<{
     sections: Section[]
@@ -45,8 +48,15 @@ const props = withDefaults(
      * editable; only the words are pending.
      */
     generatingIds?: string[]
+    /** Site SEO / business brand logo — header-simple falls back to this. */
+    brandLogo?: string
   }>(),
-  { mode: 'light', canWrite: true, aiBusy: false, generatingIds: () => [] },
+  { mode: 'light', canWrite: true, aiBusy: false, generatingIds: () => [], brandLogo: '' },
+)
+
+provide(
+  'platformBrandLogo',
+  computed(() => props.brandLogo?.trim() ?? ''),
 )
 
 const generating = computed(() => new Set(props.generatingIds))
@@ -63,9 +73,32 @@ const emit = defineEmits<{
   libraryDrop: [payload: LibraryDragPayload, index: number]
 }>()
 
-const DEVICE_WIDTH = { desktop: 1200, tablet: 768, mobile: 390 } as const
+/** Desktop base is wide enough that 1280 / 1440 / 1600 show gutters vs full. */
+const DEVICE_WIDTH = { desktop: 1680, tablet: 768, mobile: 390 } as const
 
-const width = computed(() => DEVICE_WIDTH[props.device])
+const width = computed(() => {
+  const base = DEVICE_WIDTH[props.device]
+  if (props.device !== 'desktop') return base
+  const contentPx = resolveContentWidthPx(props.theme)
+  // Grow past the base when a custom measure exceeds it.
+  return contentPx ? Math.max(base, contentPx) : base
+})
+
+/**
+ * Site content measure on the section shell. Motionsites and sections that
+ * opt into `maxWidth: full` stay edge-to-edge inside the frame.
+ */
+function sectionStackStyle(section: Section): Record<string, string> | undefined {
+  if (section.block === 'motion-section-01') return undefined
+  if (section.style?.maxWidth === 'full') return undefined
+  const css = resolveContentWidthCss(props.theme)
+  if (css === '100%') return undefined
+  return {
+    maxWidth: 'var(--site-content-max)',
+    marginInline: 'auto',
+    width: '100%',
+  }
+}
 
 const RADIUS: Record<Theme['radius'], string> = {
   none: '0px',
@@ -135,6 +168,9 @@ const themeVars = computed(() => {
     '--site-primary-fill': theme.gradientPrimary || colors['--site-primary'],
     '--site-surface-fill': theme.gradientSurface || colors['--site-surface'],
     '--site-surface-alt-fill': theme.gradientSurfaceAlt || colors['--site-surface-alt'],
+    '--site-content-width': resolveContentWidthCss(theme),
+    /** Alias kept for blocks / older CSS that read `--site-content-max`. */
+    '--site-content-max': resolveContentWidthCss(theme),
     background: theme.gradientSurface || colors['--site-surface'],
     color: colors['--site-text'],
     fontFamily: `${theme.fontBody}, ui-sans-serif, system-ui, sans-serif`,
@@ -406,28 +442,62 @@ onBeforeUnmount(cancelDrag)
             :ref="(el) => setElement(section.id, el)"
             class="relative transition-opacity"
             :class="draggingIndex === index ? 'opacity-40' : ''"
+            :style="sectionStackStyle(section)"
             :aria-busy="generating.has(section.id) || undefined"
           >
             <BlockRenderer :sections="[section]" />
 
-            <!-- Generating: the section is real and already in the document, so
-                 its own layout stays on screen underneath. What is pending is
-                 the words, and the veil says so rather than replacing the
-                 section with a grey rectangle that claims nothing exists yet. -->
+            <!-- Generating: real section stays underneath; veil + sheen say
+                 work is in flight (copy write or Motionsites build). -->
             <div
               v-if="generating.has(section.id)"
-              class="section-generating pointer-events-none absolute inset-0 z-10 grid place-items-center"
-              :style="{ backgroundColor: 'color-mix(in oklab, var(--site-surface) 78%, transparent)' }"
+              class="section-generating pointer-events-none absolute inset-0 z-10 grid place-items-center overflow-hidden"
+              :class="section.block === 'motion-section-01' ? 'section-generating--motion' : ''"
+              :style="
+                section.block === 'motion-section-01'
+                  ? undefined
+                  : { backgroundColor: 'color-mix(in oklab, var(--site-surface) 78%, transparent)' }
+              "
             >
+              <div
+                v-if="section.block === 'motion-section-01'"
+                class="motion-gen-stage absolute inset-0"
+                aria-hidden="true"
+              >
+                <span class="motion-gen-orb motion-gen-orb--a" />
+                <span class="motion-gen-orb motion-gen-orb--b" />
+                <span class="motion-gen-orb motion-gen-orb--c" />
+                <span class="motion-gen-scan" />
+              </div>
               <span
-                class="type-button-12 inline-flex items-center gap-2 rounded-full border border-line bg-raised px-3 py-1.5 text-soft shadow-float"
+                class="type-button-12 relative z-[1] inline-flex items-center gap-2.5 rounded-full border px-3.5 py-2 text-soft shadow-float"
+                :class="
+                  section.block === 'motion-section-01'
+                    ? 'border-white/15 bg-black/55 text-white backdrop-blur-md'
+                    : 'border-line bg-raised'
+                "
                 :style="{ zoom: 100 / (zoom || 100) }"
               >
                 <span
-                  class="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent"
+                  class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-t-transparent"
+                  :class="section.block === 'motion-section-01' ? 'border-white/80' : 'border-brand'"
                   aria-hidden="true"
                 />
-                Writing copy…
+                <span class="flex flex-col items-start gap-0.5">
+                  <span class="font-semibold tracking-wide">
+                    {{
+                      section.block === 'motion-section-01'
+                        ? 'Generating Motionsites…'
+                        : 'Writing copy…'
+                    }}
+                  </span>
+                  <span
+                    v-if="section.block === 'motion-section-01'"
+                    class="text-[0.65rem] font-normal tracking-[0.08em] text-white/55 uppercase"
+                  >
+                    Building the live section
+                  </span>
+                </span>
               </span>
             </div>
 
@@ -511,6 +581,70 @@ onBeforeUnmount(cancelDrag)
   animation: section-sheen 1.6s ease-in-out infinite;
 }
 
+.section-generating--motion {
+  background: rgb(0 0 0 / 0.72);
+}
+
+.section-generating--motion::before {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.08) 45%,
+    transparent 90%
+  );
+}
+
+.motion-gen-stage {
+  pointer-events: none;
+}
+
+.motion-gen-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(40px);
+  opacity: 0.55;
+  animation: motion-orb 3.2s ease-in-out infinite;
+}
+
+.motion-gen-orb--a {
+  left: 12%;
+  top: 18%;
+  width: 42%;
+  height: 36%;
+  background: radial-gradient(circle, #e8702a 0%, transparent 70%);
+}
+
+.motion-gen-orb--b {
+  right: 8%;
+  top: 28%;
+  width: 38%;
+  height: 40%;
+  background: radial-gradient(circle, #f59e0b 0%, transparent 70%);
+  animation-delay: -1.1s;
+}
+
+.motion-gen-orb--c {
+  left: 28%;
+  bottom: 10%;
+  width: 48%;
+  height: 34%;
+  background: radial-gradient(circle, #0ea5e9 0%, transparent 70%);
+  animation-delay: -2s;
+}
+
+.motion-gen-scan {
+  position: absolute;
+  inset-inline: 0;
+  height: 28%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgb(255 255 255 / 0.12),
+    transparent
+  );
+  animation: motion-scan 2.4s ease-in-out infinite;
+}
+
 @keyframes section-sheen {
   from {
     transform: translateY(-100%);
@@ -520,10 +654,33 @@ onBeforeUnmount(cancelDrag)
   }
 }
 
+@keyframes motion-orb {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translate3d(4%, -6%, 0) scale(1.12);
+    opacity: 0.7;
+  }
+}
+
+@keyframes motion-scan {
+  from {
+    transform: translateY(-120%);
+  }
+  to {
+    transform: translateY(320%);
+  }
+}
+
 /* Motion here carries no information the spinner and label do not, so it is
    the first thing to go. */
 @media (prefers-reduced-motion: reduce) {
-  .section-generating::before {
+  .section-generating::before,
+  .motion-gen-orb,
+  .motion-gen-scan {
     animation: none;
   }
 }

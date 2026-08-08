@@ -37,14 +37,19 @@ interface StripeIntent {
 
 export class StripePaymentProvider implements PaymentProvider {
   readonly id = 'stripe'
-  readonly #secretKey = process.env.STRIPE_SECRET_KEY ?? ''
+  readonly #secretKey: string
+
+  constructor(secretKey = process.env.STRIPE_SECRET_KEY ?? '') {
+    this.#secretKey = secretKey.trim()
+  }
 
   status(): ProviderStatus {
     return {
       id: this.id,
       configured: this.#secretKey.length > 0,
       capabilities: ['authorize', 'capture', 'refund', 'redirect'],
-      reason: this.#secretKey ? null : 'STRIPE_SECRET_KEY is not set on this installation.',
+      // Merchant-facing: never expose env var names in the dashboard.
+      reason: this.#secretKey ? null : 'Stripe needs setup — open Payments to install.',
     }
   }
 
@@ -75,7 +80,7 @@ export class StripePaymentProvider implements PaymentProvider {
 
   #requireReference(session: PaymentSession): string {
     if (!session.providerReference) {
-      throw new PaymentUnconfiguredError(this.id, 'the session carries no provider reference.')
+      throw new PaymentUnconfiguredError(this.id, 'Stripe session is missing a provider reference.')
     }
     return session.providerReference
   }
@@ -93,7 +98,11 @@ export class StripePaymentProvider implements PaymentProvider {
 
   async #post<T>(path: string, body: Record<string, string>): Promise<T> {
     if (!this.#secretKey) {
-      throw new PaymentUnconfiguredError(this.id, 'STRIPE_SECRET_KEY is not set.')
+      console.warn('[stripe] Refusing request: secret key is not set.')
+      throw new PaymentUnconfiguredError(
+        this.id,
+        'Stripe needs setup — open Payments to install.',
+      )
     }
 
     const response = await fetch(`${API_BASE}${path}`, {

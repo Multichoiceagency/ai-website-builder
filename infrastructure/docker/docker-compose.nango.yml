@@ -1,0 +1,68 @@
+# Optional Nango — OAuth broker for integrations (https://github.com/NangoHQ/nango)
+#
+# From repo root:
+#   pnpm infra:nango
+#
+# Dashboard: http://localhost:3003
+# Connect UI: http://localhost:3009
+#
+# After first boot, open the Nango dashboard, create an environment secret key,
+# configure a Google integration (id default: `google`) with the same OAuth
+# client as GOOGLE_CLIENT_*, and set NANGO_SECRET_KEY in `.env`.
+#
+# Free self-host tier: Auth + Proxy. Point core-api webhook at:
+#   http://host.docker.internal:4000/api/v1/integrations/nango/webhook
+# (or your tunnel URL) in the Nango environment webhook settings.
+
+services:
+  nango-db:
+    profiles: ['nango']
+    image: postgres:16.0-alpine
+    container_name: platform-nango-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nango
+      POSTGRES_PASSWORD: ${NANGO_DB_PASSWORD:-nango}
+      POSTGRES_DB: nango
+    volumes:
+      - nango-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nango -d nango']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nango-server:
+    profiles: ['nango']
+    image: nangohq/nango-server:hosted
+    container_name: platform-nango
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      nango-db:
+        condition: service_healthy
+    ports:
+      - '${NANGO_SERVER_PORT:-3003}:3003'
+      - '${NANGO_CONNECT_UI_PORT:-3009}:3009'
+    environment:
+      NANGO_DB_USER: nango
+      NANGO_DB_PASSWORD: ${NANGO_DB_PASSWORD:-nango}
+      NANGO_DB_HOST: nango-db
+      NANGO_DB_NAME: nango
+      NANGO_DB_SSL: 'false'
+      RECORDS_DATABASE_URL: postgresql://nango:${NANGO_DB_PASSWORD:-nango}@nango-db:5432/nango
+      SERVER_PORT: 3003
+      NANGO_SERVER_URL: ${NANGO_SERVER_URL:-http://localhost:3003}
+      NANGO_PUBLIC_SERVER_URL: ${NANGO_PUBLIC_SERVER_URL:-http://localhost:3003}
+      NANGO_PUBLIC_CONNECT_URL: ${NANGO_PUBLIC_CONNECT_URL:-http://localhost:3009}
+      FLAG_AUTH_ENABLED: ${NANGO_FLAG_AUTH_ENABLED:-false}
+      FLAG_SERVE_CONNECT_UI: 'true'
+      NANGO_DASHBOARD_USERNAME: ${NANGO_DASHBOARD_USERNAME:-}
+      NANGO_DASHBOARD_PASSWORD: ${NANGO_DASHBOARD_PASSWORD:-}
+      NANGO_ENCRYPTION_KEY: ${NANGO_ENCRYPTION_KEY:-}
+      NANGO_LOGS_ENABLED: 'false'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CSP_REPORT_ONLY: 'true'
+
+volumes:
+  nango-db-data:

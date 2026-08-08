@@ -7,6 +7,7 @@ import {
   createBlogAuthorInputSchema,
   createBlogCategoryInputSchema,
   createBlogPostInputSchema,
+  isVideoMime,
   mediaListQuerySchema,
   mediaUploadQuerySchema,
   publicPageSchema,
@@ -56,6 +57,8 @@ import { findSiteById, resolveSiteByHost } from '../db/repositories/sites.js'
 import { buildEvent, eventBus } from '../lib/event-bus.js'
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js'
 import { MEDIA_MAX_BYTES, MEDIA_VIDEO_MAX_BYTES, prepareUpload, responseHeadersFor } from '../lib/media/upload.js'
+import { removeFrameObjects, scheduleVideoFrameExtract, processVideoFrames } from '../lib/media/frames.js'
+import { mediaFrameStorageKey } from '../lib/media/url.js'
 import { storage } from '../lib/storage/index.js'
 import { ok } from '../lib/response.js'
 import { parseOrThrow } from '../lib/validate.js'
@@ -140,6 +143,10 @@ const contentRoutes: FastifyPluginAsync = async (app) => {
       }),
     )
 
+    if (isVideoMime(asset.mime)) {
+      scheduleVideoFrameExtract(context.tenantId, asset.id)
+    }
+
     return reply.status(201).send(ok({ asset, sanitised: prepared.sanitised }))
   })
 
@@ -209,7 +216,14 @@ const contentRoutes: FastifyPluginAsync = async (app) => {
     if (!asset) throw new NotFoundError('Asset')
 
     // Only once the row points at the new object is the old one unreferenced.
+    if (existing.frameCount > 0) {
+      await removeFrameObjects(existing.storageKey, existing.frameCount)
+    }
     await storage().remove(existing.storageKey)
+
+    if (isVideoMime(asset.mime)) {
+      scheduleVideoFrameExtract(context.tenantId, asset.id)
+    }
 
     return reply.send(ok({ asset, sanitised: prepared.sanitised }))
   })
@@ -258,8 +272,26 @@ const contentRoutes: FastifyPluginAsync = async (app) => {
       )
     }
 
+    if (outcome.asset.frameCount > 0) {
+      await removeFrameObjects(outcome.asset.storageKey, outcome.asset.frameCount)
+    }
     await storage().remove(outcome.asset.storageKey)
     return reply.send(ok({ deleted: true }))
+  })
+
+  /** Retry / force rebuild of scroll-scrub frames for a video. */
+  app.post('/media/:mediaId/frames/rebuild', async (request, reply) => {
+    const context = requireTenant(request, 'media:write')
+    const { mediaId } = parseOrThrow(mediaParams, request.params, 'media id')
+
+    const asset = await withTenant(context.tenantId, (tx) => findMediaById(tx, context.tenantId, mediaId))
+    if (!asset) throw new NotFoundError('Asset')
+    if (!isVideoMime(asset.mime)) {
+      throw new BadRequestError('Only video assets can build a scroll frame pack.')
+    }
+
+    const updated = await processVideoFrames(context.tenantId, mediaId)
+    return reply.send(ok({ asset: updated ?? asset }))
   })
 
   /**
@@ -306,11 +338,21 @@ const contentRoutes: FastifyPluginAsync = async (app) => {
       const deletable = assets.filter((asset) => !blockedIds.has(asset.id))
 
       await deleteMediaAssets(tx, context.tenantId, deletable.map((asset) => asset.id))
-      return { changed: deletable.length, blocked, removedKeys: deletable.map((asset) => asset.storageKey) }
+      return {
+        changed: deletable.length,
+        blocked,
+        removedKeys: deletable.map((asset) => asset.storageKey),
+        removedFrames: deletable
+          .filter((asset) => asset.frameCount > 0)
+          .map((asset) => ({ storageKey: asset.storageKey, frameCount: asset.frameCount })),
+      }
     })
 
     // Storage last: a failed object delete must not roll back the rows, or the
     // library would keep showing assets a retry has already half-removed.
+    for (const pack of (outcome as { removedFrames?: { storageKey: string; frameCount: number }[] }).removedFrames ?? []) {
+      await removeFrameObjects(pack.storageKey, pack.frameCount)
+    }
     for (const key of (outcome as { removedKeys?: string[] }).removedKeys ?? []) {
       await storage().remove(key)
     }
@@ -353,6 +395,55 @@ const contentRoutes: FastifyPluginAsync = async (app) => {
     if (!bytes) throw new NotFoundError('Asset file')
 
     return reply.headers(responseHeadersFor(located.mime, located.filename, { download })).send(bytes)
+  })
+
+  /**
+   * One JPEG (or legacy PNG/WebP) from a video's scroll-scrub pack (0-based index).
+   * Index must be < frameCount and the pack must be `ready`.
+   */
+  app.get('/public/media/:mediaId/frames/:index', async (request, reply) => {
+    const params = parseOrThrow(
+      z.object({
+        mediaId: uuidSchema,
+        index: z
+          .string()
+          .regex(/^\d{1,3}(?:\.(?:jpg|jpeg|png|webp))?$/i, 'frame index')
+          .transform((value) => Number.parseInt(value.replace(/\.(jpg|jpeg|png|webp)$/i, ''), 10)),
+      }),
+      request.params,
+      'frame',
+    )
+
+    const located = await withoutTenant((tx) => resolvePublicMedia(tx, params.mediaId))
+    if (!located) throw new NotFoundError('Asset')
+    if (located.frameStatus !== 'ready' || located.frameCount <= 0) {
+      throw new NotFoundError('Frame pack')
+    }
+    if (!Number.isFinite(params.index) || params.index < 0 || params.index >= located.frameCount) {
+      throw new NotFoundError('Frame')
+    }
+
+    // Prefer JPEG; also try legacy PNG/WebP keys from earlier extracts.
+    const candidates = [
+      mediaFrameStorageKey(located.storageKey, params.index),
+      mediaFrameStorageKey(located.storageKey, params.index).replace(/\.jpg$/i, '.png'),
+      mediaFrameStorageKey(located.storageKey, params.index).replace(/\.jpg$/i, '.webp'),
+    ]
+    let bytes: Buffer | null = null
+    let mime: 'image/jpeg' | 'image/png' | 'image/webp' = 'image/jpeg'
+    for (const key of candidates) {
+      bytes = await storage().get(key)
+      if (bytes) {
+        if (key.endsWith('.png')) mime = 'image/png'
+        else if (key.endsWith('.webp')) mime = 'image/webp'
+        break
+      }
+    }
+    if (!bytes) throw new NotFoundError('Frame file')
+
+    return reply
+      .headers(responseHeadersFor(mime, `frame-${params.index}.${mime === 'image/jpeg' ? 'jpg' : mime.slice(6)}`))
+      .send(bytes)
   })
 
   // endregion

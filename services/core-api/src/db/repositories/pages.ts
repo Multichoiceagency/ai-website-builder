@@ -99,6 +99,20 @@ export async function findPageById(tx: Tx, tenantId: string, pageId: string): Pr
   return row ? toPage(row) : null
 }
 
+export async function findPageByPath(
+  tx: Tx,
+  tenantId: string,
+  siteId: string,
+  path: string,
+): Promise<Page | null> {
+  const [row] = await tx<PageRow[]>`
+    SELECT ${SUMMARY_SELECT(tx)} FROM pages
+    WHERE tenant_id = ${tenantId} AND site_id = ${siteId} AND path = ${path}
+    LIMIT 1
+  `
+  return row ? toPage(row) : null
+}
+
 export async function insertPage(
   tx: Tx,
   input: {

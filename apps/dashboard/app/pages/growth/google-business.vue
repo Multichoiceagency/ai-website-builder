@@ -148,11 +148,11 @@ const heading = computed(() => {
         </UiCard>
 
         <UiCard>
-          <h2 class="mb-2 text-label font-semibold uppercase text-faint">Separate from signing in</h2>
+          <h2 class="mb-2 text-label font-semibold uppercase text-faint">One Google connection</h2>
           <p class="text-[0.8125rem] leading-relaxed text-soft">
-            Logging in with Google and letting the platform manage your business listing are two different
-            permissions, asked separately. Signing in never grants access to your listing, your reviews or your ad
-            budget.
+            Connect Google once for Business Profile, Search Console, Analytics, Ads and Gmail campaigns.
+            Sign-up with Google uses the same permission set so the workspace can land already linked.
+            You can review every scope under Settings → Integrations before connecting.
           </p>
         </UiCard>
       </div>

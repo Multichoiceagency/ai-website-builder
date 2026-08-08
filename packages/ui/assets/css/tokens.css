@@ -60,6 +60,7 @@
   --z-canvas-drag: 40;    /* drag indicators, teleported to body */
   --z-nav-flyout: 50;     /* icon-rail tooltips and shell popovers */
   --z-editor-panel: 60;   /* editor slide-overs — above canvas AND shell chrome */
+  --z-drawer: 70;         /* admin AI / slide-over drawers above shell chrome */
   --z-modal: 100;         /* UiDialog: covers everything, including a slide-over */
 
   /* --- motion ------------------------------------------------------------ */

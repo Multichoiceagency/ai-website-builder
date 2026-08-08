@@ -46,8 +46,12 @@ import {
   groupJourneys,
   touchWeights,
 } from '../lib/analytics/attribution-dimensions.js'
+import { buildLivePresence } from '../lib/analytics/live-presence.js'
+import { recommendFromLivePresence } from '../lib/ai/live-recommendations.js'
 import { ok } from '../lib/response.js'
 import { attribute, channelOf, trackingRouter } from '../lib/tracking/index.js'
+import { listGa4Properties, runGa4Overview, runGa4Series, runGa4Breakdown, isGa4Configured } from '../lib/analytics/ga4-data.js'
+import { hasGoogleConnection } from '../lib/integrations/google-token.js'
 import { parseOrThrow } from '../lib/validate.js'
 import { requireTenant } from '../plugins/auth.js'
 
@@ -208,6 +212,41 @@ function toBreakdownRow(row: BreakdownRow, dimension: AnalyticsBreakdownDimensio
 
 const analyticsRoutes: FastifyPluginAsync = async (app) => {
   /**
+   * Live presence for the 3D globe — active sessions + avatar pins + tips.
+   */
+  app.get('/live', async (request, reply) => {
+    const context = requireTenant(request, 'analytics:read')
+    const query = parseOrThrow(
+      z.object({
+        siteId: uuidSchema.optional(),
+        windowMinutes: z.coerce.number().int().min(1).max(60).default(15),
+        ai: z
+          .union([z.literal('1'), z.literal('0'), z.literal('true'), z.literal('false')])
+          .optional()
+          .transform((value) => value === '1' || value === 'true'),
+      }),
+      request.query ?? {},
+      'live query',
+    )
+
+    let presence = await withTenant(context.tenantId, (tx) =>
+      buildLivePresence(tx, context.tenantId, {
+        siteId: query.siteId,
+        windowMinutes: query.windowMinutes,
+      }),
+    )
+
+    if (query.ai) {
+      presence = {
+        ...presence,
+        recommendations: await recommendFromLivePresence(presence),
+      }
+    }
+
+    return reply.send(ok(presence))
+  })
+
+  /**
    * The overview (§21): what happened, against what happened before.
    */
   app.get('/overview', async (request, reply) => {
@@ -250,8 +289,9 @@ const analyticsRoutes: FastifyPluginAsync = async (app) => {
         'landing_page',
       ]
 
-      const [series, pages, funnelCounts, eventCounts, breakdownResults] = await Promise.all([
+      const [series, previousSeries, pages, funnelCounts, eventCounts, breakdownResults] = await Promise.all([
         dailyTraffic(tx, context.tenantId, current, currency),
+        dailyTraffic(tx, context.tenantId, previous, currency),
         topPages(tx, context.tenantId, current, TOP_PAGES_LIMIT),
         funnelVisitors(tx, context.tenantId, current, FUNNEL_STAGES),
         countEventsByName(tx, context.tenantId, current),
@@ -313,6 +353,7 @@ const analyticsRoutes: FastifyPluginAsync = async (app) => {
         currency,
         otherCurrencies: revenueSlices.slice(1),
         series,
+        previousSeries,
         breakdowns,
         topPages: pages,
         funnel,
@@ -563,6 +604,72 @@ const analyticsRoutes: FastifyPluginAsync = async (app) => {
     })
 
     return reply.send(ok(health))
+  })
+
+  /** GA4 Data API — observed sessions for a property the tenant granted via OAuth. */
+  app.get('/ga4/status', async (request, reply) => {
+    const context = requireTenant(request, 'analytics:read')
+    const connected = isGa4Configured() ? await hasGoogleConnection(context.tenantId) : false
+    return reply.send(
+      ok({
+        configured: isGa4Configured(),
+        connected,
+        reason: !isGa4Configured()
+          ? 'Google OAuth is not configured on this environment.'
+          : connected
+            ? 'Google is connected. List properties and run an overview.'
+            : 'Connect Google under Settings → Integrations.',
+      }),
+    )
+  })
+
+  app.get('/ga4/properties', async (request, reply) => {
+    const context = requireTenant(request, 'analytics:read')
+    const properties = await listGa4Properties(context.tenantId)
+    return reply.send(ok({ properties }))
+  })
+
+  app.get('/ga4/overview', async (request, reply) => {
+    const context = requireTenant(request, 'analytics:read')
+    const query = parseOrThrow(
+      z.object({
+        property: z.string().min(1).max(120),
+        days: z.coerce.number().int().min(1).max(90).default(28),
+      }),
+      request.query ?? {},
+      'query',
+    )
+    const metrics = await runGa4Overview(context.tenantId, query.property, query.days)
+    return reply.send(ok({ property: query.property, days: query.days, metrics }))
+  })
+
+  app.get('/ga4/series', async (request, reply) => {
+    const context = requireTenant(request, 'analytics:read')
+    const query = parseOrThrow(
+      z.object({
+        property: z.string().min(1).max(120),
+        days: z.coerce.number().int().min(1).max(90).default(28),
+      }),
+      request.query ?? {},
+      'query',
+    )
+    const series = await runGa4Series(context.tenantId, query.property, query.days)
+    return reply.send(ok({ property: query.property, days: query.days, series }))
+  })
+
+  app.get('/ga4/breakdown', async (request, reply) => {
+    const context = requireTenant(request, 'analytics:read')
+    const query = parseOrThrow(
+      z.object({
+        property: z.string().min(1).max(120),
+        days: z.coerce.number().int().min(1).max(90).default(28),
+        dimension: z.enum(['country', 'sessionSource', 'deviceCategory', 'landingPage']).default('country'),
+      }),
+      request.query ?? {},
+      'query',
+    )
+    const rows = await runGa4Breakdown(context.tenantId, query.property, query.dimension, query.days)
+    return reply.send(ok({ property: query.property, days: query.days, dimension: query.dimension, rows }))
   })
 }
 

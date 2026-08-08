@@ -1,5 +1,6 @@
 import { parse, type HTMLElement } from 'node-html-parser'
 import type { BusinessLocation, BusinessReview, OpeningHours, SocialPlatform } from '@platform/schemas'
+import { absoluteUrl, scoreLogoCandidate, type LogoCandidate } from './logo.js'
 
 /**
  * Turn one HTML document into structured facts.
@@ -17,6 +18,8 @@ export interface ExtractedPage {
   paragraphs: string[]
   links: { href: string; text: string }[]
   images: string[]
+  /** Ranked logo / mark candidates from this document (not just og:image). */
+  logos: LogoCandidate[]
   phones: string[]
   emails: string[]
   socials: { platform: SocialPlatform; url: string }[]
@@ -183,6 +186,189 @@ function extractColors(html: string): string[] {
     .map(([hex]) => hex)
 }
 
+function pushLogo(candidates: LogoCandidate[], candidate: LogoCandidate): void {
+  if (!candidate.url || candidate.score <= 0) return
+  candidates.push(candidate)
+}
+
+function logoUrlFromJsonLd(value: unknown, base: URL): string {
+  if (!value) return ''
+  if (typeof value === 'string') return absoluteUrl(value, base)
+  if (typeof value === 'object' && value !== null) {
+    const record = value as Record<string, unknown>
+    if (typeof record.url === 'string') return absoluteUrl(record.url, base)
+    if (typeof record.contentUrl === 'string') return absoluteUrl(record.contentUrl, base)
+    if (typeof record['@id'] === 'string' && /^https?:/i.test(record['@id'])) {
+      return absoluteUrl(record['@id'], base)
+    }
+  }
+  return ''
+}
+
+/** Collect every plausible logo / mark reference on the page. */
+export function extractLogos(root: HTMLElement, base: URL, ogImage: string): LogoCandidate[] {
+  const candidates: LogoCandidate[] = []
+
+  for (const node of collectJsonLd(root)) {
+    const logo = logoUrlFromJsonLd(node.logo, base)
+    if (logo) {
+      pushLogo(candidates, {
+        url: logo,
+        score: scoreLogoCandidate({ url: logo, source: 'jsonld' }),
+        source: 'jsonld',
+      })
+    }
+    const image = logoUrlFromJsonLd(node.image, base)
+    // Only treat JSON-LD image as a logo when the type looks like an org/site.
+    const type = String(node['@type'] ?? '').toLowerCase()
+    if (image && /organization|localbusiness|website|brand|store/.test(type)) {
+      pushLogo(candidates, {
+        url: image,
+        score: scoreLogoCandidate({ url: image, source: 'jsonld', srcHint: 'organization-image' }),
+        source: 'jsonld',
+      })
+    }
+  }
+
+  for (const link of root.querySelectorAll('link[rel]')) {
+    const rel = (link.getAttribute('rel') ?? '').toLowerCase()
+    const href = link.getAttribute('href') ?? ''
+    if (!href) continue
+    const url = absoluteUrl(href, base)
+    if (!url) continue
+
+    if (rel.includes('apple-touch-icon')) {
+      pushLogo(candidates, {
+        url,
+        score: scoreLogoCandidate({
+          url,
+          source: 'apple-touch-icon',
+          rel,
+          sizes: link.getAttribute('sizes') ?? '',
+        }),
+        source: 'apple-touch-icon',
+      })
+    } else if (/\bicon\b/.test(rel) || rel.includes('shortcut')) {
+      pushLogo(candidates, {
+        url,
+        score: scoreLogoCandidate({
+          url,
+          source: 'favicon',
+          rel,
+          sizes: link.getAttribute('sizes') ?? '',
+        }),
+        source: 'favicon',
+      })
+    }
+  }
+
+  const tile = root.querySelector('meta[name="msapplication-TileImage"]')?.getAttribute('content')
+  if (tile) {
+    const url = absoluteUrl(tile, base)
+    pushLogo(candidates, {
+      url,
+      score: scoreLogoCandidate({ url, source: 'favicon', rel: 'msapplication-TileImage' }),
+      source: 'favicon',
+    })
+  }
+
+  if (ogImage) {
+    const url = absoluteUrl(ogImage, base)
+    pushLogo(candidates, {
+      url,
+      score: scoreLogoCandidate({ url, source: 'og', srcHint: 'og:image' }),
+      source: 'og',
+    })
+  }
+
+  for (const img of root.querySelectorAll('img[src], img[data-src], img[srcset]')) {
+    const raw =
+      img.getAttribute('src')
+      || img.getAttribute('data-src')
+      || (img.getAttribute('srcset') ?? '').split(',')[0]?.trim().split(/\s+/)[0]
+      || ''
+    if (!raw) continue
+    const url = absoluteUrl(raw, base)
+    if (!url) continue
+
+    const alt = img.getAttribute('alt') ?? ''
+    const className = img.getAttribute('class') ?? ''
+    const id = img.getAttribute('id') ?? ''
+    const aria = img.getAttribute('aria-label') ?? ''
+    const itemprop = (img.getAttribute('itemprop') ?? '').toLowerCase()
+    const inChrome = Boolean(img.closest('header, nav, [role="banner"], .navbar, .site-header, .header'))
+
+    if (itemprop === 'logo') {
+      pushLogo(candidates, {
+        url,
+        score: scoreLogoCandidate({ url, source: 'itemprop', alt, className, id, inChrome: true }),
+        source: 'itemprop',
+      })
+      continue
+    }
+
+    const hints = `${alt} ${className} ${id} ${aria} ${raw}`.toLowerCase()
+    const looksLikeLogo = /\blogo\b|wordmark|brand-mark|navbar-brand|site-logo|header-logo/.test(hints)
+
+    if (looksLikeLogo) {
+      pushLogo(candidates, {
+        url,
+        score: scoreLogoCandidate({
+          url,
+          source: 'img-logo',
+          alt: `${alt} ${aria}`,
+          className,
+          id,
+          srcHint: raw,
+          inChrome,
+        }),
+        source: 'img-logo',
+      })
+      continue
+    }
+
+    if (inChrome) {
+      pushLogo(candidates, {
+        url,
+        score: scoreLogoCandidate({
+          url,
+          source: 'header',
+          alt: `${alt} ${aria}`,
+          className,
+          id,
+          srcHint: raw,
+          inChrome: true,
+        }),
+        source: 'header',
+      })
+    }
+  }
+
+  for (const wrap of root.querySelectorAll('a, [class*="logo"], [id*="logo"]')) {
+    const classId = `${wrap.getAttribute('class') ?? ''} ${wrap.getAttribute('id') ?? ''}`.toLowerCase()
+    if (!/\blogo\b/.test(classId) && wrap.rawTagName !== 'a') continue
+    if (wrap.rawTagName === 'a' && !/\blogo\b/.test(classId)) continue
+    const img = wrap.rawTagName === 'img' ? wrap : wrap.querySelector('img[src]')
+    if (!img) continue
+    const raw = img.getAttribute('src') ?? ''
+    const url = absoluteUrl(raw, base)
+    pushLogo(candidates, {
+      url,
+      score: scoreLogoCandidate({
+        url,
+        source: 'img-logo',
+        className: `${wrap.getAttribute('class') ?? ''} ${img.getAttribute('class') ?? ''}`,
+        id: wrap.getAttribute('id') ?? '',
+        alt: img.getAttribute('alt') ?? '',
+        inChrome: true,
+      }),
+      source: 'img-logo',
+    })
+  }
+
+  return candidates
+}
+
 export function extractPage(url: string, html: string): ExtractedPage {
   const root = parse(html, { blockTextElements: { script: true, style: true } })
   const base = new URL(url)
@@ -261,6 +447,8 @@ export function extractPage(url: string, html: string): ExtractedPage {
     reviews.push(...reviewsFromJsonLd(node))
   }
 
+  const ogImage = meta('og:image')
+
   const images = root
     .querySelectorAll('img[src]')
     .map((node) => node.getAttribute('src') ?? '')
@@ -283,11 +471,12 @@ export function extractPage(url: string, html: string): ExtractedPage {
     paragraphs,
     links,
     images,
+    logos: extractLogos(root, base, ogImage),
     phones: [...phones],
     emails: [...emails],
     socials: [...socials.values()],
     themeColor: meta('theme-color'),
-    ogImage: meta('og:image'),
+    ogImage,
     jsonLd,
     locations,
     reviews,

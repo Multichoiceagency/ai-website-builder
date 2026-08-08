@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { PublicPage, Theme, ThemeTokens } from '@platform/schemas'
+import { computed, provide } from 'vue'
+import {
+  resolveContentWidthCss,
+  type PublicPage,
+  type Theme,
+  type ThemeTokens,
+} from '@platform/schemas'
 
 const route = useRoute()
 const config = useRuntimeConfig()
@@ -9,11 +14,18 @@ const config = useRuntimeConfig()
  * The hostname is the tenant key. On the server it comes from the request;
  * in the browser it comes from the address bar. Never from a query parameter —
  * that would let anyone request any tenant's site.
+ *
+ * Locally, `127.0.0.1` / `[::1]` are treated as `localhost` so the seeded
+ * demo domain resolves whether you open localhost:3001 or 127.0.0.1:3001.
  */
 const requestHeaders = useRequestHeaders(['host', 'x-forwarded-host'])
 const host = computed(() => {
-  if (import.meta.client) return window.location.host
-  return requestHeaders['x-forwarded-host'] ?? requestHeaders.host ?? 'localhost'
+  const raw = import.meta.client
+    ? window.location.host
+    : (requestHeaders['x-forwarded-host'] ?? requestHeaders.host ?? 'localhost')
+  const hostname = raw.split(':')[0]!.toLowerCase()
+  if (hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1') return 'localhost'
+  return hostname || 'localhost'
 })
 
 const path = computed(() => {
@@ -23,7 +35,7 @@ const path = computed(() => {
 })
 
 const { data, error } = await useFetch<{ success: true; data: PublicPage }>(
-  () => `${config.public.coreApiUrl}/public/v1/pages`,
+  '/public/pages',
   {
     key: () => `page:${host.value}:${path.value}`,
     query: computed(() => ({ host: host.value, path: path.value })),
@@ -31,10 +43,23 @@ const { data, error } = await useFetch<{ success: true; data: PublicPage }>(
 )
 
 if (error.value || !data.value?.data) {
-  throw createError({ statusCode: 404, statusMessage: 'Page not found', fatal: true })
+  const statusCode = error.value?.statusCode ?? error.value?.status ?? 404
+  const apiDown = statusCode === 0 || statusCode >= 500
+  throw createError({
+    statusCode: apiDown ? 503 : 404,
+    statusMessage: apiDown
+      ? 'Storefront could not reach the API. Is core-api running on :4000?'
+      : `No published page for ${host.value}${path.value}. In the dashboard open Website → Pages and click Publish (drafts are not public). Then open http://${host.value}:3001${path.value}`,
+    fatal: true,
+  })
 }
 
 const page = computed(() => data.value!.data)
+
+provide(
+  'platformBrandLogo',
+  computed(() => page.value.site.logo?.trim() ?? ''),
+)
 
 const RADIUS: Record<Theme['radius'], string> = {
   none: '0px',
@@ -147,12 +172,17 @@ const themeCss = computed(() => {
 })
 
 /** Typography and shape stay inline: Vue's binding escapes them, a stylesheet would not. */
-const shapeVars = computed(() => ({
-  '--site-radius': RADIUS[theme.value.radius] ?? RADIUS.md,
-  '--site-font-heading': `${theme.value.fontHeading}, ui-sans-serif, system-ui, sans-serif`,
-  '--site-font-body': `${theme.value.fontBody}, ui-sans-serif, system-ui, sans-serif`,
-  fontFamily: `${theme.value.fontBody}, ui-sans-serif, system-ui, sans-serif`,
-}))
+const shapeVars = computed(() => {
+  const content = resolveContentWidthCss(theme.value)
+  return {
+    '--site-radius': RADIUS[theme.value.radius] ?? RADIUS.md,
+    '--site-font-heading': `${theme.value.fontHeading}, ui-sans-serif, system-ui, sans-serif`,
+    '--site-font-body': `${theme.value.fontBody}, ui-sans-serif, system-ui, sans-serif`,
+    '--site-content-width': content,
+    '--site-content-max': content,
+    fontFamily: `${theme.value.fontBody}, ui-sans-serif, system-ui, sans-serif`,
+  }
+})
 
 /** Without a dark set, the site is light whatever the visitor's OS says. */
 const mode = computed(() => (darkTokens.value ? theme.value.mode : 'light'))

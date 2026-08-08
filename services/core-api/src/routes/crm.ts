@@ -68,6 +68,7 @@ import { parseOrThrow } from '../lib/validate.js'
 import { requireTenant } from '../plugins/auth.js'
 import crmEmailRoutes from './crm-email.js'
 import crmAutomationRoutes from './crm-automations.js'
+import crmWhatsappRoutes from './crm-whatsapp.js'
 
 const contactParams = z.object({ contactId: uuidSchema })
 const leadParams = z.object({ leadId: uuidSchema })
@@ -721,6 +722,7 @@ const crmRoutes: FastifyPluginAsync = async (app) => {
   // dashboard call two base URLs for one screen.
   await app.register(crmEmailRoutes)
   await app.register(crmAutomationRoutes)
+  await app.register(crmWhatsappRoutes)
 }
 
 export default crmRoutes

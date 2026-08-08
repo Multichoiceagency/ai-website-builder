@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { BlockMetadata, Site, SiteTemplate } from '@platform/schemas'
+import { isMotionsitesPageRecipe } from '../../utils/catalog-split'
 
 /**
- * The template store — browse recipes, preview in the site theme, apply sections
- * to an existing page or start onboarding with the template selected.
+ * Template store — full-page / multi-section recipes by collection.
+ * Motionsites islands live under Website → Components; page recipes stay here.
  */
 definePageMeta({ layout: 'default' })
 
@@ -86,13 +87,17 @@ const CLASS_NOTES: Record<string, string> = {
   C: 'Advanced animation and scroll orchestration.',
   D: 'Cinematic — WebGL or equivalent. Needs a budget to match.',
 }
+
+const isMotionPage = computed(() =>
+  detail.value ? isMotionsitesPageRecipe(detail.value.template) : false,
+)
 </script>
 
 <template>
   <div>
     <UiPageHeader
       title="Templates"
-      description="Starting points for this website. Each recipe maps to installed blocks — apply them to a page, or build a new site with onboarding."
+      description="Full-page and multi-section recipes by collection — including Motionsites page designs. Preview in your theme, then apply to a page or start onboarding. Single Motionsites islands live under Components."
     >
       <template #actions>
         <UiButton size="sm" to="/website/components">Components</UiButton>
@@ -114,7 +119,9 @@ const CLASS_NOTES: Record<string, string> = {
 
     <TemplatePicker
       v-model="selected"
-      cache-key="template-store"
+      cache-key="template-store-pages"
+      page-recipes-only
+      :allow-none="false"
       :theme="site?.theme ?? null"
       @inspect="inspect"
     />
@@ -132,9 +139,9 @@ const CLASS_NOTES: Record<string, string> = {
             <TemplatePreview :block-ids="detailBlockIds" :theme="site?.theme ?? null" ratio="4 / 3" eager />
           </div>
           <p class="-mt-1 type-caption-12 leading-relaxed text-faint">
-            Rendered live from the sections below
+            Live preview of the section recipe
             <span v-if="site"> in {{ site.name }}’s theme</span>
-            — not a picture of the original design.
+            — not a screenshot of the original.
           </p>
 
           <div>
@@ -154,7 +161,17 @@ const CLASS_NOTES: Record<string, string> = {
             <div>
               <dt class="type-button-10 uppercase tracking-[0.08em] text-faint">Archetype</dt>
               <dd class="mt-0.5 type-button text-ink">
-                {{ detail.template.pageType === 'landing' ? 'Whole page' : 'Single section' }}
+                {{
+                  detail.template.pageType === 'landing' || detail.blocks.length >= 3
+                    ? 'Whole page'
+                    : 'Single section'
+                }}
+              </dd>
+            </div>
+            <div>
+              <dt class="type-button-10 uppercase tracking-[0.08em] text-faint">Source</dt>
+              <dd class="mt-0.5 type-button text-ink">
+                {{ isMotionPage ? 'MotionSites page' : detail.template.collection }}
               </dd>
             </div>
             <div>
@@ -177,28 +194,31 @@ const CLASS_NOTES: Record<string, string> = {
                 {{ detail.template.mobileSafe ? 'Safe' : 'Degrades — pointer-driven' }}
               </dd>
             </div>
+            <div>
+              <dt class="type-button-10 uppercase tracking-[0.08em] text-faint">Performance</dt>
+              <dd class="mt-0.5 flex items-center gap-2 type-button text-ink">
+                Class {{ detail.template.performanceClass }}
+                <UiBadge
+                  :tone="
+                    detail.template.performanceClass === 'A' || detail.template.performanceClass === 'B'
+                      ? 'positive'
+                      : 'warning'
+                  "
+                >
+                  {{ detail.template.performanceClass }}
+                </UiBadge>
+              </dd>
+            </div>
           </dl>
 
           <div class="rounded-lg border border-line px-3 py-2.5">
-            <p class="flex items-center gap-2 type-button text-ink">
-              Performance class {{ detail.template.performanceClass }}
-              <UiBadge
-                :tone="
-                  detail.template.performanceClass === 'A' || detail.template.performanceClass === 'B'
-                    ? 'positive'
-                    : 'warning'
-                "
-              >
-                {{ detail.template.performanceClass }}
-              </UiBadge>
-            </p>
-            <p class="mt-1 type-caption-12 leading-relaxed text-soft">
-              {{ CLASS_NOTES[detail.template.performanceClass] }}
-            </p>
+            <p class="type-button text-ink">{{ CLASS_NOTES[detail.template.performanceClass] }}</p>
           </div>
 
           <div>
-            <h3 class="mb-2 type-caption uppercase tracking-[0.08em] text-faint">Sections it maps to</h3>
+            <h3 class="mb-2 type-caption uppercase tracking-[0.08em] text-faint">
+              Sections it maps to ({{ detail.blocks.length }})
+            </h3>
             <ol v-if="detail.blocks.length" class="flex flex-col divide-y divide-line border-y border-line">
               <li v-for="(block, index) in detail.blocks" :key="block.id" class="flex items-center gap-3 py-2">
                 <span class="w-4 shrink-0 tabular-nums type-caption-12 text-faint">{{ index + 1 }}</span>
@@ -220,7 +240,7 @@ const CLASS_NOTES: Record<string, string> = {
             v-if="can('page:write') && PAGE_OPTIONS.length && detail.blocks.length"
             class="rounded-lg border border-line bg-sunken px-3 py-3"
           >
-            <label class="mb-1.5 block text-[0.75rem] font-medium text-soft">Add these sections to</label>
+            <label class="mb-1.5 block text-[0.75rem] font-medium text-soft">Apply these sections to</label>
             <UiSelect v-model="pageTarget" :options="PAGE_OPTIONS" />
           </div>
         </div>
@@ -233,7 +253,7 @@ const CLASS_NOTES: Record<string, string> = {
           :loading="appending"
           @click="applyToPage"
         >
-          Add to page
+          Apply to page
         </UiButton>
         <UiButton
           v-if="detail"
@@ -241,7 +261,7 @@ const CLASS_NOTES: Record<string, string> = {
           :to="`/onboarding?template=${detail.template.id}`"
           arrow
         >
-          Build new site
+          Preview &amp; build new site
         </UiButton>
       </template>
     </UiDialog>

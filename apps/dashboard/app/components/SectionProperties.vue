@@ -1,29 +1,39 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   applyMotionTemplate,
   listMotionTemplates,
+  SECTION_STYLE_ALIGNS,
+  SECTION_STYLE_GAPS,
+  SECTION_STYLE_MAX_WIDTHS,
+  SECTION_STYLE_PADDINGS,
   SECTION_STYLE_SCALES,
+  SECTION_STYLE_TYPE_SCALES,
   type Section,
   type SectionMotion,
   type SectionStyle,
+  type SectionStyleAlign,
   type SectionStyleBackground,
+  type SectionStyleGap,
+  type SectionStyleMaxWidth,
+  type SectionStylePadding,
   type SectionStyleScale,
   type SectionStyleText,
+  type SectionStyleTypeScale,
   type SectionVisibility,
 } from '@platform/schemas'
 import { ChevronRight } from '@lucide/vue'
 
 /**
- * Section properties — the block-CMS equivalent of Framer's right-hand panel.
+ * Framer-like Design inspector — layout, typography, colours, motion, visibility.
  *
- * Not Position and Size: in a block document a section is a full-width band in
- * a vertical flow, so X/Y and arbitrary dimensions have no meaning. What *is*
- * per-section here is motion intent, visibility, and optional style overrides
- * (scale + colour tokens) applied as CSS variables on the section wrapper.
+ * Motionsites islands stay fully animated; these controls restyle the section
+ * shell and (for islands) feed overlay copy/fonts via Content props + postMessage.
  */
 const props = defineProps<{ section: Section }>()
 const emit = defineEmits<{ update: [patch: Partial<Section>] }>()
+
+const { fontSelectOptions, ensureLoaded } = useGoogleFonts()
 
 const MOTION_OPTIONS = listMotionTemplates().map((entry) => ({
   value: entry.id,
@@ -49,6 +59,45 @@ const SCALE_OPTIONS = SECTION_STYLE_SCALES.map((value) => ({
   value,
   label: value.toUpperCase(),
   icon: value === 'sm' ? 'intensity-subtle' : value === 'xl' ? 'intensity-pronounced' : 'motion-scale',
+}))
+
+const PAD_OPTIONS = SECTION_STYLE_PADDINGS.map((value) => ({
+  value,
+  label: value.toUpperCase(),
+  icon: 'intensity-subtle',
+}))
+
+const MAX_WIDTH_LABEL: Record<SectionStyleMaxWidth, string> = {
+  content: 'Content',
+  wide: 'Wide (site)',
+  full: 'Full',
+  '1280': '1280px',
+  '1440': '1440px',
+  '1600': '1600px',
+}
+
+const MAX_WIDTH_OPTIONS = SECTION_STYLE_MAX_WIDTHS.map((value) => ({
+  value,
+  label: MAX_WIDTH_LABEL[value],
+  icon: value === 'full' ? 'align-center' : 'align-left',
+}))
+
+const ALIGN_OPTIONS = SECTION_STYLE_ALIGNS.map((value) => ({
+  value,
+  label: value === 'start' ? 'Start' : value === 'end' ? 'End' : 'Center',
+  icon: value === 'start' ? 'align-left' : value === 'end' ? 'align-right' : 'align-center',
+}))
+
+const GAP_OPTIONS = SECTION_STYLE_GAPS.map((value) => ({
+  value,
+  label: value.toUpperCase(),
+  icon: 'intensity-subtle',
+}))
+
+const TYPE_SCALE_OPTIONS = SECTION_STYLE_TYPE_SCALES.map((value) => ({
+  value,
+  label: value.toUpperCase(),
+  icon: value === 'sm' ? 'intensity-subtle' : value === 'lg' ? 'intensity-pronounced' : 'motion-scale',
 }))
 
 const BACKGROUND_SWATCHES: { value: SectionStyleBackground | ''; label: string; swatch: string }[] = [
@@ -83,6 +132,14 @@ const visibility = computed<SectionVisibility>(() => ({
 const style = computed<SectionStyle>(() => props.section.style ?? {})
 
 const styleScale = computed(() => style.value.scale ?? 'md')
+const stylePaddingY = computed(() => style.value.paddingY ?? 'md')
+const stylePaddingX = computed(() => style.value.paddingX ?? 'md')
+const styleMaxWidth = computed(() => style.value.maxWidth ?? 'full')
+const styleAlign = computed(() => style.value.align ?? 'start')
+const styleGap = computed(() => style.value.gap ?? 'md')
+const styleTypeScale = computed(() => style.value.typeScale ?? 'md')
+const styleFontHeading = computed(() => style.value.fontHeading ?? '')
+const styleFontBody = computed(() => style.value.fontBody ?? '')
 const styleBackground = computed(() => style.value.background ?? '')
 const styleText = computed(() => style.value.text ?? '')
 const styleAccent = computed(() => style.value.accent ?? '')
@@ -99,14 +156,28 @@ const customAccent = computed(() =>
   typeof styleAccent.value === 'string' && styleAccent.value.startsWith('#') ? styleAccent.value : '#0f766e',
 )
 
-/** The multi-select grid speaks in ids; the schema speaks in three booleans. */
-const visibleOn = computed(() => BREAKPOINTS.filter((entry) => visibility.value[entry.value]).map((entry) => entry.value))
+const fontOptionsWithTheme = computed(() => [
+  { label: 'Theme default', value: '' },
+  ...fontSelectOptions,
+])
+
+watch(
+  () => [styleFontHeading.value, styleFontBody.value] as const,
+  ([heading, body]) => {
+    if (heading) ensureLoaded(heading)
+    if (body) ensureLoaded(body)
+  },
+  { immediate: true },
+)
+
+const visibleOn = computed(() =>
+  BREAKPOINTS.filter((entry) => visibility.value[entry.value]).map((entry) => entry.value),
+)
 
 function setMotion(patch: Partial<SectionMotion>) {
   emit('update', { motion: { ...motion.value, ...patch } })
 }
 
-/** One-click recipe: writes the full template intent, keeping tuned delay/once. */
 function applyTemplate(preset: SectionMotion['preset']) {
   emit('update', { motion: applyMotionTemplate(motion.value, preset) })
 }
@@ -125,23 +196,76 @@ function setVisibleOn(value: string | string[]) {
 function setStyle(patch: Partial<SectionStyle>) {
   const next: SectionStyle = { ...style.value, ...patch }
   if (patch.scale === 'md') delete next.scale
+  if (patch.paddingY === 'md') delete next.paddingY
+  if (patch.paddingX === 'md') delete next.paddingX
+  if (patch.maxWidth === 'full') delete next.maxWidth
+  if (patch.align === 'start') delete next.align
+  if (patch.gap === 'md') delete next.gap
+  if (patch.typeScale === 'md') delete next.typeScale
+  if (patch.fontHeading === '') delete next.fontHeading
+  if (patch.fontBody === '') delete next.fontBody
   if (patch.background === undefined && 'background' in patch) delete next.background
   if (patch.text === undefined && 'text' in patch) delete next.text
-  // Drop empty object so older documents stay clean.
   const hasKeys = Object.keys(next).some((key) => next[key as keyof SectionStyle] !== undefined)
   emit('update', { style: hasKeys ? next : undefined })
 }
 
 function setScale(value: string | string[]) {
-  const scale = (Array.isArray(value) ? value[0] : value) as SectionStyleScale
-  setStyle({ scale })
+  setStyle({ scale: (Array.isArray(value) ? value[0] : value) as SectionStyleScale })
+}
+
+function setPaddingY(value: string | string[]) {
+  setStyle({ paddingY: (Array.isArray(value) ? value[0] : value) as SectionStylePadding })
+}
+
+function setPaddingX(value: string | string[]) {
+  setStyle({ paddingX: (Array.isArray(value) ? value[0] : value) as SectionStylePadding })
+}
+
+function setMaxWidth(value: string | string[]) {
+  setStyle({ maxWidth: (Array.isArray(value) ? value[0] : value) as SectionStyleMaxWidth })
+}
+
+function setAlign(value: string | string[]) {
+  setStyle({ align: (Array.isArray(value) ? value[0] : value) as SectionStyleAlign })
+}
+
+function setGap(value: string | string[]) {
+  setStyle({ gap: (Array.isArray(value) ? value[0] : value) as SectionStyleGap })
+}
+
+function setTypeScale(value: string | string[]) {
+  setStyle({ typeScale: (Array.isArray(value) ? value[0] : value) as SectionStyleTypeScale })
+}
+
+function setFontHeading(value: string) {
+  if (value) ensureLoaded(value)
+  const nextStyle: SectionStyle = { ...style.value, fontHeading: value || undefined }
+  if (!value) delete nextStyle.fontHeading
+  const hasKeys = Object.keys(nextStyle).some((key) => nextStyle[key as keyof SectionStyle] !== undefined)
+  const patch: Partial<Section> = { style: hasKeys ? nextStyle : undefined }
+  if (isMotionIsland.value) {
+    patch.props = { ...props.section.props, fontDisplay: value || '' }
+  }
+  emit('update', patch)
+}
+
+function setFontBody(value: string) {
+  if (value) ensureLoaded(value)
+  const nextStyle: SectionStyle = { ...style.value, fontBody: value || undefined }
+  if (!value) delete nextStyle.fontBody
+  const hasKeys = Object.keys(nextStyle).some((key) => nextStyle[key as keyof SectionStyle] !== undefined)
+  const patch: Partial<Section> = { style: hasKeys ? nextStyle : undefined }
+  if (isMotionIsland.value) {
+    patch.props = { ...props.section.props, fontBody: value || '' }
+  }
+  emit('update', patch)
 }
 
 function setBackgroundToken(value: SectionStyleBackground | '') {
   if (!value) {
     const { background: _drop, ...rest } = style.value
-    const hasKeys = Object.keys(rest).length > 0
-    emit('update', { style: hasKeys ? rest : undefined })
+    emit('update', { style: Object.keys(rest).length ? rest : undefined })
     return
   }
   setStyle({ background: value })
@@ -150,8 +274,7 @@ function setBackgroundToken(value: SectionStyleBackground | '') {
 function setTextToken(value: SectionStyleText | '') {
   if (!value) {
     const { text: _drop, ...rest } = style.value
-    const hasKeys = Object.keys(rest).length > 0
-    emit('update', { style: hasKeys ? rest : undefined })
+    emit('update', { style: Object.keys(rest).length ? rest : undefined })
     return
   }
   setStyle({ text: value })
@@ -178,7 +301,13 @@ function clearAccent() {
 
 const hidesEverywhere = computed(() => visibleOn.value.length === 0)
 
-const openSections = ref({ style: true, animation: true, visibility: true })
+const openSections = ref({
+  layout: true,
+  typography: true,
+  colors: true,
+  animation: false,
+  visibility: false,
+})
 
 function toggleSection(key: keyof typeof openSections.value) {
   openSections.value = { ...openSections.value, [key]: !openSections.value[key] }
@@ -194,44 +323,154 @@ function isTextSelected(value: SectionStyleText | '') {
   return styleText.value === value
 }
 
-/** Force MotionReveal to re-arm by toggling hidden→visible via a tiny delay nudge. */
 function replay() {
   if (motion.value.preset === 'none') return
   const delay = motion.value.delay
   setMotion({ delay: delay === 0 ? 0.001 : delay })
   requestAnimationFrame(() => setMotion({ delay }))
 }
+
+const isMotionIsland = computed(() => props.section.block === 'motion-section-01')
 </script>
 
 <template>
   <div class="flex flex-col gap-2">
-    <!-- Style -->
+    <p
+      v-if="isMotionIsland"
+      class="rounded-lg border border-line bg-sunken/50 px-3 py-2 type-caption-12 leading-relaxed text-soft"
+    >
+      Motionsites stay fully animated (video / spotlight). Use
+      <strong class="font-medium text-ink">Content</strong> for overlay copy;
+      Design tunes the section shell and fonts without freezing motion.
+    </p>
+
+    <!-- Layout -->
     <section class="rounded-lg border border-line">
       <button
         type="button"
         class="flex w-full items-center gap-1.5 px-3 py-2.5 text-left transition-colors hover:bg-sunken"
-        :aria-expanded="openSections.style"
-        @click="toggleSection('style')"
+        :aria-expanded="openSections.layout"
+        @click="toggleSection('layout')"
       >
         <ChevronRight
           class="h-3 w-3 shrink-0 text-faint transition-transform duration-150"
-          :class="openSections.style ? 'rotate-90' : ''"
+          :class="openSections.layout ? 'rotate-90' : ''"
           :stroke-width="2.25"
           aria-hidden="true"
         />
-        <h3 class="type-caption text-ink">Style</h3>
-        <span class="type-button-10 ml-auto text-faint">{{ styleScale }}</span>
+        <h3 class="type-caption text-ink">Layout</h3>
+        <span class="type-button-10 ml-auto text-faint">{{ styleMaxWidth }} · {{ stylePaddingY }}</span>
       </button>
 
-      <div v-show="openSections.style" class="flex flex-col gap-4 border-t border-line px-3 py-3">
+      <div v-show="openSections.layout" class="flex flex-col gap-4 border-t border-line px-3 py-3">
         <UiOptionGrid
-          label="Scale"
+          label="Width"
+          :options="MAX_WIDTH_OPTIONS"
+          :columns="3"
+          :model-value="styleMaxWidth"
+          @update:model-value="setMaxWidth"
+        />
+        <UiOptionGrid
+          label="Padding Y"
+          :options="PAD_OPTIONS"
+          :columns="4"
+          :model-value="stylePaddingY"
+          @update:model-value="setPaddingY"
+        />
+        <UiOptionGrid
+          label="Padding X"
+          :options="PAD_OPTIONS"
+          :columns="4"
+          :model-value="stylePaddingX"
+          @update:model-value="setPaddingX"
+        />
+        <UiOptionGrid
+          label="Align"
+          :options="ALIGN_OPTIONS"
+          :columns="3"
+          :model-value="styleAlign"
+          @update:model-value="setAlign"
+        />
+        <UiOptionGrid
+          label="Gap"
+          :options="GAP_OPTIONS"
+          :columns="3"
+          :model-value="styleGap"
+          @update:model-value="setGap"
+        />
+        <UiOptionGrid
+          label="Zoom scale"
           :options="SCALE_OPTIONS"
           :columns="4"
           :model-value="styleScale"
           @update:model-value="setScale"
         />
+      </div>
+    </section>
 
+    <!-- Typography -->
+    <section class="rounded-lg border border-line">
+      <button
+        type="button"
+        class="flex w-full items-center gap-1.5 px-3 py-2.5 text-left transition-colors hover:bg-sunken"
+        :aria-expanded="openSections.typography"
+        @click="toggleSection('typography')"
+      >
+        <ChevronRight
+          class="h-3 w-3 shrink-0 text-faint transition-transform duration-150"
+          :class="openSections.typography ? 'rotate-90' : ''"
+          :stroke-width="2.25"
+          aria-hidden="true"
+        />
+        <h3 class="type-caption text-ink">Typography</h3>
+        <span class="type-button-10 ml-auto truncate text-faint">{{ styleFontHeading || 'theme' }}</span>
+      </button>
+
+      <div v-show="openSections.typography" class="flex flex-col gap-4 border-t border-line px-3 py-3">
+        <UiField v-slot="{ id }" label="Heading font">
+          <UiSelect
+            :id="id"
+            :model-value="styleFontHeading"
+            :options="fontOptionsWithTheme"
+            @update:model-value="setFontHeading"
+          />
+        </UiField>
+        <UiField v-slot="{ id }" label="Body font">
+          <UiSelect
+            :id="id"
+            :model-value="styleFontBody"
+            :options="fontOptionsWithTheme"
+            @update:model-value="setFontBody"
+          />
+        </UiField>
+        <UiOptionGrid
+          label="Type scale"
+          :options="TYPE_SCALE_OPTIONS"
+          :columns="3"
+          :model-value="styleTypeScale"
+          @update:model-value="setTypeScale"
+        />
+      </div>
+    </section>
+
+    <!-- Colors -->
+    <section class="rounded-lg border border-line">
+      <button
+        type="button"
+        class="flex w-full items-center gap-1.5 px-3 py-2.5 text-left transition-colors hover:bg-sunken"
+        :aria-expanded="openSections.colors"
+        @click="toggleSection('colors')"
+      >
+        <ChevronRight
+          class="h-3 w-3 shrink-0 text-faint transition-transform duration-150"
+          :class="openSections.colors ? 'rotate-90' : ''"
+          :stroke-width="2.25"
+          aria-hidden="true"
+        />
+        <h3 class="type-caption text-ink">Colors</h3>
+      </button>
+
+      <div v-show="openSections.colors" class="flex flex-col gap-4 border-t border-line px-3 py-3">
         <div>
           <p class="type-caption mb-1.5 text-soft">Background</p>
           <div class="flex flex-wrap gap-1.5">
@@ -252,8 +491,14 @@ function replay() {
             >
               <span
                 class="h-4 w-4 rounded-sm border border-line"
-                :class="swatch.value === 'transparent' || !swatch.value ? 'bg-[repeating-conic-gradient(#ccc_0_25%,transparent_0_50%)] bg-[length:8px_8px]' : ''"
-                :style="swatch.value && swatch.value !== 'transparent' ? { background: swatch.swatch } : undefined"
+                :class="
+                  swatch.value === 'transparent' || !swatch.value
+                    ? 'bg-[repeating-conic-gradient(#ccc_0_25%,transparent_0_50%)] bg-[length:8px_8px]'
+                    : ''
+                "
+                :style="
+                  swatch.value && swatch.value !== 'transparent' ? { background: swatch.swatch } : undefined
+                "
               />
             </button>
             <label class="flex h-8 items-center gap-1.5 rounded-md border border-line px-1.5">
@@ -301,11 +546,7 @@ function replay() {
         <div>
           <div class="mb-1.5 flex items-center justify-between gap-2">
             <p class="type-caption text-soft">Accent</p>
-            <button
-              type="button"
-              class="type-button-10 text-faint transition-colors hover:text-ink"
-              @click="clearAccent"
-            >
+            <button type="button" class="type-button-10 text-faint transition-colors hover:text-ink" @click="clearAccent">
               Clear
             </button>
           </div>
@@ -320,10 +561,6 @@ function replay() {
             <span class="type-button-10 font-mono text-faint">{{ styleAccent || 'theme' }}</span>
           </label>
         </div>
-
-        <p class="type-caption-12 leading-relaxed text-faint">
-          Colours remap theme tokens on this section only — blocks inherit them automatically.
-        </p>
       </div>
     </section>
 
@@ -346,6 +583,10 @@ function replay() {
       </button>
 
       <div v-show="openSections.animation" class="flex flex-col gap-4 border-t border-line px-3 py-3">
+        <p v-if="isMotionIsland" class="type-caption-12 leading-relaxed text-faint">
+          Island motion (video, spotlight, GSAP) lives inside the React build. These presets animate the
+          section shell only.
+        </p>
         <UiOptionGrid
           label="Effect"
           :options="MOTION_OPTIONS"
@@ -398,10 +639,6 @@ function replay() {
             Replay on canvas
           </button>
         </template>
-
-        <p class="type-caption-12 leading-relaxed text-faint">
-          Stored as intent, not code — visitors who ask for reduced motion see the finished state instead.
-        </p>
       </div>
     </section>
 

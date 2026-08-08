@@ -27,13 +27,14 @@ import { preferredBlock, type TemplateSteering } from './templates.js'
  * Gateway. Neither step ever emits component source (ADR-0003).
  */
 
-// Preference order. Each language model is skipped when it has no key, so the
-// list degrades on its own: with only GEMINI_API_KEY set, Gemini is the live
-// provider. The deterministic composer always closes the list — it is the
-// guaranteed floor, so the pipeline can never be left with nothing.
+// Preference order. Google Gemini is the default language model for discovery
+// → copy (scraped business sites) and section AI. Each provider is skipped when
+// it has no key, so the list degrades on its own: Anthropic is the paid fallback
+// when GEMINI_API_KEY is missing. The deterministic composer always closes the
+// list — it is the guaranteed floor, so the pipeline can never be left with nothing.
 export const aiGateway = new AiGateway([
-  new AnthropicCopyProvider(),
   new GeminiCopyProvider(),
+  new AnthropicCopyProvider(),
   new DeterministicCopyProvider(),
 ])
 
@@ -50,7 +51,7 @@ const INDUSTRY_PALETTES: Record<string, { primary: string; accent: string }> = {
   real_estate: { primary: '#164e63', accent: '#b45309' },
   agency: { primary: '#4c1d95', accent: '#db2777' },
   saas: { primary: '#1d4ed8', accent: '#0d9488' },
-  ecommerce: { primary: '#111827', accent: '#c2410c' },
+  ecommerce: { primary: '#111827', accent: '#0D9488' },
   consultant: { primary: '#1e3a8a', accent: '#0f766e' },
   local: { primary: '#1d4ed8', accent: '#0f766e' },
 }
@@ -113,26 +114,34 @@ export function themeFromBrand(
   const industry = INDUSTRY_PALETTES[profile.company.industry] ?? INDUSTRY_PALETTES.local!
   const hints = steering?.designHints
   const primary = pickPrimary(profile, hints?.primaryHint)
+  const isEcommerce = profile.company.industry === 'ecommerce'
 
   const radius =
-    style === 'bold' ? 'none' : style === 'premium' || style === 'editorial' ? 'sm' : style === 'minimal' ? 'md' : 'lg'
+    style === 'bold' || isEcommerce
+      ? 'none'
+      : style === 'premium' || style === 'editorial'
+        ? 'sm'
+        : style === 'minimal'
+          ? 'md'
+          : 'lg'
 
-  const heading = profile.brand.fonts[0] ?? hints?.fontHeading ?? 'Inter'
-  const body = profile.brand.fonts[1] ?? hints?.fontBody ?? heading
+  const heading = profile.brand.fonts[0] ?? hints?.fontHeading ?? (isEcommerce ? 'Rubik' : 'Inter')
+  const body = profile.brand.fonts[1] ?? hints?.fontBody ?? (isEcommerce ? 'Nunito Sans' : heading)
   const accent =
     hints?.accentHint && /^#[0-9a-f]{6}$/i.test(hints.accentHint) ? hints.accentHint.toLowerCase() : industry.accent
 
   return themeSchema.parse({
     colorPrimary: primary,
     colorAccent: accent,
-    colorSurface: '#ffffff',
-    colorSurfaceAlt: style === 'premium' ? '#f8f7f5' : '#f1f5f9',
-    colorText: style === 'bold' ? '#0a0a0a' : '#18181b',
+    colorSurface: isEcommerce ? '#FFFFFF' : '#ffffff',
+    colorSurfaceAlt: isEcommerce ? '#F8FAFC' : style === 'premium' ? '#f8f7f5' : '#f1f5f9',
+    colorText: style === 'bold' || isEcommerce ? '#0F172A' : '#18181b',
     colorTextMuted: '#52525b',
     fontHeading: heading,
     fontBody: body,
     radius,
     maxPerformanceClass: ceilingForStyle(style),
+    ...(isEcommerce ? { contentWidth: '1440' as const } : {}),
   })
 }
 
@@ -229,6 +238,7 @@ export function planSite(
   const hasServices = profile.services.length > 0
   const hasReviews = profile.reviews.length > 0
   const hasAddress = profile.locations.some((location) => location.city)
+  const isEcommerce = industry === 'ecommerce'
 
   const pages: PlannedPage[] = []
 
@@ -249,6 +259,19 @@ export function planSite(
       selectBlock('cta', ceiling, industry, prefer('cta')),
     ]),
   })
+
+  if (isEcommerce) {
+    const announce = selectBlock('header', ceiling, industry, 'header-shop-announce-01')
+    pages.push({
+      goal: 'product',
+      path: '/product',
+      title: dutch ? 'Product' : 'Product',
+      description: '',
+      blocks: [announce, header, selectBlock('product', ceiling, industry, prefer('product', 'product-detail-01')), footer].filter(
+        (id): id is string => Boolean(id),
+      ),
+    })
+  }
 
   if (hasServices) {
     pages.push({

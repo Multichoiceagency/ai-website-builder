@@ -20,10 +20,8 @@ Add this to the top of `src/index.css`, then `@tailwind base/components/utilitie
 - Display/wordmark accent: **Playfair Display, italic**.
 
 ### Asset URLs (use these exactly)
-- Base image (`BG_IMAGE_1`):
-  `https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260609_195923_b0ba8ace-1d1d-4f2c-9a28-1ab84b330680.png&w=1280&q=85`
-- Reveal image (`BG_IMAGE_2`):
-  `https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260609_201152_bba90a12-bf12-459f-91f0-51f237dbaf3b.png&w=1280&q=85`
+- Base image (`BG_IMAGE_1`): `/motionsites/sections/assets/001_Interactive-Discovery-base.webp`
+- Reveal image (`BG_IMAGE_2`): `/motionsites/sections/assets/001_Interactive-Discovery-reveal.webp`
 
 ### Layout & structure
 Root wrapper: `min-h-screen bg-white tracking-[-0.02em]`, inline `fontFamily: "'Inter', sans-serif"`.
@@ -50,11 +48,8 @@ In the parent, define `const SPOTLIGHT_R = 260;` and track the mouse with smooth
   `0 → rgba(255,255,255,1)`, `0.4 → 1`, `0.6 → 0.75`, `0.75 → 0.4`, `0.88 → 0.12`, `1 → 0`.
   Fill an arc of radius `SPOTLIGHT_R` with it. Then `canvas.toDataURL()` and apply it as `maskImage`/`webkitMaskImage` on the reveal div with `maskSize: '100% 100%'`. This makes the second image visible only inside the soft glowing circle that trails the cursor.
 
-### Navigation (fixed, over hero)
-`<nav className="fixed top-0 left-0 right-0 z-[100] flex items-center justify-between p-4 sm:p-5">`:
-- **Left**: an inline SVG logo (26×26, viewBox `0 0 256 256`, `fill="#ffffff"`, path `M 256 256 L 128 256 L 0 128 L 128 128 Z M 256 128 L 128 128 L 0 0 L 128 0 Z`) + wordmark `<span className="text-white text-2xl font-playfair italic">Lithos</span>`.
-- **Center pill** (`hidden md:flex absolute left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur-md border border-white/30 rounded-full px-2 py-2 items-center gap-1`): buttons **Course** (active: full white text), then **Field Guides, Geology, Plans, Live Tour** (`text-white/80 ... hover:bg-white/20 hover:text-white transition-colors`, `px-4 py-1.5 rounded-full text-sm font-medium`).
-- **Right (desktop)**: `hidden md:block bg-white text-gray-900 text-sm font-semibold px-6 py-2.5 rounded-full hover:bg-gray-100` — **Sign Up**.
+### Navigation
+Do **not** include a site header, logo bar, primary nav, or Sign Up control inside this island. The host page provides navigation **outside** the design.
 
 ### Animations (premium, on load)
 Add to `index.css`:
@@ -76,6 +71,5 @@ Apply:
 
 ### Responsiveness
 - Heading scales `text-5xl` → `sm:text-7xl` → `md:text-8xl`.
-- Center nav pill and desktop Sign Up are `hidden` below `md`; the mobile hamburger is `md:hidden`.
 - Bottom-left paragraph is `hidden sm:block`; bottom-right block is full-width on mobile (`left-5 right-5`) and right-anchored from `sm`.
 - Use `100dvh` so mobile browser chrome doesn't clip the section.

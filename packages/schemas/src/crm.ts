@@ -676,7 +676,7 @@ export type EmailMessage = z.infer<typeof emailMessageSchema>
  * not pretend a send succeeded (ADR-0006).
  */
 export const emailProviderStatusSchema = z.object({
-  provider: z.enum(['smtp', 'console']),
+  provider: z.enum(['smtp', 'console', 'gmail']),
   configured: z.boolean(),
   /** Present when `configured` is false: what is missing, by name only. */
   missing: z.array(z.string().max(64)).default([]),

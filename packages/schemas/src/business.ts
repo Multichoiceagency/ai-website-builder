@@ -190,7 +190,7 @@ export type DiscoveryResult = z.infer<typeof discoveryResultSchema>
 
 // region Site planning
 
-export const PAGE_GOALS = ['home', 'services', 'service_detail', 'about', 'contact', 'reviews', 'faq'] as const
+export const PAGE_GOALS = ['home', 'services', 'service_detail', 'about', 'contact', 'reviews', 'faq', 'product'] as const
 export const pageGoalSchema = z.enum(PAGE_GOALS)
 export type PageGoal = z.infer<typeof pageGoalSchema>
 
