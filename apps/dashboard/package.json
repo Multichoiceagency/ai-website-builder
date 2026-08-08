@@ -22,6 +22,7 @@
     "@platform/permissions": "workspace:*",
     "@platform/schemas": "workspace:*",
     "@platform/templates": "workspace:*",
+    "@platform/theming": "workspace:*",
     "@platform/ui": "workspace:*",
     "apexcharts": "^6.7.0",
     "clsx": "^2.1.1",
