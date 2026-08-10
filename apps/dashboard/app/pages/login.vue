@@ -88,15 +88,24 @@ async function continueWithGoogle() {
           ? route.query.redirect
           : '/'
 
-    const { authorizeUrl } = await api.post<{ authorizeUrl: string }>('/api/v1/auth/google/start', {
-      mode: mode.value,
-      redirectTo,
-      organizationName:
-        mode.value === 'register' && organizationName.value.trim()
-          ? organizationName.value.trim()
-          : undefined,
-      displayName: mode.value === 'register' ? name.value.trim() || undefined : undefined,
-    })
+    const payload: {
+      mode: 'login' | 'register'
+      redirectTo: string
+      organizationName?: string
+      displayName?: string
+    } = { mode: mode.value, redirectTo }
+
+    if (mode.value === 'register') {
+      const org = organizationName.value.trim()
+      const display = name.value.trim()
+      if (org.length >= 2) payload.organizationName = org
+      if (display.length >= 1) payload.displayName = display
+    }
+
+    const { authorizeUrl } = await api.post<{ authorizeUrl: string }>(
+      '/api/v1/auth/google/start',
+      payload,
+    )
 
     // Full navigation so Google sees a real browser redirect, not a fetch follow.
     window.location.href = authorizeUrl

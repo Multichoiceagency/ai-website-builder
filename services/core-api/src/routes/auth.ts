@@ -237,12 +237,19 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     const problem = googleAuthConfigurationProblem()
     if (problem) throw new BadRequestError(problem)
 
+    const optionalTrimmed = (min: number, max: number) =>
+      z.preprocess(
+        (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+        z.string().trim().min(min).max(max).optional(),
+      )
+
     const input = parseOrThrow(
       z.object({
         mode: z.enum(['login', 'register']).default('login'),
         redirectTo: z.string().max(512).optional(),
-        organizationName: z.string().trim().min(2).max(120).optional(),
-        displayName: z.string().trim().min(1).max(120).optional(),
+        // Empty strings from the form must not 400 — treat as "not provided".
+        organizationName: optionalTrimmed(2, 120),
+        displayName: optionalTrimmed(1, 120),
       }),
       request.body ?? {},
       'google auth',
