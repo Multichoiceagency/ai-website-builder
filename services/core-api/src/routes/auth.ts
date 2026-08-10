@@ -81,6 +81,9 @@ function safeRedirectPath(raw: string | undefined, fallback = '/'): string {
 }
 
 function dashboardOrigin(): string {
+  // Prefer explicit dashboard URL; CORS_ORIGINS[0] is the dashboard in Coolify.
+  const fromEnv = process.env.DASHBOARD_URL?.trim()
+  if (fromEnv) return fromEnv.replace(/\/$/, '')
   return env.CORS_ORIGINS[0] ?? 'http://localhost:3000'
 }
 

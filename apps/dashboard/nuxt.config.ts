@@ -21,17 +21,15 @@ export default defineNuxtConfig({
   modules: ['@vite-pwa/nuxt'],
 
   runtimeConfig: {
+    /** Server-only upstream for `/api/v1/**` proxy (see server/routes/api/v1). */
+    coreApiOrigin,
     public: {
       /** Distinguishes admin chrome from the public renderer for block behaviour. */
       surface: 'dashboard',
-      /** Empty = same origin; see `routeRules` proxy below. */
+      /** Empty = same origin; browser calls go through the Nitro proxy. */
       coreApiUrl: '',
       storefrontUrl: process.env.STOREFRONT_URL ?? 'http://localhost:3001',
     },
-  },
-
-  routeRules: {
-    '/api/v1/**': { proxy: `${coreApiOrigin}/api/v1/**` },
   },
 
   app: {
