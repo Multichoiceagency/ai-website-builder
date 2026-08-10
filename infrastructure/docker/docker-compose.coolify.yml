@@ -1,6 +1,9 @@
 # Coolify / production stack for the AI website builder monorepo.
-# Deploy as a Coolify Docker Compose service from the repository root.
+# Coolify runs compose with --project-directory = repo root (base `/`),
+# so build/volume paths must be relative to the repository root — not to
+# this file's directory. Do not use context: ../.. (escapes the checkout).
 # Set secrets in Coolify env — never commit real values.
+# Expose container ports only; Coolify/Traefik publishes public domains.
 name: platform
 
 services:
@@ -15,7 +18,7 @@ services:
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./infrastructure/docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-platform}"]
       interval: 5s
@@ -43,10 +46,13 @@ services:
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?set S3_SECRET_KEY}
     volumes:
       - minio-data:/data
+    expose:
+      - "9000"
+      - "9001"
 
   core-api:
     build:
-      context: ../..
+      context: .
       dockerfile: infrastructure/docker/Dockerfile.core-api
     restart: unless-stopped
     depends_on:
@@ -91,8 +97,8 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
       GOOGLE_AUTH_REDIRECT_URI: ${GOOGLE_AUTH_REDIRECT_URI:-}
-    ports:
-      - "${CORE_API_PORT:-4000}:4000"
+    expose:
+      - "4000"
     healthcheck:
       test:
         [
@@ -108,7 +114,7 @@ services:
 
   dashboard:
     build:
-      context: ../..
+      context: .
       dockerfile: infrastructure/docker/Dockerfile.dashboard
     restart: unless-stopped
     depends_on:
@@ -123,12 +129,12 @@ services:
       CORE_API_URL: ${CORE_API_URL}
       STOREFRONT_URL: ${STOREFRONT_URL}
       DASHBOARD_URL: ${DASHBOARD_URL:-}
-    ports:
-      - "${DASHBOARD_PORT:-3000}:3000"
+    expose:
+      - "3000"
 
   storefront:
     build:
-      context: ../..
+      context: .
       dockerfile: infrastructure/docker/Dockerfile.storefront
     restart: unless-stopped
     depends_on:
@@ -140,8 +146,8 @@ services:
       PORT: 3001
       NUXT_PUBLIC_CORE_API_URL: ${CORE_API_URL}
       CORE_API_URL: ${CORE_API_URL}
-    ports:
-      - "${STOREFRONT_PORT:-3001}:3001"
+    expose:
+      - "3001"
 
   nango-db:
     image: postgres:16.0-alpine
@@ -165,9 +171,9 @@ services:
     depends_on:
       nango-db:
         condition: service_healthy
-    ports:
-      - '${NANGO_SERVER_PORT:-3003}:3003'
-      - '${NANGO_CONNECT_UI_PORT:-3009}:3009'
+    expose:
+      - "3003"
+      - "3009"
     environment:
       NANGO_DB_USER: nango
       NANGO_DB_PASSWORD: ${NANGO_DB_PASSWORD}
@@ -194,9 +200,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     stop_grace_period: 45s
-    # Coolify / public hosts must bind 0.0.0.0 (not 127.0.0.1).
-    ports:
-      - '${OPENWA_PORT:-2785}:2785'
+    expose:
+      - "2785"
     security_opt:
       - 'no-new-privileges:true'
     cap_drop:
