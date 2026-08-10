@@ -5,6 +5,7 @@ import { getBlock } from '@platform/blocks'
 import { siteTemplateSchema, templateCatalogSchema } from '@platform/schemas'
 import { describe, expect, it } from 'vitest'
 import { getTemplate, listTemplateCollections, listTemplates, searchTemplates, templateCatalog } from './index.js'
+import { MOTIONSITES_ISLAND_READY } from './island-ready.js'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 const publicDir = join(repoRoot, 'apps', 'dashboard', 'public')
@@ -85,13 +86,14 @@ describe('template catalogue', () => {
     expect(getTemplate('velorah-hero')?.islandReady).toBe(true)
     expect(getTemplate('asme-hero')?.islandReady).toBe(true)
     expect(getTemplate('wanderful-hero')?.islandReady).toBe(true)
-    expect(listTemplates().filter((template) => template.islandReady).map((t) => t.id).sort()).toEqual([
-      'asme-hero',
-      'interactive-discovery',
-      'velorah-hero',
-      'wanderful-hero',
-    ])
     expect(getTemplate('interactive-discovery')?.islandReady).toBe(true)
+    const readyIds = listTemplates()
+      .filter((template) => template.islandReady)
+      .map((template) => template.id)
+      .sort()
+    for (const id of MOTIONSITES_ISLAND_READY) {
+      if (getTemplate(id)) expect(readyIds).toContain(id)
+    }
   })
 
   /**

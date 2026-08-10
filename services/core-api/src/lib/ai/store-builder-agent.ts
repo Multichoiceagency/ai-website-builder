@@ -17,6 +17,7 @@ import { findPageByPath, insertPage, publishPage, updatePage } from '../../db/re
 import { findSiteById, updateSite } from '../../db/repositories/sites.js'
 import { generateGeminiContent, resolveGeminiModel } from './providers/gemini-client.js'
 import { getPrompt } from './prompt-registry.js'
+import { extractMarketplaceListing } from '../commerce/marketplace-import.js'
 
 /**
  * Single ecommerce store-builder agent.
@@ -49,7 +50,7 @@ function formatMoney(amount: number, currency: string): string {
 
 function defaultPlan(input: StoreBuildInput): StoreBuildPlan {
   const dutch = input.locale.toLowerCase().startsWith('nl')
-  const prompt = input.prompt.trim()
+  const prompt = input.prompt.trim() || (dutch ? 'Moderne webshop' : 'Modern online shop')
   const shopName =
     prompt.match(/(?:called|named|voor|voor\s+)"([^"]+)"/i)?.[1] ??
     prompt.match(/(?:shop|store|winkel|merk)\s+([A-Z][\w &'-]{1,40})/)?.[1]?.trim() ??
@@ -83,6 +84,7 @@ function defaultPlan(input: StoreBuildInput): StoreBuildPlan {
       title: dutch ? `Product ${i + 1}` : `Product ${i + 1}`,
       description: prompt.slice(0, 280),
       collectionHandle: collection.handle,
+      images: [],
       options: [{ name: dutch ? 'Maat' : 'Size', values: ['S', 'M', 'L'] }],
       variants: [
         {
@@ -193,15 +195,148 @@ Rules:
 }
 
 export async function planStoreBuild(input: StoreBuildInput): Promise<StoreBuildPlan> {
+  if (input.sourceUrl?.trim()) {
+    const listing = await extractMarketplaceListing(input.sourceUrl, input.currency)
+    const seeded = planFromListing(input, listing)
+    if (input.prompt.trim().length >= 12) {
+      const enriched = await planWithModel({
+        ...input,
+        prompt: `${input.prompt.trim()}\n\nSeed product from ${listing.marketplace}: ${listing.title}. ${listing.description.slice(0, 400)}`,
+      })
+      if (enriched) {
+        if (seeded.products[0] && !enriched.products[0]?.images?.length) {
+          enriched.products[0] = {
+            ...enriched.products[0]!,
+            images: seeded.products[0].images,
+            title: seeded.products[0].title,
+            description: seeded.products[0].description || enriched.products[0]!.description,
+          }
+        }
+        return enriched
+      }
+    }
+    return seeded
+  }
+
   const fromModel = await planWithModel(input)
   if (fromModel) return fromModel
   return defaultPlan(input)
+}
+
+function planFromListing(
+  input: StoreBuildInput,
+  listing: Awaited<ReturnType<typeof extractMarketplaceListing>>,
+): StoreBuildPlan {
+  const dutch = input.locale.toLowerCase().startsWith('nl')
+  const currency = listing.currency || input.currency
+  const basePrice = listing.priceAmount && listing.priceAmount > 0 ? listing.priceAmount : 2_999
+  const shopName =
+    listing.brand ||
+    listing.title.split(/\s+/).slice(0, 3).join(' ') ||
+    (dutch ? 'Nieuwe winkel' : 'New shop')
+
+  const heroImages = listing.images.slice(0, 4).map((url) => ({
+    url,
+    alt: listing.title,
+  }))
+
+  const products: StoreBuildProductPlan[] = [
+    {
+      title: listing.title.slice(0, 200),
+      description: listing.description || input.prompt || listing.title,
+      collectionHandle: 'bestsellers',
+      images: heroImages,
+      options: [{ name: dutch ? 'Optie' : 'Option', values: ['Default'] }],
+      variants: [
+        {
+          title: 'Default',
+          price: { amount: basePrice, currency },
+          compareAtPrice: { amount: Math.round(basePrice * 1.2), currency },
+          optionValues: { [dutch ? 'Optie' : 'Option']: 'Default' },
+          sku: 'HERO-001',
+          inventory: 50,
+        },
+      ],
+    },
+  ]
+
+  for (let i = 1; i < input.productCount; i += 1) {
+    const amount = Math.max(499, basePrice + (i % 5) * 300 - 100)
+    const imageUrl = listing.images[i % Math.max(1, listing.images.length)]
+    products.push({
+      title: dutch
+        ? `${listing.title.slice(0, 40)} — variant ${i + 1}`
+        : `${listing.title.slice(0, 40)} — pick ${i + 1}`,
+      description: listing.description.slice(0, 400) || input.prompt,
+      collectionHandle: i % 2 === 0 ? 'new-arrivals' : 'essentials',
+      images: imageUrl ? [{ url: imageUrl, alt: listing.title }] : [],
+      options: [{ name: dutch ? 'Maat' : 'Size', values: ['S', 'M', 'L'] }],
+      variants: [
+        {
+          title: 'M',
+          price: { amount, currency },
+          compareAtPrice: null,
+          optionValues: { [dutch ? 'Maat' : 'Size']: 'M' },
+          sku: `SKU-${i + 1}`,
+          inventory: 25,
+        },
+      ],
+    })
+  }
+
+  return storeBuildPlanSchema.parse({
+    shopName: shopName.slice(0, 120),
+    tagline: dutch
+      ? 'Geïnspireerd op je productlink — klaar om te verkopen.'
+      : 'Inspired by your product link — ready to sell.',
+    industryHint: 'ecommerce',
+    announcement: dutch
+      ? `NIEUW BINNEN · GEÏMPORTEERD VANUIT ${listing.marketplace.toUpperCase()} · WELCOME10`
+      : `JUST DROPPED · INSPIRED BY ${listing.marketplace.toUpperCase()} · USE WELCOME10`,
+    collections: [
+      {
+        title: dutch ? 'Bestsellers' : 'Bestsellers',
+        handle: 'bestsellers',
+        description: dutch ? 'Hero product en top picks.' : 'Hero product and top picks.',
+      },
+      {
+        title: dutch ? 'Nieuw' : 'New arrivals',
+        handle: 'new-arrivals',
+        description: dutch ? 'Verse toevoegingen.' : 'Fresh additions.',
+      },
+      {
+        title: dutch ? 'Essentials' : 'Essentials',
+        handle: 'essentials',
+        description: dutch ? 'Aanvullende producten.' : 'Companion products.',
+      },
+    ],
+    products,
+    shipping: {
+      name: dutch ? 'Standaard verzending' : 'Standard shipping',
+      price: { amount: 495, currency },
+      freeAboveSubtotal: { amount: 7_500, currency },
+    },
+    welcomeDiscountCode: 'WELCOME10',
+    welcomeDiscountBps: 1_000,
+  })
 }
 
 function buildShopHomeSections(plan: StoreBuildPlan, currency: string): Section[] {
   const featured = plan.products[0]
   const price = featured?.variants[0]?.price
   const priceLine = price ? formatMoney(price.amount, currency) : ''
+  const productCards = plan.products.slice(0, 8).map((product) => {
+    const variantPrice = product.variants[0]?.price
+    return {
+      image: product.images?.[0]?.url || '',
+      title: product.title,
+      price: variantPrice ? formatMoney(variantPrice.amount, currency) : '',
+      compareAt: '',
+      badge: product.collectionHandle || '',
+      meta: '',
+      href: `/shop/${slugify(product.title)}`,
+    }
+  })
 
   return [
     createSection('header-shop-announce-01', {
@@ -213,7 +348,7 @@ function buildShopHomeSections(plan: StoreBuildPlan, currency: string): Section[
       links: [
         { label: 'Shop', href: '/shop' },
         { label: 'Bestsellers', href: '/shop' },
-        { label: 'Cart', href: '/checkout' },
+        { label: 'Cart', href: '/cart' },
       ],
       ctaLabel: 'Shop now',
       ctaHref: '/shop',
@@ -226,14 +361,22 @@ function buildShopHomeSections(plan: StoreBuildPlan, currency: string): Section[
       ctaHref: '/shop',
       align: 'center',
     }),
-    createSection('features-grid-01', {
-      heading: 'Shop by collection',
-      intro: 'Curated catalogue — collections, variants, and checkout ready.',
-      items: plan.collections.slice(0, 3).map((collection) => ({
-        title: collection.title,
-        description: collection.description || collection.title,
-        icon: 'package',
-      })),
+    createSection('product-card-grid-01', {
+      eyebrow: 'BEST SELLERS',
+      title: 'Shop the favourites',
+      subtitle: plan.tagline,
+      viewAllHref: '/shop',
+      viewAllLabel: 'View all',
+      columns: '3',
+      products: productCards.slice(0, 6),
+    }),
+    createSection('product-carousel-01', {
+      eyebrow: 'MORE TO EXPLORE',
+      title: 'New & notable',
+      subtitle: '',
+      viewAllHref: '/shop',
+      viewAllLabel: 'Shop all',
+      products: productCards,
     }),
     ...(featured
       ? [
@@ -245,11 +388,21 @@ function buildShopHomeSections(plan: StoreBuildPlan, currency: string): Section[
             ratingCount: 'New shop',
             priceLine,
             ctaLabel: 'Add to cart',
-            ctaHref: '/checkout',
+            ctaHref: '/cart',
             thickBorders: false,
           }),
         ]
       : []),
+    createSection('product-category-tiles-01', {
+      title: 'Shop by collection',
+      subtitle: 'Curated catalogue — collections, variants, and checkout ready.',
+      categories: plan.collections.slice(0, 3).map((collection) => ({
+        image: '',
+        title: collection.title,
+        href: '/shop',
+        meta: collection.description.slice(0, 48),
+      })),
+    }),
     createSection('cta-banner-01', {
       heading: plan.tagline || 'Ready when you are',
       body: `Use ${plan.welcomeDiscountCode} at checkout.`,
@@ -275,7 +428,10 @@ function toCreateProduct(
     description: product.description,
     status: 'active',
     options: product.options,
-    images: [],
+    images: (product.images ?? []).map((image) => ({
+      url: image.url,
+      alt: image.alt || product.title,
+    })),
     variants: product.variants.map((variant) => ({
       title: variant.title,
       sku: variant.sku,
@@ -314,6 +470,7 @@ export async function executeStoreBuild(
       await updateSite(tx, ctx.tenantId, input.siteId, {
         theme: { ...site.theme, ...themePatch },
         name: site.name.trim() ? site.name : plan.shopName,
+        kind: 'ecommerce',
       })
     })
     steps.push({ id: 'theme', label: 'Apply store theme', status: 'done', detail: input.themePreset })
@@ -475,21 +632,41 @@ export async function executeStoreBuild(
         shopPageId = created.id
       }
       if (shopPageId) {
-        await publishPage(tx, ctx.tenantId, shopPageId)
+        if (input.publish !== false) await publishPage(tx, ctx.tenantId, shopPageId)
         pageIds.push(shopPageId)
       }
 
       if (input.updateHome) {
         const home = await findPageByPath(tx, ctx.tenantId, input.siteId, '/')
+        const homeSections = buildShopHomeSections(plan, input.currency)
         if (home) {
-          const merged = [
-            createSection('header-shop-announce-01', { messages: plan.announcement }),
-            ...home.sections.filter((section) => section.block !== 'header-shop-announce-01'),
-          ]
-          const updated = await updatePage(tx, ctx.tenantId, home.id, { sections: merged })
+          const updated = await updatePage(tx, ctx.tenantId, home.id, {
+            title: plan.shopName,
+            sections: homeSections,
+            seo: {
+              title: plan.shopName,
+              description: plan.tagline,
+              noIndex: false,
+            },
+          })
           const homeId = updated?.id ?? home.id
-          await publishPage(tx, ctx.tenantId, homeId)
+          if (input.publish !== false) await publishPage(tx, ctx.tenantId, homeId)
           pageIds.push(homeId)
+        } else {
+          const created = await insertPage(tx, {
+            tenantId: ctx.tenantId,
+            siteId: input.siteId,
+            path: '/',
+            title: plan.shopName,
+            seo: {
+              title: plan.shopName,
+              description: plan.tagline,
+              noIndex: false,
+            },
+            sections: homeSections,
+          })
+          if (input.publish !== false) await publishPage(tx, ctx.tenantId, created.id)
+          pageIds.push(created.id)
         }
       }
     })

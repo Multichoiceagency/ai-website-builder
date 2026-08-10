@@ -5,13 +5,14 @@ const props = withDefaults(
   defineProps<{
     brand?: string
     logo?: string
+    logoHeight?: 'sm' | 'md' | 'lg' | 'xl'
     layout?: 'left' | 'center' | 'split'
     links?: { label: string; href: string }[]
     ctaLabel?: string
     ctaHref?: string
     sticky?: boolean
   }>(),
-  { brand: '', logo: '', layout: 'left', links: () => [], ctaLabel: '', ctaHref: '', sticky: true },
+  { brand: '', logo: '', logoHeight: 'md', layout: 'left', links: () => [], ctaLabel: '', ctaHref: '', sticky: true },
 )
 
 /** Site business / SEO logo from editor or storefront (empty string when unset). */
@@ -21,6 +22,19 @@ const resolvedLogo = computed(() => {
   const section = (props.logo ?? '').trim()
   if (section) return section
   return String(unref(siteBrandLogo) ?? '').trim()
+})
+
+const logoClass = computed(() => {
+  switch (props.logoHeight) {
+    case 'sm':
+      return 'h-6 w-auto'
+    case 'lg':
+      return 'h-12 w-auto'
+    case 'xl':
+      return 'h-16 w-auto'
+    default:
+      return 'h-8 w-auto'
+  }
 })
 
 const layout = toRef(props, 'layout')
@@ -65,7 +79,7 @@ const ctaClass = computed(() => {
           v-if="resolvedLogo"
           :src="resolvedLogo"
           :alt="brand || 'Logo'"
-          class="h-8 w-auto"
+          :class="logoClass"
           width="32"
           height="32"
         />

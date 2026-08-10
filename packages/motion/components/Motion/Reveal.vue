@@ -1,28 +1,18 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import gsap from 'gsap'
 import type { SectionMotion } from '@platform/schemas'
 
 /**
  * Applies a stored motion intent to its slot.
  *
- * The element renders in its hidden state during SSR and is released either
- * on mount (`load`) or on first intersection (`viewport`). CSS carries the
- * reduced-motion and no-scripting fallbacks, so a failed observer can never
- * strand content invisible.
- *
- * Changing the intent in the editor (Style → Animation) must replay: the
- * observer and hidden→visible transition are re-armed whenever the recipe
- * changes, not only on first mount.
+ * CSS presets remain the default. Hero / product reveals also run a short GSAP
+ * tween when the library is available (Lenis+GSAP host plugin).
  */
 const props = withDefaults(
   defineProps<{
     motion?: Partial<SectionMotion> | null
-    /** Element to render. Blocks pass `section`, `header`, `footer`, … */
     as?: string
-    /**
-     * Extra CSS custom properties merged onto the wrapper (section style
-     * overrides: scale, colour tokens). Motion vars win on name clash.
-     */
     vars?: Record<string, string> | null
   }>(),
   { motion: null, as: 'div', vars: null },
@@ -42,6 +32,9 @@ const root = ref<HTMLElement | null>(null)
 const state = ref<'hidden' | 'visible'>(preset.value === 'none' ? 'visible' : 'hidden')
 let observer: IntersectionObserver | null = null
 let loadFrame = 0
+let tween: gsap.core.Tween | null = null
+
+const GSAP_PRESETS = new Set(['hero-reveal', 'product-reveal', 'fade-up', 'scale-in', 'blur-in'])
 
 function clearObserver() {
   observer?.disconnect()
@@ -52,8 +45,24 @@ function clearObserver() {
   }
 }
 
+function playGsap() {
+  const el = root.value
+  if (!el || !GSAP_PRESETS.has(preset.value)) return
+  if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return
+  }
+  tween?.kill()
+  const from: gsap.TweenVars = { autoAlpha: 0, duration: 0.7, ease: 'power2.out', delay: props.motion?.delay ?? 0 }
+  if (preset.value === 'fade-up' || preset.value === 'hero-reveal' || preset.value === 'product-reveal') from.y = 28
+  if (preset.value === 'scale-in') from.scale = 0.94
+  if (preset.value === 'blur-in') from.filter = 'blur(12px)'
+  tween = gsap.fromTo(el, from, { autoAlpha: 1, y: 0, scale: 1, filter: 'blur(0px)', duration: from.duration, ease: from.ease, delay: from.delay })
+}
+
 function arm() {
   clearObserver()
+  tween?.kill()
+  tween = null
 
   if (preset.value === 'none' || trigger.value === 'none') {
     state.value = 'visible'
@@ -63,10 +72,10 @@ function arm() {
   state.value = 'hidden'
 
   if (trigger.value === 'load') {
-    // One frame in the hidden state, so the transition has something to run from.
     loadFrame = requestAnimationFrame(() => {
       loadFrame = 0
       state.value = 'visible'
+      playGsap()
     })
     return
   }
@@ -74,6 +83,7 @@ function arm() {
   const element = root.value
   if (!element || typeof IntersectionObserver === 'undefined') {
     state.value = 'visible'
+    playGsap()
     return
   }
 
@@ -82,6 +92,7 @@ function arm() {
       for (const entry of entries) {
         if (entry.isIntersecting) {
           state.value = 'visible'
+          playGsap()
           if (once.value) clearObserver()
         } else if (!once.value) {
           state.value = 'hidden'
@@ -114,6 +125,7 @@ watch(
 
 onBeforeUnmount(() => {
   clearObserver()
+  tween?.kill()
 })
 </script>
 

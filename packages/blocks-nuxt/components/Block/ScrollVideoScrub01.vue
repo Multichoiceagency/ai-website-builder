@@ -34,6 +34,9 @@ const frameIndex = ref(0)
 const reduced = ref(false)
 const ready = ref(false)
 const bitmaps = ref<(ImageBitmap | null)[]>([])
+/** Editor overflow scroller — sticky is unreliable here; pin via progress instead. */
+const editorScrollParent = ref<HTMLElement | null>(null)
+const stickyHeightPx = ref(0)
 
 let raf = 0
 let observer: IntersectionObserver | null = null
@@ -51,6 +54,23 @@ const count = computed(() => Math.max(0, Math.floor(Number(props.frameCount) || 
 const scrollStyle = computed(() => ({
   height: `${props.scrollHeightVh}vh`,
 }))
+
+const pinStyle = computed(() => {
+  if (editorScrollParent.value && stickyHeightPx.value > 0) {
+    return {
+      height: `${stickyHeightPx.value}px`,
+      // Avoid sticky inside overflow editors — keep the pin at the scrollport top
+      // via position sticky still when it works; fall back to relative fill.
+      position: 'sticky' as const,
+      top: '0px',
+    }
+  }
+  return {
+    height: '100dvh',
+    position: 'sticky' as const,
+    top: '0px',
+  }
+})
 
 function absoluteUrl(path: string): string {
   if (!path) return ''
@@ -76,13 +96,50 @@ const activeStep = computed(() => {
   return current
 })
 
+function resolveScrollParent(element: HTMLElement): HTMLElement | Document {
+  const editor = element.closest<HTMLElement>('[data-editor-scroll]')
+  if (editor) return editor
+  return (document.scrollingElement as HTMLElement | null) ?? document.documentElement
+}
+
+function isDocumentScroller(scroller: HTMLElement | Document): boolean {
+  if (scroller === document || scroller === document.documentElement || scroller === document.body) {
+    return true
+  }
+  if (scroller === document.scrollingElement) return true
+  return false
+}
+
 function measure() {
   const element = root.value
   if (!element) return
-  const rect = element.getBoundingClientRect()
-  const total = rect.height - window.innerHeight
-  const travelled = -rect.top
-  progress.value = total > 0 ? Math.min(Math.max(travelled / total, 0), 1) : 0
+
+  const scroller = resolveScrollParent(element)
+  const inEditor = scroller instanceof HTMLElement && scroller.hasAttribute('data-editor-scroll')
+  editorScrollParent.value = inEditor ? scroller : null
+
+  let nextProgress = 0
+
+  if (isDocumentScroller(scroller)) {
+    const rect = element.getBoundingClientRect()
+    const viewportH = window.innerHeight
+    stickyHeightPx.value = viewportH
+    const total = rect.height - viewportH
+    const travelled = -rect.top
+    nextProgress = total > 0 ? travelled / total : 0
+  } else {
+    const parent = scroller as HTMLElement
+    const parentRect = parent.getBoundingClientRect()
+    const rect = element.getBoundingClientRect()
+    const viewportH = parent.clientHeight
+    stickyHeightPx.value = viewportH
+    // Progress relative to the scrollport, not the window.
+    const total = rect.height - viewportH
+    const travelled = parentRect.top - rect.top
+    nextProgress = total > 0 ? travelled / total : 0
+  }
+
+  progress.value = Math.min(Math.max(nextProgress, 0), 1)
   const max = Math.max(count.value - 1, 0)
   frameIndex.value = Math.round(progress.value * max)
   paint()
@@ -163,6 +220,16 @@ onMounted(() => {
   reduced.value = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   void loadFrames()
 
+  let observerRoot: Element | null = null
+  if (root.value) {
+    const scroller = resolveScrollParent(root.value)
+    if (scroller instanceof HTMLElement && scroller.hasAttribute('data-editor-scroll')) {
+      editorScrollParent.value = scroller
+      stickyHeightPx.value = scroller.clientHeight
+      observerRoot = scroller
+    }
+  }
+
   if (reduced.value || typeof IntersectionObserver === 'undefined') {
     progress.value = 1
     frameIndex.value = Math.max(count.value - 1, 0)
@@ -179,7 +246,7 @@ onMounted(() => {
         }
       }
     },
-    { threshold: 0 },
+    { threshold: 0, root: observerRoot },
   )
   if (root.value) observer.observe(root.value)
 })
@@ -198,26 +265,30 @@ watch(
 
 <template>
   <div ref="root" class="relative w-full bg-black text-white" :style="scrollStyle">
-    <div class="sticky top-0 h-[100dvh] w-full overflow-hidden">
+    <div class="relative w-full overflow-hidden" :style="pinStyle">
       <canvas ref="canvasEl" class="absolute inset-0 h-full w-full" aria-hidden="true" />
       <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/25" />
 
       <div
-        v-if="!ready && count > 0"
+        v-if="count === 0 || !resolvedMediaId"
+        class="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/70"
+      >
+        {{
+          count === 0
+            ? 'No scroll frames yet. Upload a video in Media and wait until frames are ready, then pick it here.'
+            : 'Pick a library video with scroll frames ready to scrub this section.'
+        }}
+      </div>
+
+      <div
+        v-else-if="!ready"
         class="absolute inset-0 grid place-items-center text-sm text-white/70"
       >
         Loading frames…
       </div>
 
       <div
-        v-else-if="!count || !resolvedMediaId"
-        class="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/70"
-      >
-        Pick a library video with scroll frames ready to scrub this section.
-      </div>
-
-      <div
-        v-if="activeStep"
+        v-if="activeStep && count > 0"
         class="absolute inset-x-0 bottom-[12%] z-10 mx-auto max-w-2xl px-6 text-center transition-opacity duration-300"
       >
         <h2

@@ -26,6 +26,8 @@ import {
   Navigation,
   Package,
   Palette,
+  PanelBottom,
+  PanelTop,
   Percent,
   Plug,
   Receipt,
@@ -84,6 +86,8 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: Globe,
     items: [
       { label: 'Pages', to: '/website/pages', icon: FileText, permission: 'page:read' },
+      { label: 'Header', to: '/website/header', icon: PanelTop, permission: 'page:write' },
+      { label: 'Footer', to: '/website/footer', icon: PanelBottom, permission: 'page:write' },
       { label: 'Blog', to: '/website/blog', icon: LayoutTemplate, permission: 'page:read' },
       { label: 'Navigation', to: '/website/navigation', icon: Navigation, permission: 'site:read' },
       { label: 'Media', to: '/website/media', icon: Image, permission: 'media:read' },
@@ -101,7 +105,9 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: ShoppingBag,
     items: [
       { label: 'Overview', to: '/commerce', icon: Store, permission: 'commerce:read' },
-      { label: 'Store builder', to: '/commerce/builder', icon: LayoutTemplate, permission: 'commerce:read', phase: 5 },
+      { label: 'Store builder', to: '/commerce/builder', icon: LayoutTemplate, permission: 'commerce:read' },
+      { label: 'Header', to: '/commerce/header', icon: PanelTop, permission: 'page:write' },
+      { label: 'Footer', to: '/commerce/footer', icon: PanelBottom, permission: 'page:write' },
       { label: 'Products', to: '/commerce/products', icon: Package, permission: 'commerce:read' },
       { label: 'Collections', to: '/commerce/collections', icon: Tags, permission: 'commerce:read' },
       { label: 'Inventory', to: '/commerce/inventory', icon: Warehouse, permission: 'commerce:read' },

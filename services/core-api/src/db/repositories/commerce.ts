@@ -269,6 +269,19 @@ export async function findProductById(tx: Tx, tenantId: string, productId: strin
   return row ? toProduct(tx, tenantId, row) : null
 }
 
+export async function findProductByHandle(tx: Tx, tenantId: string, handle: string): Promise<Product | null> {
+  const [row] = await tx<ProductRow[]>`
+    SELECT p.id, p.title, p.handle, p.status, p.description, p.tax_rate_bps, p.options, p.images,
+           p.created_at, p.updated_at,
+           agg.variant_count, agg.min_price, agg.price_currency, inv.inventory_quantity
+    FROM commerce_products p
+    ${PRODUCT_AGGREGATES(tx)}
+    WHERE p.tenant_id = ${tenantId} AND p.handle = ${handle}
+    LIMIT 1
+  `
+  return row ? toProduct(tx, tenantId, row) : null
+}
+
 export async function productHandleTaken(tx: Tx, tenantId: string, handle: string): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
     SELECT id FROM commerce_products WHERE tenant_id = ${tenantId} AND handle = ${handle} LIMIT 1

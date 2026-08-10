@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   STORE_BUILDER_DEV_THEME,
   STORE_BUILDER_THEME_PRESETS,
@@ -10,15 +10,20 @@ import {
 } from '@platform/schemas'
 
 /**
- * Ecommerce store builder — one prompt → full shop seed.
- * Dev chrome tokens from ui-ux-pro-max “OpenWA Store Builder”.
- * Capability map aligned with Medusa / Shopify / Payload ecommerce docs.
+ * Ecommerce store builder — product URL or prompt → full shop seed.
+ * Distinct from Website → Generate (brochure pages only).
  */
+
+definePageMeta({ layout: 'default' })
 
 const api = useApi()
 const activeSiteId = useActiveSiteId()
 const theme = STORE_BUILDER_DEV_THEME
 
+type BuildMode = 'url' | 'prompt'
+
+const mode = ref<BuildMode>('url')
+const sourceUrl = ref('')
 const prompt = ref(
   'Build a modern essentials store for everyday home goods. Warm editorial look, bestsellers + new arrivals, EUR pricing, free shipping over €75.',
 )
@@ -26,6 +31,7 @@ const currency = ref('EUR')
 const productCount = ref(6)
 const themePreset = ref<(typeof STORE_BUILDER_THEME_PRESETS)[number]>('editorial-ink')
 const updateHome = ref(true)
+const publish = ref(true)
 const busy = ref(false)
 const error = ref('')
 const plan = ref<StoreBuildPlan | null>(null)
@@ -47,7 +53,32 @@ const themeOptions = STORE_BUILDER_THEME_PRESETS.map((id) => ({
     .join(' '),
 }))
 
-const canBuild = computed(() => Boolean(siteId.value) && prompt.value.trim().length >= 12 && !busy.value)
+function isValidHttpUrl(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+const sourceUrlValid = computed(() => isValidHttpUrl(sourceUrl.value))
+const promptReady = computed(() => prompt.value.trim().length >= 12)
+
+const canBuild = computed(() => {
+  if (!siteId.value || busy.value) return false
+  if (mode.value === 'url') return sourceUrlValid.value || promptReady.value
+  return promptReady.value
+})
+
+watch(mode, (next) => {
+  if (next === 'prompt' && !prompt.value.trim()) {
+    prompt.value =
+      'Build a modern essentials store for everyday home goods. Warm editorial look, bestsellers + new arrivals, EUR pricing, free shipping over €75.'
+  }
+})
 
 async function buildShop() {
   if (!canBuild.value || !siteId.value) return
@@ -64,6 +95,8 @@ async function buildShop() {
       productCount: productCount.value,
       themePreset: themePreset.value,
       updateHome: updateHome.value,
+      publish: publish.value,
+      ...(mode.value === 'url' && sourceUrlValid.value ? { sourceUrl: sourceUrl.value.trim() } : {}),
     }
     const response = await api.post<{ plan: StoreBuildPlan; result: StoreBuildResult }>(
       '/api/v1/commerce/store/build',
@@ -97,10 +130,17 @@ async function buildShop() {
   >
     <UiPageHeader
       title="Ecommerce builder"
-      description="One prompt builds a full shop: theme, collections, variants, shipping, discount, and /shop pages — Medusa / Shopify / Payload shaped."
+      description="Builds a full shop — products, collections, shipping, discount, and home + /shop pages. Not the same as Website → Generate (brochure sites)."
       back="/commerce"
       back-label="Commerce"
     />
+
+    <p class="mx-auto mb-5 max-w-5xl text-[0.875rem] leading-relaxed" :style="{ color: theme.textMuted }">
+      Need a marketing / brochure site instead?
+      <NuxtLink to="/website/generate" class="font-medium underline-offset-2 hover:underline" :style="{ color: theme.cta }">
+        Website → Generate
+      </NuxtLink>
+    </p>
 
     <div class="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
       <section
@@ -114,24 +154,86 @@ async function buildShop() {
           Store builder agent
         </p>
         <h2 class="mt-2 text-[1.35rem] font-semibold tracking-tight" :style="{ fontFamily: theme.fontHeading }">
-          Describe the shop. We seed everything.
+          Seed a complete online shop
         </h2>
         <p class="mt-2 text-[0.875rem] leading-relaxed" :style="{ color: theme.textMuted }">
-          Same surfaces merchants expect from Shopify Online Store, Medusa Admin, and Payload ecommerce:
-          products with variants, collections, inventory location, shipping rates, promo code, theme tokens, and a shop page.
+          Paste an Amazon or AliExpress product URL, or describe the brand. One run creates catalog,
+          collections, inventory location, shipping, a welcome discount, theme tokens, and shop pages —
+          ready for carts and checkout via CommerceProvider.
         </p>
 
-        <label class="mt-5 block text-[0.75rem] font-semibold" :style="{ color: theme.textMuted }" for="shop-prompt">
-          Prompt
-        </label>
-        <textarea
-          id="shop-prompt"
-          v-model="prompt"
-          rows="6"
-          class="mt-1.5 w-full resize-y rounded-xl border px-3.5 py-3 text-[0.9375rem] leading-relaxed outline-none transition-colors duration-200 focus:border-[var(--sb-primary)]"
-          :style="{ borderColor: theme.line, color: theme.text, background: theme.background }"
-          placeholder="e.g. Minimal skincare DTC brand in EUR — clean teal theme, 8 products, bestsellers + new arrivals…"
-        />
+        <div class="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Build mode">
+          <button
+            type="button"
+            role="tab"
+            class="cursor-pointer rounded-lg border px-3.5 py-2 text-[0.8125rem] font-semibold transition-colors"
+            :aria-selected="mode === 'url'"
+            :style="{
+              borderColor: mode === 'url' ? theme.primary : theme.line,
+              background: mode === 'url' ? theme.primary : theme.background,
+              color: mode === 'url' ? '#fff' : theme.text,
+            }"
+            @click="mode = 'url'"
+          >
+            From product URL
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="cursor-pointer rounded-lg border px-3.5 py-2 text-[0.8125rem] font-semibold transition-colors"
+            :aria-selected="mode === 'prompt'"
+            :style="{
+              borderColor: mode === 'prompt' ? theme.primary : theme.line,
+              background: mode === 'prompt' ? theme.primary : theme.background,
+              color: mode === 'prompt' ? '#fff' : theme.text,
+            }"
+            @click="mode = 'prompt'"
+          >
+            From prompt
+          </button>
+        </div>
+
+        <template v-if="mode === 'url'">
+          <label class="mt-5 block text-[0.75rem] font-semibold" :style="{ color: theme.textMuted }" for="shop-url">
+            Product URL
+          </label>
+          <input
+            id="shop-url"
+            v-model="sourceUrl"
+            type="url"
+            class="mt-1.5 w-full rounded-xl border px-3.5 py-3 text-[0.9375rem] outline-none transition-colors duration-200 focus:border-[var(--sb-primary)]"
+            :style="{ borderColor: theme.line, color: theme.text, background: theme.background }"
+            placeholder="https://www.amazon.com/… or https://www.aliexpress.com/…"
+          />
+          <p v-if="sourceUrl.trim() && !sourceUrlValid" class="mt-1.5 text-[0.75rem] text-red-700">
+            Enter a valid http(s) URL.
+          </p>
+          <label class="mt-4 block text-[0.75rem] font-semibold" :style="{ color: theme.textMuted }" for="shop-prompt-url">
+            Extra brief <span class="font-normal">(optional if URL is set)</span>
+          </label>
+          <textarea
+            id="shop-prompt-url"
+            v-model="prompt"
+            rows="3"
+            class="mt-1.5 w-full resize-y rounded-xl border px-3.5 py-3 text-[0.9375rem] leading-relaxed outline-none transition-colors duration-200 focus:border-[var(--sb-primary)]"
+            :style="{ borderColor: theme.line, color: theme.text, background: theme.background }"
+            placeholder="Tone, audience, currency hints…"
+          />
+        </template>
+
+        <template v-else>
+          <label class="mt-5 block text-[0.75rem] font-semibold" :style="{ color: theme.textMuted }" for="shop-prompt">
+            Prompt
+          </label>
+          <textarea
+            id="shop-prompt"
+            v-model="prompt"
+            rows="6"
+            class="mt-1.5 w-full resize-y rounded-xl border px-3.5 py-3 text-[0.9375rem] leading-relaxed outline-none transition-colors duration-200 focus:border-[var(--sb-primary)]"
+            :style="{ borderColor: theme.line, color: theme.text, background: theme.background }"
+            placeholder="e.g. Minimal skincare DTC brand in EUR — clean teal theme, 8 products, bestsellers + new arrivals…"
+          />
+        </template>
 
         <div class="mt-4 grid gap-3 sm:grid-cols-3">
           <label class="block text-[0.75rem] font-semibold" :style="{ color: theme.textMuted }">
@@ -170,7 +272,11 @@ async function buildShop() {
 
         <label class="mt-4 flex cursor-pointer items-center gap-2 text-[0.8125rem]" :style="{ color: theme.textMuted }">
           <input v-model="updateHome" type="checkbox" class="accent-[var(--sb-primary)]" />
-          Also add announcement bar to the site home page
+          Also rewrite the site home page as a shop landing
+        </label>
+        <label class="mt-2 flex cursor-pointer items-center gap-2 text-[0.8125rem]" :style="{ color: theme.textMuted }">
+          <input v-model="publish" type="checkbox" class="accent-[var(--sb-primary)]" />
+          Publish shop (and home) pages after seed
         </label>
 
         <p v-if="!siteId" class="mt-3 text-[0.8125rem] text-red-700">
@@ -204,10 +310,10 @@ async function buildShop() {
             What one run creates
           </h3>
           <ul class="mt-3 space-y-2 text-[0.8125rem] leading-snug" :style="{ color: theme.textMuted }">
-            <li>Theme tokens (Rubik / Nunito Sans · teal/ink presets)</li>
-            <li>Collections + products with variants & inventory</li>
+            <li>Site kind set to <code class="text-[0.75rem]">ecommerce</code></li>
+            <li>Theme tokens + collections + products with variants &amp; inventory</li>
             <li>Standard shipping + WELCOME10 discount</li>
-            <li><code class="text-[0.75rem]">/shop</code> page with announcement, hero, PDP, CTA</li>
+            <li><code class="text-[0.75rem]">/shop</code> (+ optional home) with announcement, hero, PDP, CTA</li>
             <li>Ready for carts / checkout / orders via CommerceProvider</li>
           </ul>
         </section>

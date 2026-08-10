@@ -60,9 +60,11 @@ const workspaceLabel = computed(
 )
 
 const previewUrl = computed(() =>
-  activeSite.value?.primaryHostname
-    ? `http://${activeSite.value.primaryHostname}:3001`
-    : config.public.storefrontUrl,
+  buildStorefrontUrl({
+    storefrontBase: String(config.public.storefrontUrl || 'http://localhost:3001'),
+    primaryHostname: activeSite.value?.primaryHostname,
+    path: '/',
+  }),
 )
 
 const moduleSections = computed(() =>

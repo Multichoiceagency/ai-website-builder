@@ -185,6 +185,27 @@ async function connectGoogle() {
 async function onConnectContinue() {
   const mode = connectMode.value ?? (google.value?.connected ? 'google' : 'manual')
   connectMode.value = mode
+
+  // Prefill from selected GBP location payload when available.
+  const selected = locations.value.find((l) => l.externalId === selectedLocationId.value)
+  if (selected) {
+    if (!businessName.value.trim()) businessName.value = selected.label
+    if (selected.websiteUri && !website.value.trim()) website.value = selected.websiteUri
+    if (selected.cityName && !city.value.trim()) city.value = selected.cityName
+  }
+
+  // Google with a picked location (or none found) can skip the separate select step.
+  if (mode === 'google' && (selectedLocationId.value || locations.value.length === 0)) {
+    await go('connect', 'scan', {
+      connectMode: mode,
+      website: website.value.trim(),
+      businessName: businessName.value.trim(),
+      city: city.value.trim(),
+      locale: locale.value,
+    })
+    return
+  }
+
   await go('connect', 'select', {
     connectMode: mode,
     website: website.value.trim(),
@@ -213,12 +234,18 @@ async function loadLocations() {
     const list = fresh?.locations ?? cached?.locations ?? []
     locations.value = list.map((entry) => {
       const payload = entry.payload as
-        | { storefrontAddress?: { addressLines?: string[] }; title?: string }
+        | {
+            storefrontAddress?: { addressLines?: string[]; locality?: string }
+            title?: string
+            websiteUri?: string
+          }
         | undefined
       return {
         externalId: entry.externalId,
         label: entry.label || payload?.title || entry.externalId,
         address: payload?.storefrontAddress?.addressLines?.join(', ') ?? '',
+        websiteUri: payload?.websiteUri,
+        cityName: payload?.storefrontAddress?.locality,
       }
     })
     if (locations.value.length === 1) selectedLocationId.value = locations.value[0]!.externalId
@@ -226,6 +253,13 @@ async function loadLocations() {
     loadingLocations.value = false
   }
 }
+
+watch(
+  () => [step.value, google.value?.connected] as const,
+  ([current, connected]) => {
+    if (current === 'connect' && connected) void loadLocations()
+  },
+)
 
 async function onSelectContinue() {
   const selected = locations.value.find((l) => l.externalId === selectedLocationId.value)
@@ -322,6 +356,11 @@ onMounted(async () => {
   await load()
   hydrateFromProgress()
 
+  if (route.query.mode === 'one-prompt') {
+    await navigateTo('/website/generate')
+    return
+  }
+
   const preselected = route.query.template
   if (typeof preselected === 'string' && preselected) templateId.value = preselected
 
@@ -337,10 +376,8 @@ onMounted(async () => {
       await refreshCapabilities()
       connectMode.value = 'google'
       await patch({ connectMode: 'google' })
-      if (step.value === 'connect' || step.value === 'account' || step.value === 'intent') {
-        // Stay on connect/select so the user can pick a location.
-        if (step.value === 'connect') await onConnectContinue()
-      }
+      // Stay on Connect and load GBP locations — do not skip the picker.
+      if (step.value === 'connect') await loadLocations()
     }
   }
 
@@ -403,12 +440,16 @@ onMounted(async () => {
       v-model:city="city"
       v-model:locale="locale"
       v-model:connect-mode="connectMode"
+      v-model:selected-location-id="selectedLocationId"
       :google-connected="google?.connected"
       :google-available="google?.available"
       :google-reason="google?.reason"
       :google-callback-status="googleCallbackStatus"
+      :locations="locations"
+      :loading-locations="loadingLocations"
       @connect-google="connectGoogle"
       @continue="onConnectContinue"
+      @refresh-locations="loadLocations"
     />
 
     <OnboardSelectBusiness
@@ -432,8 +473,9 @@ onMounted(async () => {
       :business-name="businessName"
       :city="city"
       :locale="locale"
+      :google-location-id="selectedLocationId"
       @continue="onScanContinue"
-      @back="patch({ step: 'select' })"
+      @back="patch({ step: selectedLocationId ? 'connect' : 'select' })"
     />
 
     <OnboardCommerce

@@ -100,24 +100,39 @@ export const STORE_BUILDER_THEME_SEEDS: Record<
   },
 }
 
-export const storeBuildInputSchema = z.object({
-  /** Natural-language shop brief — one prompt builds the whole shop. */
-  prompt: z.string().trim().min(12).max(4_000),
-  siteId: uuidSchema,
-  currency: currencyCodeSchema.default('EUR'),
-  locale: z.string().min(2).max(12).default('en'),
-  /** How many starter products to seed (Shopify/Medusa-style catalog bootstrap). */
-  productCount: z.number().int().min(2).max(24).default(6),
-  themePreset: z.enum(STORE_BUILDER_THEME_PRESETS).default('editorial-ink'),
-  /** When true, also rewrite the site home page with a shop hero. */
-  updateHome: z.boolean().default(true),
-})
+export const storeBuildInputSchema = z
+  .object({
+    /** Natural-language shop brief — optional when `sourceUrl` is set. */
+    prompt: z.string().trim().max(4_000).default(''),
+    /**
+     * Amazon / AliExpress / any product URL. We extract title, images, price when
+     * the page allows, then seed a full shop around that product.
+     */
+    sourceUrl: z.string().trim().url().max(2_048).optional(),
+    siteId: uuidSchema,
+    currency: currencyCodeSchema.default('EUR'),
+    locale: z.string().min(2).max(12).default('en'),
+    /** How many starter products to seed (Shopify/Medusa-style catalog bootstrap). */
+    productCount: z.number().int().min(2).max(24).default(6),
+    themePreset: z.enum(STORE_BUILDER_THEME_PRESETS).default('editorial-ink'),
+    /** When true, rewrite home into a full ecommerce landing (not just an announcement bar). */
+    updateHome: z.boolean().default(true),
+    /** Publish shop + home pages after seed (still opt-in per ADR-0007 spirit for custom sites). */
+    publish: z.boolean().default(true),
+  })
+  .refine((value) => Boolean(value.sourceUrl) || value.prompt.trim().length >= 12, {
+    message: 'Provide a shop prompt (12+ characters) or a product URL (Amazon / AliExpress).',
+  })
 export type StoreBuildInput = z.infer<typeof storeBuildInputSchema>
 
 export const storeBuildProductPlanSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(5_000).default(''),
   collectionHandle: z.string().min(1).max(80).optional(),
+  images: z
+    .array(z.object({ url: z.string().max(2048), alt: z.string().max(200).default('') }))
+    .max(8)
+    .default([]),
   options: z
     .array(
       z.object({

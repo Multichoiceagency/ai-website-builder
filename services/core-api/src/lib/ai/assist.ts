@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { aiGateway } from '../generation/index.js'
 import { buildAssistCatalogueContext, type CatalogueHit } from './catalogue-context.js'
+import {
+  ensurePlatformKnowledgeSeeded,
+  formatKnowledgeForPrompt,
+  searchKnowledge,
+} from './knowledge-rag.js'
 import { analyzeMotionsitesBrief } from './motionsites-brief-agent.js'
 import { getPrompt } from './prompt-registry.js'
 import { generateGeminiContent, resolveGeminiModel } from './providers/gemini-client.js'
@@ -40,8 +45,19 @@ const assistActionSchema = z.discriminatedUnion('type', [
     url: z.string().url().max(2_048),
   }),
   z.object({
+    type: z.literal('setHeaderLogoSize'),
+    size: z.enum(['sm', 'md', 'lg', 'xl']),
+  }),
+  z.object({
     type: z.literal('insertBlock'),
     blockId: z.string().min(1).max(120),
+  }),
+  z.object({
+    type: z.literal('patchSectionProps'),
+    sectionId: z.string().min(1).max(120),
+    props: z.record(z.unknown()).refine((value) => Object.keys(value).length > 0, {
+      message: 'props must not be empty',
+    }),
   }),
 ])
 
@@ -106,15 +122,20 @@ Rules:
 - Be concise (2–6 short sentences). Plain language.
 - Do not invent facts about their business or their site.
 - Do not claim you changed anything unless you also return structured actions.
+- Prefer structured actions over instructing the user to click the inspector or settings.
+  When they ask to change the site, return JSON actions the UI can apply — do not
+  only describe how they could do it manually.
 - Prefer a single JSON object: {"answer":"...","actions":[...]}.
-  Allowed actions when the user asks to change layout, theme, or header:
+  Allowed actions when the user asks to change layout, theme, header, or section props:
   - {"type":"setContentWidth","width":1600} or "full"|"1280"|"1440"|"1600"
   - {"type":"setPageLayout","maxWidth":1600} (same width tokens)
   - {"type":"setHeaderLogo","url":"https://…/logo.png"}
+  - {"type":"setHeaderLogoSize","size":"sm"|"md"|"lg"|"xl"} (patches logoHeight on header-* sections)
   - {"type":"insertBlock","blockId":"scroll-video-scrub-01"}
+  - {"type":"patchSectionProps","sectionId":"sec_…","props":{…}} (merge props onto one section)
 - If you cannot use JSON, plain text is fine — never invent markup.
-- If they ask to change copy on a section, tell them to select the section
-  and use Ask AI on the canvas toolbar.
+- If they ask to rewrite long copy and you lack a sectionId, tell them to select the
+  section and use Ask AI on the canvas toolbar.
 - If they ask to build a site, point them to Onboarding.
 - When recommending a section or template, cite its exact id from the catalogue.
 - For interactive 3D / scroll-scrub video, prefer block id \`scroll-video-scrub-01\`.
@@ -127,6 +148,8 @@ function assistSystemPrompt(): string {
 export interface AssistOptions {
   /** When false, skip catalogue digest (tests / tiny prompts). Default true. */
   includeCatalogue?: boolean
+  /** Tenant for RAG (platform chunks always included). */
+  tenantId?: string | null
 }
 
 export interface AssistResult {
@@ -150,6 +173,18 @@ export async function assistWithMessage(
   const { digest, hits } = includeCatalogue
     ? buildAssistCatalogueContext(message)
     : { digest: '', hits: [] as CatalogueHit[] }
+
+  await ensurePlatformKnowledgeSeeded()
+  let knowledgeBlock = ''
+  try {
+    const knowledgeHits = await searchKnowledge(message, {
+      tenantId: options.tenantId,
+      limit: 5,
+    })
+    knowledgeBlock = formatKnowledgeForPrompt(knowledgeHits)
+  } catch {
+    knowledgeBlock = ''
+  }
 
   const brief = await analyzeMotionsitesBrief(message, { fetchRemoteMedia: true })
   if (brief.kind === 'exact_island' && brief.islandId) {
@@ -193,25 +228,30 @@ export async function assistWithMessage(
             },
             ...hits.slice(0, 5),
           ],
+      actions: [{ type: 'insertBlock', blockId: 'scroll-video-scrub-01' }],
     }
   }
 
   const llm = aiGateway.available().find((provider) => provider.id !== 'deterministic-composer')
   if (!llm) return null
 
-  const system = digest
-    ? `${assistSystemPrompt()}
+  const parts = [assistSystemPrompt()]
+  if (knowledgeBlock) parts.push(knowledgeBlock)
+  if (digest) {
+    parts.push(`Catalogue context (cite ids from this list only):\n${digest}`)
+  }
+  const system = parts.join('\n\n')
 
-Catalogue context (cite ids from this list only):
-${digest}`
-    : assistSystemPrompt()
+  const userText = knowledgeBlock
+    ? `${message.slice(0, 800)}\n\n${knowledgeBlock.slice(0, 1_500)}`
+    : message.slice(0, 1_000)
 
   if (llm.id === 'google') {
-    return assistViaGemini(message, system, hits)
+    return assistViaGemini(userText, system, hits)
   }
 
   if (llm.id === 'anthropic') {
-    return assistViaAnthropic(message, system, hits)
+    return assistViaAnthropic(userText, system, hits)
   }
 
   return null
@@ -242,6 +282,9 @@ async function assistViaGemini(
               maxWidth: { type: 'STRING' },
               blockId: { type: 'STRING' },
               url: { type: 'STRING' },
+              size: { type: 'STRING' },
+              sectionId: { type: 'STRING' },
+              props: { type: 'OBJECT' },
             },
             required: ['type'],
           },
@@ -302,6 +345,9 @@ async function assistViaAnthropic(
                     maxWidth: {},
                     blockId: { type: 'string' },
                     url: { type: 'string' },
+                    size: { type: 'string' },
+                    sectionId: { type: 'string' },
+                    props: { type: 'object' },
                   },
                   required: ['type'],
                 },

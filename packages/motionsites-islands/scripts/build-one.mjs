@@ -38,6 +38,7 @@ await build({
   resolve: {
     alias: {
       '@shared': join(pkgRoot, 'src/shared'),
+      'react-bits': join(pkgRoot, 'src/shared/react-bits'),
     },
   },
   build: {

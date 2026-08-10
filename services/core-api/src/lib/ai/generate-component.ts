@@ -83,7 +83,7 @@ function targetBriefPreamble(target: ComponentTarget, title: string): string {
     default:
       return [
         `Build a Motionsites-style **${label.toLowerCase()}** titled “${title}”.`,
-        'Single-file React + Tailwind + lucide-react; optional framer-motion/gsap.',
+        'Single-file React + Tailwind + lucide-react; optional framer-motion/gsap/lenis/three/vanta/react-bits.',
         'No third-party CDN assets; theme-friendly colours.',
       ].join('\n')
   }

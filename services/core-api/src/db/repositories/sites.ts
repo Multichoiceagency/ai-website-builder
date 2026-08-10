@@ -1,9 +1,11 @@
 import {
   componentTargetsMapSchema,
+  siteKindSchema,
   siteSchema,
   themeSchema,
   type ComponentTargetsMap,
   type Site,
+  type SiteKind,
   type Theme,
 } from '@platform/schemas'
 import type { Tx } from '../client.js'
@@ -15,6 +17,7 @@ interface SiteRow {
   name: string
   slug: string
   locale: string
+  kind: string
   theme: unknown
   component_targets: unknown
   primary_hostname: string | null
@@ -29,8 +32,7 @@ function toSite(row: SiteRow): Site {
     name: row.name,
     slug: row.slug,
     locale: row.locale,
-    // Parsing fills in any token added since the row was written, so an old
-    // site never renders with missing theme values.
+    kind: siteKindSchema.parse(row.kind || 'website'),
     theme: themeSchema.parse(readJson<Record<string, unknown>>(row.theme, {})),
     componentTargets: componentTargetsMapSchema.parse(
       readJson<Record<string, unknown>>(row.component_targets, {}),
@@ -47,6 +49,7 @@ const SITE_COLUMNS = [
   'name',
   'slug',
   'locale',
+  'kind',
   'theme',
   'component_targets',
   'primary_hostname',
@@ -61,7 +64,13 @@ export async function listSites(tx: Tx, tenantId: string): Promise<Site[]> {
   return rows.map(toSite)
 }
 
-export async function countSites(tx: Tx, tenantId: string): Promise<number> {
+export async function countSites(tx: Tx, tenantId: string, kind?: SiteKind): Promise<number> {
+  if (kind) {
+    const [row] = await tx<{ count: string }[]>`
+      SELECT count(*)::text AS count FROM sites WHERE tenant_id = ${tenantId} AND kind = ${kind}
+    `
+    return Number(row!.count)
+  }
   const [row] = await tx<{ count: string }[]>`
     SELECT count(*)::text AS count FROM sites WHERE tenant_id = ${tenantId}
   `
@@ -82,18 +91,21 @@ export async function insertSite(
     name: string
     slug: string
     locale: string
+    kind?: SiteKind
     theme: Theme
     componentTargets?: ComponentTargetsMap
   },
 ): Promise<Site> {
   const targets = componentTargetsMapSchema.parse(input.componentTargets ?? {})
+  const kind = siteKindSchema.parse(input.kind ?? 'website')
   const [row] = await tx<SiteRow[]>`
-    INSERT INTO sites (tenant_id, name, slug, locale, theme, component_targets)
+    INSERT INTO sites (tenant_id, name, slug, locale, kind, theme, component_targets)
     VALUES (
       ${input.tenantId},
       ${input.name},
       ${input.slug},
       ${input.locale},
+      ${kind},
       ${jsonParam(tx, input.theme)},
       ${jsonParam(tx, targets)}
     )
@@ -109,17 +121,16 @@ export async function updateSite(
   patch: {
     name?: string
     locale?: string
+    kind?: SiteKind
     theme?: Theme
     componentTargets?: ComponentTargetsMap
   },
 ): Promise<Site | null> {
-  // COALESCE with an explicitly cast parameter keeps this a single statement
-  // for any combination of supplied fields, and the casts are required because
-  // a bare NULL parameter has no inferable type.
   const [row] = await tx<SiteRow[]>`
     UPDATE sites SET
       name   = COALESCE(${patch.name ?? null}::text, name),
       locale = COALESCE(${patch.locale ?? null}::text, locale),
+      kind   = COALESCE(${patch.kind ?? null}::text, kind),
       theme  = COALESCE(${patch.theme ? jsonParam(tx, patch.theme) : null}::jsonb, theme),
       component_targets = COALESCE(
         ${patch.componentTargets ? jsonParam(tx, patch.componentTargets) : null}::jsonb,
@@ -148,11 +159,6 @@ export async function insertDomain(
   }
 }
 
-/**
- * Host → (tenant, site). Calls the SECURITY DEFINER function because `domains`
- * is behind RLS and the storefront has no tenant context yet — see the comment
- * on `resolve_site_by_host` in migration 0001.
- */
 export async function resolveSiteByHost(
   tx: Tx,
   hostname: string,

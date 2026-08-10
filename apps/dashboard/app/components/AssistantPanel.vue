@@ -33,7 +33,9 @@ type AssistActionPayload =
   | { type: 'setContentWidth'; width: 'full' | 'content' | 'wide' | '1280' | '1440' | '1600' | number }
   | { type: 'setPageLayout'; maxWidth: 'full' | 'content' | 'wide' | '1280' | '1440' | '1600' | number }
   | { type: 'setHeaderLogo'; url: string }
+  | { type: 'setHeaderLogoSize'; size: 'sm' | 'md' | 'lg' | 'xl' }
   | { type: 'insertBlock'; blockId: string }
+  | { type: 'patchSectionProps'; sectionId: string; props: Record<string, unknown> }
 
 function friendlyAssistError(error: unknown): string {
   if (!(error instanceof ApiError)) return 'That did not work. Try one of the actions below.'
@@ -139,6 +141,46 @@ async function applyAssistActions(actions: AssistActionPayload[] | undefined) {
         )
         await api.patch(`/api/v1/pages/${currentPageId.value}`, { sections })
         say('assistant', 'Header logo updated on this page.')
+      } else if (action.type === 'setHeaderLogoSize') {
+        if (!currentPageId.value) {
+          say('assistant', 'Open a page in the editor, then ask again to set the header logo size.')
+          continue
+        }
+        const page = await api.get<{
+          sections: { id: string; block: string; props?: Record<string, unknown> }[]
+        }>(`/api/v1/pages/${currentPageId.value}`)
+        const headers = page.sections.filter((section) => section.block.startsWith('header-'))
+        if (!headers.length) {
+          say('assistant', 'No header section on this page yet. Insert a header block first.')
+          continue
+        }
+        const sections = page.sections.map((section) =>
+          section.block.startsWith('header-')
+            ? { ...section, props: { ...(section.props ?? {}), logoHeight: action.size } }
+            : section,
+        )
+        await api.patch(`/api/v1/pages/${currentPageId.value}`, { sections })
+        say('assistant', `Header logo size is now ${action.size}.`)
+      } else if (action.type === 'patchSectionProps') {
+        if (!currentPageId.value) {
+          say('assistant', 'Open a page in the editor, then ask again to update that section.')
+          continue
+        }
+        const page = await api.get<{
+          sections: { id: string; block: string; props?: Record<string, unknown> }[]
+        }>(`/api/v1/pages/${currentPageId.value}`)
+        const target = page.sections.find((section) => section.id === action.sectionId)
+        if (!target) {
+          say('assistant', `No section with id \`${action.sectionId}\` on this page.`)
+          continue
+        }
+        const sections = page.sections.map((section) =>
+          section.id === action.sectionId
+            ? { ...section, props: { ...(section.props ?? {}), ...action.props } }
+            : section,
+        )
+        await api.patch(`/api/v1/pages/${currentPageId.value}`, { sections })
+        say('assistant', `Updated props on section \`${action.sectionId}\`.`)
       } else if (action.type === 'insertBlock' && action.blockId) {
         if (currentPageId.value) {
           emit('insert-catalogue', {

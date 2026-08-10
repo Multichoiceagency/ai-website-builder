@@ -7,6 +7,8 @@ export interface BusinessLocationOption {
   externalId: string
   label: string
   address?: string
+  websiteUri?: string
+  cityName?: string
 }
 
 const props = defineProps<{

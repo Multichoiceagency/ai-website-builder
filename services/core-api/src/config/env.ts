@@ -34,6 +34,16 @@ const envSchema = z.object({
 
   CORE_API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   CORE_API_HOST: z.string().default('0.0.0.0'),
+  /**
+   * Public HTTPS origin of this API (Coolify FQDN). Required for OpenWA/Nango
+   * webhooks and any absolute URL returned to other hosts. Local default only.
+   */
+  CORE_API_URL: z.string().url().default('http://localhost:4000'),
+  DASHBOARD_URL: optionalUrl,
+  STOREFRONT_URL: optionalUrl,
+  /** Edge hostname for `{slug}.{edge}` storefront previews. */
+  PLATFORM_EDGE_HOSTNAME: optionalNonEmpty,
+  STOREFRONT_PUBLIC_HOST: optionalNonEmpty,
 
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
   SESSION_TTL_SECONDS: z.coerce.number().int().min(300).default(604_800),

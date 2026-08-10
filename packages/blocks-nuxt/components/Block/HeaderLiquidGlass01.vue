@@ -17,6 +17,7 @@ const props = withDefaults(
   defineProps<{
     brand?: string
     logo?: string
+    logoHeight?: 'sm' | 'md' | 'lg' | 'xl'
     trademark?: boolean
     layout?: 'left' | 'center' | 'split'
     links?: { label: string; href: string }[]
@@ -26,6 +27,7 @@ const props = withDefaults(
   {
     brand: 'Wanderful',
     logo: '',
+    logoHeight: 'md',
     trademark: true,
     layout: 'split',
     links: () => [
@@ -40,6 +42,19 @@ const props = withDefaults(
 )
 
 const logoSrc = computed(() => (props.logo ?? '').trim())
+
+const logoClass = computed(() => {
+  switch (props.logoHeight) {
+    case 'sm':
+      return 'h-5 w-auto'
+    case 'lg':
+      return 'h-10 w-auto'
+    case 'xl':
+      return 'h-14 w-auto'
+    default:
+      return 'h-7 w-auto'
+  }
+})
 
 const headerClass = computed(() => {
   switch (props.layout) {
@@ -76,7 +91,7 @@ const navClass = computed(() => {
           v-if="logoSrc"
           :src="logoSrc"
           :alt="brand"
-          class="h-7 w-auto"
+          :class="logoClass"
           width="28"
           height="28"
         />

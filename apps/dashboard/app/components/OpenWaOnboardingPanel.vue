@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { WhatsappConnectionStatus } from '@platform/schemas'
 
 /**
- * Tenant OpenWA onboarding — enter your own gateway URL + API key, copy the
- * webhook, follow the safety checklist. Platform `.env` remains a fallback.
+ * Tenant OpenWA onboarding — save gateway → create session & scan QR → wait until ready.
+ * Webhook URL comes from the API (`connection.webhookUrl`); never invent one from an empty coreApiUrl.
  */
 const props = defineProps<{
   connection: WhatsappConnectionStatus | null
@@ -29,16 +29,46 @@ const dashboardUrl = ref('')
 const apiKey = ref('')
 const webhookSecret = ref('')
 
+const sessionId = ref('')
+const qrCode = ref('')
+const sessionStatus = ref('')
+const qrPolling = ref(false)
+const statusPolling = ref(false)
+
+let qrPollTimer: ReturnType<typeof setInterval> | null = null
+let statusPollTimer: ReturnType<typeof setInterval> | null = null
+
 watch(
   () => props.connection,
   (value) => {
     if (!value) return
-    baseUrl.value = value.source === 'tenant' ? (value.baseUrl ?? '') : (value.baseUrl ?? 'http://localhost:2785')
-    dashboardUrl.value = value.dashboardUrl ?? value.baseUrl ?? 'http://localhost:2785'
+    baseUrl.value = value.baseUrl ?? ''
+    dashboardUrl.value = value.dashboardUrl ?? value.baseUrl ?? ''
     if (!value.configured || !value.onboardingComplete) panelOpen.value = true
+
+    const ready = value.sessions?.some((session) => isReadyStatus(session.status))
+    if (ready) {
+      stopStatusPolling()
+      const match = value.sessions?.find((session) => isReadyStatus(session.status))
+      if (match) {
+        sessionId.value = match.id
+        sessionStatus.value = match.status
+      }
+    }
   },
   { immediate: true },
 )
+
+onBeforeUnmount(() => {
+  stopQrPolling()
+  stopStatusPolling()
+})
+
+const displayWebhookUrl = computed(
+  () => props.webhookUrl || props.connection?.webhookUrl || '',
+)
+
+const urlPlaceholder = computed(() => props.connection?.baseUrl ?? '')
 
 const gatewayLabel = computed(() => {
   if (props.connection?.reachable) return 'Online'
@@ -46,10 +76,39 @@ const gatewayLabel = computed(() => {
   return 'Not connected'
 })
 
+const sessionReady = computed(() =>
+  Boolean(
+    isReadyStatus(sessionStatus.value) ||
+      props.connection?.sessions?.some((session) => isReadyStatus(session.status)),
+  ),
+)
+
+function isReadyStatus(status: string | undefined): boolean {
+  if (!status) return false
+  const normalized = status.toLowerCase()
+  return normalized === 'ready' || normalized === 'connected' || normalized === 'authenticated'
+}
+
+function stopQrPolling() {
+  if (qrPollTimer) {
+    clearInterval(qrPollTimer)
+    qrPollTimer = null
+  }
+  qrPolling.value = false
+}
+
+function stopStatusPolling() {
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer)
+    statusPollTimer = null
+  }
+  statusPolling.value = false
+}
+
 async function copyWebhook() {
-  if (!props.webhookUrl) return
+  if (!displayWebhookUrl.value) return
   try {
-    await navigator.clipboard.writeText(props.webhookUrl)
+    await navigator.clipboard.writeText(displayWebhookUrl.value)
     copied.value = true
     setTimeout(() => {
       copied.value = false
@@ -84,6 +143,84 @@ async function saveConnection(markComplete = false) {
   } finally {
     busy.value = false
   }
+}
+
+async function createSessionAndShowQr() {
+  if (!can('crm:write') || !props.connection?.reachable) return
+  error.value = ''
+  busy.value = true
+  qrCode.value = ''
+  sessionStatus.value = ''
+  stopQrPolling()
+  stopStatusPolling()
+  try {
+    const session = await api.post<{ id: string; name: string; status: string }>(
+      '/api/v1/crm/whatsapp/sessions',
+      { name: 'support' },
+    )
+    sessionId.value = session.id
+    sessionStatus.value = session.status
+    startQrPolling(session.id)
+    startStatusPolling()
+  } catch (caught) {
+    error.value = caught instanceof ApiError ? caught.message : 'Could not create the WhatsApp session.'
+  } finally {
+    busy.value = false
+  }
+}
+
+async function fetchQrOnce(id: string) {
+  try {
+    const result = await api.get<{ qrCode: string; status: string }>(
+      `/api/v1/crm/whatsapp/sessions/${encodeURIComponent(id)}/qr`,
+    )
+    if (result.qrCode) qrCode.value = result.qrCode
+    if (result.status) sessionStatus.value = result.status
+    if (result.qrCode || isReadyStatus(result.status)) {
+      stopQrPolling()
+    }
+  } catch {
+    // QR often takes a few seconds after start — keep polling.
+  }
+}
+
+function startQrPolling(id: string) {
+  stopQrPolling()
+  qrPolling.value = true
+  void fetchQrOnce(id)
+  qrPollTimer = setInterval(() => {
+    void fetchQrOnce(id)
+  }, 2000)
+}
+
+async function refreshConnectionStatus() {
+  try {
+    const status = await api.get<WhatsappConnectionStatus>('/api/v1/crm/whatsapp/status')
+    emit('saved', status)
+    const match =
+      (sessionId.value
+        ? status.sessions?.find((session) => session.id === sessionId.value)
+        : undefined) ?? status.sessions?.find((session) => isReadyStatus(session.status))
+    if (match) {
+      sessionStatus.value = match.status
+      sessionId.value = match.id
+      if (isReadyStatus(match.status)) {
+        stopQrPolling()
+        stopStatusPolling()
+      }
+    }
+  } catch {
+    // Transient — keep polling.
+  }
+}
+
+function startStatusPolling() {
+  stopStatusPolling()
+  statusPolling.value = true
+  void refreshConnectionStatus()
+  statusPollTimer = setInterval(() => {
+    void refreshConnectionStatus()
+  }, 2000)
 }
 
 async function dismissChecklist() {
@@ -129,70 +266,83 @@ async function dismissChecklist() {
       </p>
       <p v-else-if="savedFlash" class="mb-4 type-caption-12 text-positive">Connection saved.</p>
 
-      <div class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <div class="space-y-4">
+      <ol class="mb-6 space-y-6">
+        <!-- Step 1: Save gateway ------------------------------------------------ -->
+        <li class="space-y-4">
+          <div class="flex items-baseline gap-2">
+            <span class="type-button-12 tabular-nums text-brand">1</span>
+            <h3 class="type-button text-ink">Save gateway</h3>
+          </div>
           <p class="type-caption-12 text-soft">
             Enter the OpenWA gateway this workspace should use. Credentials are stored encrypted per tenant.
             Platform <code class="rounded bg-sunken px-1">.env</code> values are used only when you have not saved your own.
           </p>
 
-          <UiField label="OpenWA base URL" help="HTTP API root of your OpenWA instance.">
-            <template #default="{ id, describedBy }">
-              <UiInput
-                :id="id"
-                v-model="baseUrl"
-                :described-by="describedBy"
-                :disabled="!can('crm:write') || busy"
-                placeholder="http://localhost:2785"
-              />
-            </template>
-          </UiField>
+          <div class="grid gap-4 lg:grid-cols-2">
+            <UiField
+              label="OpenWA base URL"
+              help="Use your public OpenWA HTTPS URL (not localhost in production)"
+            >
+              <template #default="{ id, describedBy }">
+                <UiInput
+                  :id="id"
+                  v-model="baseUrl"
+                  :described-by="describedBy"
+                  :disabled="!can('crm:write') || busy"
+                  :placeholder="urlPlaceholder"
+                />
+              </template>
+            </UiField>
 
-          <UiField label="Dashboard URL" help="Where you open the QR scanner / session UI. Usually the same as the base URL.">
-            <template #default="{ id, describedBy }">
-              <UiInput
-                :id="id"
-                v-model="dashboardUrl"
-                :described-by="describedBy"
-                :disabled="!can('crm:write') || busy"
-                placeholder="http://localhost:2785"
-              />
-            </template>
-          </UiField>
+            <UiField
+              label="Dashboard URL"
+              help="Where you open the QR scanner / session UI. Usually the same as the base URL."
+            >
+              <template #default="{ id, describedBy }">
+                <UiInput
+                  :id="id"
+                  v-model="dashboardUrl"
+                  :described-by="describedBy"
+                  :disabled="!can('crm:write') || busy"
+                  :placeholder="urlPlaceholder"
+                />
+              </template>
+            </UiField>
 
-          <UiField
-            label="API key"
-            :help="connection?.apiKeyConfigured ? 'Leave blank to keep the stored key. Paste a new key to replace it.' : 'Create this in the OpenWA dashboard.'"
-          >
-            <template #default="{ id, describedBy }">
-              <UiInput
-                :id="id"
-                v-model="apiKey"
-                type="password"
-                autocomplete="off"
-                :described-by="describedBy"
-                :disabled="!can('crm:write') || busy"
-                :placeholder="connection?.apiKeyConfigured ? '•••• configured' : 'Paste OpenWA API key'"
-              />
-            </template>
-          </UiField>
+            <UiField
+              label="API key"
+              :help="connection?.apiKeyConfigured ? 'Leave blank to keep the stored key. Paste a new key to replace it.' : 'Create this in the OpenWA dashboard.'"
+            >
+              <template #default="{ id, describedBy }">
+                <UiInput
+                  :id="id"
+                  v-model="apiKey"
+                  type="password"
+                  autocomplete="off"
+                  :described-by="describedBy"
+                  :disabled="!can('crm:write') || busy"
+                  :placeholder="connection?.apiKeyConfigured ? '•••• configured' : 'Paste OpenWA API key'"
+                />
+              </template>
+            </UiField>
 
-          <UiField
-            label="Webhook secret (optional)"
-            help="If OpenWA signs webhooks, paste the same secret here. Leave empty to skip verification."
-          >
-            <template #default="{ id, describedBy }">
-              <UiInput
-                :id="id"
-                v-model="webhookSecret"
-                type="password"
-                autocomplete="off"
-                :described-by="describedBy"
-                :disabled="!can('crm:write') || busy"
-                :placeholder="connection?.webhookSecretConfigured ? '•••• configured' : 'Optional'"
-              />
-            </template>
-          </UiField>
+            <UiField
+              label="Webhook secret (optional)"
+              help="If OpenWA signs webhooks, paste the same secret here. Leave empty to skip verification."
+            >
+              <template #default="{ id, describedBy }">
+                <UiInput
+                  :id="id"
+                  v-model="webhookSecret"
+                  type="password"
+                  autocomplete="off"
+                  :described-by="describedBy"
+                  :disabled="!can('crm:write') || busy"
+                  :placeholder="connection?.webhookSecretConfigured ? '•••• configured' : 'Optional'"
+                />
+              </template>
+            </UiField>
+          </div>
 
           <div class="flex flex-wrap gap-2">
             <UiButton
@@ -223,54 +373,87 @@ async function dismissChecklist() {
               Open OpenWA
             </a>
           </div>
-        </div>
 
-        <div class="space-y-4 rounded-lg border border-line bg-sunken/40 p-4">
-          <h3 class="type-button-12 text-ink">Important instructions</h3>
-          <ol class="list-decimal space-y-3 pl-4 type-caption-12 text-soft">
-            <li>
-              Use a <strong class="font-medium text-ink">dedicated WhatsApp number</strong> only.
-              Unofficial clients (OpenWA) carry ban risk for personal numbers.
-            </li>
-            <li>
-              Start or host OpenWA, then open the dashboard and create an API key.
-              Scan the QR with the dedicated phone.
-            </li>
-            <li>
-              Paste base URL + API key on the left and click <strong class="font-medium text-ink">Save &amp; test</strong>
-              until the gateway shows Online.
-            </li>
-            <li>
-              In OpenWA, register this webhook for
-              <code class="rounded bg-raised px-1">message.received</code>:
-              <div class="mt-2 flex flex-wrap items-start gap-2">
-                <code class="block min-w-0 flex-1 break-all rounded bg-raised px-2 py-1.5 font-mono text-[0.7rem] text-ink">
-                  {{ webhookUrl || '…/api/v1/crm/whatsapp/webhook?tenantId=…' }}
-                </code>
-                <UiButton size="sm" :disabled="!webhookUrl" @click="copyWebhook">
-                  {{ copied ? 'Copied' : 'Copy' }}
-                </UiButton>
-              </div>
-            </li>
-            <li>
-              Create an AI agent under
-              <NuxtLink class="text-brand" to="/crm/whatsapp-agents">WhatsApp agents</NuxtLink>
-              and paste the OpenWA <strong class="font-medium text-ink">session id</strong>.
-            </li>
-          </ol>
+          <div class="rounded-lg border border-line bg-sunken/40 p-4">
+            <p class="mb-2 type-button-12 text-ink">Webhook for <code class="rounded bg-raised px-1">message.received</code></p>
+            <div class="flex flex-wrap items-start gap-2">
+              <code class="block min-w-0 flex-1 break-all rounded bg-raised px-2 py-1.5 font-mono text-[0.7rem] text-ink">
+                {{ displayWebhookUrl || '…/api/v1/crm/whatsapp/webhook?tenantId=…' }}
+              </code>
+              <UiButton size="sm" :disabled="!displayWebhookUrl" @click="copyWebhook">
+                {{ copied ? 'Copied' : 'Copy' }}
+              </UiButton>
+            </div>
+            <p class="mt-2 type-caption-12 text-faint">
+              Dedicated WhatsApp number only — unofficial clients carry ban risk for personal numbers.
+              Source:
+              <a class="text-brand" href="https://github.com/rmyndharis/OpenWA" target="_blank" rel="noreferrer">
+                rmyndharis/OpenWA
+              </a>
+            </p>
+          </div>
+        </li>
 
-          <p class="type-caption-12 text-faint">
-            Source:
-            <a class="text-brand" href="https://github.com/rmyndharis/OpenWA" target="_blank" rel="noreferrer">
-              rmyndharis/OpenWA
-            </a>
-            · Self-host tip:
-            <code class="rounded bg-raised px-1">pnpm infra:openwa</code>
-            (local Docker profile).
+        <!-- Step 2: Create session & show QR ----------------------------------- -->
+        <li class="space-y-4 border-t border-line pt-6">
+          <div class="flex items-baseline gap-2">
+            <span class="type-button-12 tabular-nums text-brand">2</span>
+            <h3 class="type-button text-ink">Create session &amp; show QR</h3>
+          </div>
+          <p class="type-caption-12 text-soft">
+            After the gateway is online, create a session named <code class="rounded bg-sunken px-1">support</code>
+            and scan the QR with the dedicated phone.
+          </p>
+          <UiButton
+            size="sm"
+            variant="primary"
+            :loading="busy || qrPolling"
+            :disabled="!can('crm:write') || !connection?.reachable"
+            @click="createSessionAndShowQr"
+          >
+            Create session &amp; show QR
+          </UiButton>
+          <p v-if="!connection?.reachable" class="type-caption-12 text-faint">
+            Save &amp; test until the gateway shows Online before creating a session.
           </p>
 
+          <div v-if="qrCode || sessionId" class="flex flex-col items-start gap-3">
+            <img
+              v-if="qrCode"
+              :src="qrCode"
+              alt="OpenWA session QR code"
+              class="h-64 w-64 rounded-lg border border-line bg-raised object-contain p-2"
+            />
+            <p v-else-if="qrPolling" class="type-caption-12 text-soft">Waiting for QR code…</p>
+            <p class="type-caption-12 text-soft">
+              Session
+              <span v-if="sessionId" class="font-mono text-ink">{{ sessionId }}</span>
+              · status: <span class="text-ink">{{ sessionStatus || 'starting' }}</span>
+            </p>
+          </div>
+        </li>
+
+        <!-- Step 3: Wait until ready ------------------------------------------- -->
+        <li class="space-y-3 border-t border-line pt-6">
+          <div class="flex items-baseline gap-2">
+            <span class="type-button-12 tabular-nums text-brand">3</span>
+            <h3 class="type-button text-ink">Wait until ready</h3>
+          </div>
+          <p class="type-caption-12 text-soft">
+            Keep the phone online until the session status becomes ready. Then link it under
+            <NuxtLink class="text-brand" to="/crm/whatsapp-agents">WhatsApp agents</NuxtLink>.
+          </p>
+          <UiBadge :tone="sessionReady ? 'positive' : statusPolling ? 'warning' : 'neutral'">
+            {{
+              sessionReady
+                ? 'Session ready'
+                : statusPolling
+                  ? 'Waiting for scan…'
+                  : 'Not started'
+            }}
+          </UiBadge>
           <UiButton
-            v-if="connection?.configured && !connection.onboardingComplete"
+            v-if="connection?.configured && !connection.onboardingComplete && sessionReady"
             size="sm"
             variant="ghost"
             :disabled="busy || !can('crm:write')"
@@ -278,10 +461,10 @@ async function dismissChecklist() {
           >
             Mark setup complete
           </UiButton>
-        </div>
-      </div>
+        </li>
+      </ol>
 
-      <ul v-if="connection?.sessions?.length" class="mt-5 border-t border-line pt-4">
+      <ul v-if="connection?.sessions?.length" class="border-t border-line pt-4">
         <li class="mb-2 type-button-12 text-ink">Sessions from OpenWA</li>
         <li
           v-for="session in connection.sessions"

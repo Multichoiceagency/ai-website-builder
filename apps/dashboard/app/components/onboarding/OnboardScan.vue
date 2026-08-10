@@ -11,6 +11,7 @@ const props = defineProps<{
   businessName: string
   city: string
   locale: string
+  googleLocationId?: string | null
 }>()
 
 const profile = defineModel<BusinessProfile | null>('profile', { default: null })
@@ -70,6 +71,7 @@ async function scan() {
       businessName: props.businessName.trim() || undefined,
       city: props.city.trim() || undefined,
       locale: props.locale,
+      googleLocationId: props.googleLocationId?.trim() || undefined,
       socialUrls: [],
       maxPages: 8,
     })

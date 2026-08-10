@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { Page, PageSummary, Site, Theme } from '@platform/schemas'
 
 const route = useRoute()
@@ -79,13 +79,24 @@ async function saveTheme() {
   }
 }
 
-const previewUrl = computed(() => config.public.storefrontUrl)
+const previewUrl = computed(() =>
+  buildStorefrontUrl({
+    storefrontBase: String(config.public.storefrontUrl || 'http://localhost:3001'),
+    primaryHostname: data.value?.site.primaryHostname,
+    path: '/',
+  }),
+)
+
+function kindLabel(value: string): string {
+  return value === 'ecommerce' ? 'Ecommerce' : 'Website'
+}
 </script>
 
 <template>
   <div v-if="data">
     <UiPageHeader :title="data.site.name" :description="`${data.pages.length} page(s)`" back="/sites" back-label="Websites">
       <template #actions>
+        <UiBadge>{{ kindLabel(data.site.kind) }}</UiBadge>
         <UiButton size="sm" :to="previewUrl" target="_blank" external>View site</UiButton>
         <UiButton v-if="can('page:write')" size="sm" variant="primary" @click="creating = true">New page</UiButton>
       </template>

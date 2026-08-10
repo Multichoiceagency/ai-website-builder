@@ -3,6 +3,7 @@ import { getBlock, resolveRenderProps } from '@platform/blocks'
 import { rendersConfigurableHeading, sectionStyleToCssVars, type Section } from '@platform/schemas'
 import {
   BlockAboutScrollStory01,
+  BlockHeroVanta01,
   BlockContactDetails01,
   BlockContentManifesto01,
   BlockContentRichtext01,
@@ -48,6 +49,9 @@ import {
   BlockMotionSection01,
   BlockPricingToggle01,
   BlockProductDetail01,
+  BlockProductCardGrid01,
+  BlockProductCarousel01,
+  BlockProductCategoryTiles01,
   BlockScrollVideoScrub01,
   BlockServicesEditorialIndex01,
   BlockServicesList01,
@@ -106,6 +110,7 @@ const RENDERERS: Record<string, unknown> = {
   'gallery-horizontal-scroll-01': BlockGalleryHorizontalScroll01,
   'about-scroll-story-01': BlockAboutScrollStory01,
   'scroll-video-scrub-01': BlockScrollVideoScrub01,
+  'hero-vanta-01': BlockHeroVanta01,
 
   // showcase — marketing primitives
   'testimonials-marquee-01': BlockTestimonialsMarquee01,
@@ -117,6 +122,9 @@ const RENDERERS: Record<string, unknown> = {
   'pricing-toggle-01': BlockPricingToggle01,
   'features-bento-grid-01': BlockFeaturesBentoGrid01,
   'product-detail-01': BlockProductDetail01,
+  'product-card-grid-01': BlockProductCardGrid01,
+  'product-carousel-01': BlockProductCarousel01,
+  'product-category-tiles-01': BlockProductCategoryTiles01,
   'header-shop-announce-01': BlockShopAnnouncement01,
   'hero-agency-proof-01': BlockHeroAgencyProof01,
   'hero-property-01': BlockHeroProperty01,

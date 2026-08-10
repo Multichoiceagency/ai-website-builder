@@ -2,10 +2,12 @@ import type { FastifyPluginAsync } from 'fastify'
 import { limitsForPlan } from '@platform/permissions'
 import {
   discoveryInputSchema,
+  generateFromPromptInputSchema,
   generationRequestSchema,
   GENERATION_PHASE_LABELS,
   onboardingFunnelSchema,
   updateOnboardingFunnelSchema,
+  type GenerationRequest,
   type GenerationResult,
   type OnboardingFunnel,
 } from '@platform/schemas'
@@ -15,6 +17,7 @@ import { upsertNavigation } from '../db/repositories/navigation.js'
 import { insertPage, publishPage } from '../db/repositories/pages.js'
 import { countSites, insertDomain, insertSite } from '../db/repositories/sites.js'
 import { findSettingsDocument, upsertSettingsDocument } from '../db/repositories/settings.js'
+import { listResources } from '../db/repositories/integrations.js'
 import { discoverBusiness } from '../lib/discovery/index.js'
 import { BlockedUrlError } from '../lib/discovery/fetch.js'
 import {
@@ -26,6 +29,7 @@ import {
   themeFromBrand,
 } from '../lib/generation/index.js'
 import { resolveTemplate } from '../lib/generation/templates.js'
+import { profileFromPrompt } from '../lib/ai/site-builder-agent.js'
 import { isPageSpeedConfigured, runPageSpeed } from '../lib/seo/pagespeed.js'
 import { buildEvent, eventBus } from '../lib/event-bus.js'
 import { BadRequestError, PlanLimitError } from '../lib/errors.js'
@@ -144,13 +148,22 @@ const onboardingRoutes: FastifyPluginAsync = async (app) => {
     const input = parseOrThrow(discoveryInputSchema, request.body, 'discovery request')
 
     try {
-      const result = await discoverBusiness(input)
+      let gbpLocation: Record<string, unknown> | null = null
+      if (input.googleLocationId) {
+        const resources = await withTenant(context.tenantId, (tx) =>
+          listResources(tx, context.tenantId, 'business_location'),
+        )
+        const match = resources.find((entry) => entry.externalId === input.googleLocationId)
+        gbpLocation = match?.payload ?? null
+      }
+
+      const result = await discoverBusiness(input, { gbpLocation })
 
       const event = buildEvent({
         name: 'site.created',
         tenantId: context.tenantId,
         actor: context.actor,
-        resource: { type: 'discovery', id: input.website ?? input.businessName ?? 'manual' },
+        resource: { type: 'discovery', id: input.website ?? input.businessName ?? input.googleLocationId ?? 'manual' },
         payload: { pagesCrawled: result.pagesCrawled, industry: result.profile.company.industry },
       })
       await withTenant(context.tenantId, (tx) => recordAuditEvent(tx, event))
@@ -173,179 +186,25 @@ const onboardingRoutes: FastifyPluginAsync = async (app) => {
   app.post('/generate', async (request, reply) => {
     const context = requireTenant(request, 'site:write')
     const input = parseOrThrow(generationRequestSchema, request.body, 'generation request')
-    const limits = limitsForPlan(context.plan)
+    const payload = await executeSiteGeneration(context, input)
+    return reply.status(201).send(ok(payload))
+  })
 
-    // Fail fast on plan limits before spending an AI call.
-    const currentSites = await withTenant(context.tenantId, (tx) => countSites(tx, context.tenantId))
-    if (currentSites >= limits.sites) {
-      throw new PlanLimitError(
-        `Your ${context.plan} plan includes ${limits.sites} site(s). Upgrade or delete a site to generate another.`,
-        { plan: context.plan, limit: limits.sites, current: currentSites },
-      )
-    }
-
-    const profile = input.profile
-    // Template preferences are applied after the style ceiling filters the pool.
-    // No templateId → first MotionSites catalogue entry with a sourcePrompt.
-    const steering = resolveTemplate(input.templateId)
-    const style = input.style === 'auto' && steering ? steering.style : input.style
-    // The style the user picked decides how heavy the sections may be.
-    const generationInput = { ...input, style, maxPerformanceClass: ceilingForStyle(style) }
-    const plan = planSite(profile, generationInput, steering)
-    const theme = themeFromBrand(profile, generationInput.style, steering)
-
-    // One copy set per site: consistent voice across every page, one AI call.
-    const copy = await aiGateway.generateCopy({
+  /**
+   * Ambora-style one prompt → discover/synthesize profile → generate website.
+   */
+  app.post('/generate-from-prompt', async (request, reply) => {
+    const context = requireTenant(request, 'site:write')
+    const input = parseOrThrow(generateFromPromptInputSchema, request.body, 'generate-from-prompt')
+    const profile = await profileFromPrompt(input)
+    const payload = await executeSiteGeneration(context, {
       profile,
-      locale: plan.locale,
-      goal: 'site',
-      designBrief: steering?.brief,
+      siteName: input.siteName,
+      style: input.style,
+      templateId: input.templateId,
+      publish: input.publish,
+      maxPerformanceClass: input.maxPerformanceClass,
     })
-
-    const composed = plan.pages.map((page) => ({
-      page,
-      sections: composePage(page, profile, copy.slots, plan.navigation),
-    }))
-
-    const quality = assessQuality(plan, composed)
-
-    const result = await withTenant(context.tenantId, async (tx) => {
-      // Re-check inside the transaction so two concurrent generates cannot both pass.
-      const current = await countSites(tx, context.tenantId)
-      if (current >= limits.sites) {
-        throw new PlanLimitError(
-          `Your ${context.plan} plan includes ${limits.sites} site(s). Upgrade or delete a site to generate another.`,
-          { plan: context.plan, limit: limits.sites, current },
-        )
-      }
-
-      const slug = await uniqueSlug(plan.siteName, async (candidate) => {
-        const [row] = await tx<{ id: string }[]>`
-          SELECT id FROM sites WHERE tenant_id = ${context.tenantId} AND slug = ${candidate} LIMIT 1
-        `
-        return Boolean(row)
-      })
-
-      const site = await insertSite(tx, {
-        tenantId: context.tenantId,
-        name: plan.siteName,
-        slug,
-        locale: plan.locale,
-        theme,
-      })
-
-      // Primary so the shell and onboarding can open the right host immediately.
-      // Pages stay drafts unless the user opted into publish — the editor is the
-      // place to look before anything goes public (ADR-0007).
-      const previewHostname = `${slug}.localhost`
-      await insertDomain(tx, {
-        tenantId: context.tenantId,
-        siteId: site.id,
-        hostname: previewHostname,
-        isPrimary: true,
-        verified: true,
-      })
-
-      const pageIds: string[] = []
-      for (const entry of composed) {
-        const created = await insertPage(tx, {
-          tenantId: context.tenantId,
-          siteId: site.id,
-          path: entry.page.path,
-          title: entry.page.title,
-          seo: {
-            title: entry.page.goal === 'home' ? copy.slots.seoTitle : `${entry.page.title} | ${plan.siteName}`,
-            description: entry.page.description || copy.slots.seoDescription,
-            noIndex: false,
-          },
-          sections: entry.sections,
-        })
-
-        if (input.publish) await publishPage(tx, context.tenantId, created.id)
-        pageIds.push(created.id)
-      }
-
-      await upsertNavigation(tx, {
-        tenantId: context.tenantId,
-        siteId: site.id,
-        key: 'primary',
-        items: plan.navigation,
-      })
-
-      const event = buildEvent({
-        name: 'site.created',
-        tenantId: context.tenantId,
-        actor: { type: 'agent', id: copy.model, label: 'Website generator', onBehalfOfUserId: context.user.id },
-        resource: { type: 'site', id: site.id },
-        payload: {
-          pages: pageIds.length,
-          model: copy.model,
-          industry: profile.company.industry,
-          costUsd: copy.usage.costUsd,
-          published: input.publish,
-          templateId: input.templateId ?? steering?.template.id ?? null,
-        },
-      })
-      await recordAuditEvent(tx, event)
-
-      return { site, slug, previewHostname, pageIds, event }
-    })
-
-    await eventBus.publish(result.event)
-
-    const homePageId = result.pageIds[0]
-    if (!homePageId) {
-      throw new BadRequestError('Generation produced no pages.')
-    }
-
-    // Advance funnel progress so soft-gates and resume know a site exists.
-    try {
-      const current = await readFunnelProgress(context)
-      const completed = current.completedSteps.includes('generate')
-        ? current.completedSteps
-        : [...current.completedSteps, 'generate' as const]
-      await writeFunnelProgress(context, {
-        step: 'preview',
-        siteId: result.site.id,
-        completedSteps: completed,
-      })
-    } catch {
-      // Generation succeeded — progress is secondary.
-    }
-
-    const payload: GenerationResult = {
-      siteId: result.site.id,
-      siteName: result.site.name,
-      siteSlug: result.slug,
-      previewHostname: result.previewHostname,
-      homePageId,
-      plan,
-      pageIds: result.pageIds,
-      quality,
-      model: copy.model,
-      published: input.publish,
-      generatedAt: new Date().toISOString(),
-    }
-
-    // Post-generate PageSpeed QA when the site is public and an API key exists.
-    // Failures are recorded as quality issues — never block generation.
-    if (input.publish && isPageSpeedConfigured() && result.site.primaryHostname) {
-      try {
-        const speed = await runPageSpeed(`https://${result.site.primaryHostname}`, 'mobile')
-        if (speed.performanceScore != null && speed.performanceScore < 50) {
-          quality.performance.issues.push(
-            `PageSpeed mobile performance is ${speed.performanceScore}/100 — check LCP and unused JS.`,
-          )
-        }
-        if (speed.seoScore != null && speed.seoScore < 80) {
-          quality.seo.issues.push(`PageSpeed SEO score is ${speed.seoScore}/100.`)
-        }
-        for (const warning of speed.warnings) quality.performance.issues.push(warning)
-      } catch {
-        // Best-effort QA only.
-      }
-    }
-
     return reply.status(201).send(ok(payload))
   })
 
@@ -364,3 +223,179 @@ const onboardingRoutes: FastifyPluginAsync = async (app) => {
 }
 
 export default onboardingRoutes
+
+async function executeSiteGeneration(
+  context: TenantContext,
+  input: GenerationRequest,
+): Promise<GenerationResult> {
+  const limits = limitsForPlan(context.plan)
+
+  const currentSites = await withTenant(context.tenantId, (tx) => countSites(tx, context.tenantId))
+  if (currentSites >= limits.sites) {
+    throw new PlanLimitError(
+      `Your ${context.plan} plan includes ${limits.sites} site(s). Upgrade or delete a site to generate another.`,
+      { plan: context.plan, limit: limits.sites, current: currentSites },
+    )
+  }
+
+  const profile = input.profile
+  const steering = resolveTemplate(input.templateId)
+  const style = input.style === 'auto' && steering ? steering.style : input.style
+  const generationInput = { ...input, style, maxPerformanceClass: ceilingForStyle(style) }
+  const plan = planSite(profile, generationInput, steering)
+  const theme = themeFromBrand(profile, generationInput.style, steering)
+
+  const copy = await aiGateway.generateCopy({
+    profile,
+    locale: plan.locale,
+    goal: 'site',
+    designBrief: steering?.brief,
+  })
+
+  const composed = plan.pages.map((page) => ({
+    page,
+    sections: composePage(page, profile, copy.slots, plan.navigation),
+  }))
+
+  const quality = assessQuality(plan, composed)
+
+  const result = await withTenant(context.tenantId, async (tx) => {
+    const current = await countSites(tx, context.tenantId)
+    if (current >= limits.sites) {
+      throw new PlanLimitError(
+        `Your ${context.plan} plan includes ${limits.sites} site(s). Upgrade or delete a site to generate another.`,
+        { plan: context.plan, limit: limits.sites, current },
+      )
+    }
+
+    const slug = await uniqueSlug(plan.siteName, async (candidate) => {
+      const [row] = await tx<{ id: string }[]>`
+        SELECT id FROM sites WHERE tenant_id = ${context.tenantId} AND slug = ${candidate} LIMIT 1
+      `
+      return Boolean(row)
+    })
+
+    const site = await insertSite(tx, {
+      tenantId: context.tenantId,
+      name: plan.siteName,
+      slug,
+      locale: plan.locale,
+      theme,
+    })
+
+    const edgeHost = (process.env.PLATFORM_EDGE_HOSTNAME || process.env.STOREFRONT_PUBLIC_HOST || '')
+      .trim()
+      .replace(/^https?:\/\//, '')
+      .split('/')[0]
+      ?.toLowerCase()
+    const previewHostname =
+      edgeHost && edgeHost !== 'localhost' && !edgeHost.endsWith('.localhost')
+        ? `${slug}.${edgeHost}`
+        : `${slug}.localhost`
+    await insertDomain(tx, {
+      tenantId: context.tenantId,
+      siteId: site.id,
+      hostname: previewHostname,
+      isPrimary: true,
+      verified: true,
+    })
+
+    const pageIds: string[] = []
+    for (const entry of composed) {
+      const created = await insertPage(tx, {
+        tenantId: context.tenantId,
+        siteId: site.id,
+        path: entry.page.path,
+        title: entry.page.title,
+        seo: {
+          title: entry.page.goal === 'home' ? copy.slots.seoTitle : `${entry.page.title} | ${plan.siteName}`,
+          description: entry.page.description || copy.slots.seoDescription,
+          noIndex: false,
+        },
+        sections: entry.sections,
+      })
+
+      if (input.publish) await publishPage(tx, context.tenantId, created.id)
+      pageIds.push(created.id)
+    }
+
+    await upsertNavigation(tx, {
+      tenantId: context.tenantId,
+      siteId: site.id,
+      key: 'primary',
+      items: plan.navigation,
+    })
+
+    const event = buildEvent({
+      name: 'site.created',
+      tenantId: context.tenantId,
+      actor: { type: 'agent', id: copy.model, label: 'Website generator', onBehalfOfUserId: context.user.id },
+      resource: { type: 'site', id: site.id },
+      payload: {
+        pages: pageIds.length,
+        model: copy.model,
+        industry: profile.company.industry,
+        costUsd: copy.usage.costUsd,
+        published: input.publish,
+        templateId: input.templateId ?? steering?.template.id ?? null,
+      },
+    })
+    await recordAuditEvent(tx, event)
+
+    return { site, slug, previewHostname, pageIds, event }
+  })
+
+  await eventBus.publish(result.event)
+
+  const homePageId = result.pageIds[0]
+  if (!homePageId) {
+    throw new BadRequestError('Generation produced no pages.')
+  }
+
+  try {
+    const current = await readFunnelProgress(context)
+    const completed = current.completedSteps.includes('generate')
+      ? current.completedSteps
+      : [...current.completedSteps, 'generate' as const]
+    await writeFunnelProgress(context, {
+      step: 'preview',
+      siteId: result.site.id,
+      completedSteps: completed,
+    })
+  } catch {
+    // Generation succeeded — progress is secondary.
+  }
+
+  const payload: GenerationResult = {
+    siteId: result.site.id,
+    siteName: result.site.name,
+    siteSlug: result.slug,
+    previewHostname: result.previewHostname,
+    homePageId,
+    plan,
+    pageIds: result.pageIds,
+    quality,
+    model: copy.model,
+    published: input.publish,
+    generatedAt: new Date().toISOString(),
+  }
+
+  if (input.publish && isPageSpeedConfigured() && result.site.primaryHostname) {
+    try {
+      const speed = await runPageSpeed(`https://${result.site.primaryHostname}`, 'mobile')
+      if (speed.performanceScore != null && speed.performanceScore < 50) {
+        quality.performance.issues.push(
+          `PageSpeed mobile performance is ${speed.performanceScore}/100 — check LCP and unused JS.`,
+        )
+      }
+      if (speed.seoScore != null && speed.seoScore < 80) {
+        quality.seo.issues.push(`PageSpeed SEO score is ${speed.seoScore}/100.`)
+      }
+      for (const warning of speed.warnings) quality.performance.issues.push(warning)
+    } catch {
+      // Best-effort QA only.
+    }
+  }
+
+  return payload
+}

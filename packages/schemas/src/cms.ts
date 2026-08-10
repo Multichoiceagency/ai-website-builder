@@ -147,12 +147,18 @@ export type Seo = z.infer<typeof seoSchema>
 
 // region Site
 
+export const SITE_KINDS = ['website', 'ecommerce'] as const
+export const siteKindSchema = z.enum(SITE_KINDS)
+export type SiteKind = z.infer<typeof siteKindSchema>
+
 export const siteSchema = z.object({
   id: uuidSchema,
   tenantId: uuidSchema,
   name: z.string().min(1).max(200),
   slug: slugSchema,
   locale: localeSchema,
+  /** Brochure / marketing site vs full commerce storefront. */
+  kind: siteKindSchema.default('website'),
   theme: themeSchema,
   /**
    * System UX slots → registry block + props (ADR-0003). Populated by the
@@ -170,6 +176,7 @@ export const createSiteInputSchema = z.object({
   name: z.string().min(1).max(200),
   slug: slugSchema,
   locale: localeSchema.default('nl'),
+  kind: siteKindSchema.default('website'),
   theme: themeSchema.partial().optional(),
 })
 export type CreateSiteInput = z.infer<typeof createSiteInputSchema>
@@ -178,6 +185,7 @@ export const updateSiteInputSchema = z
   .object({
     name: z.string().min(1).max(200),
     locale: localeSchema,
+    kind: siteKindSchema,
     theme: themeSchema.partial(),
     componentTargets: componentTargetsMapSchema,
   })
@@ -191,12 +199,17 @@ export type UpdateSiteInput = z.infer<typeof updateSiteInputSchema>
 export const pageStatusSchema = z.enum(['draft', 'published'])
 export type PageStatus = z.infer<typeof pageStatusSchema>
 
+export const PAGE_ROLES = ['page', 'header', 'footer'] as const
+export const pageRoleSchema = z.enum(PAGE_ROLES)
+export type PageRole = z.infer<typeof pageRoleSchema>
+
 export const pageSummarySchema = z.object({
   id: uuidSchema,
   siteId: uuidSchema,
   path: pathSchema,
   title: z.string().min(1).max(200),
   status: pageStatusSchema,
+  role: pageRoleSchema.default('page'),
   sectionCount: z.number().int().min(0),
   hasUnpublishedChanges: z.boolean(),
   publishedAt: isoTimestampSchema.nullable(),
@@ -215,6 +228,7 @@ export type Page = z.infer<typeof pageSchema>
 export const createPageInputSchema = z.object({
   path: pathSchema,
   title: z.string().min(1).max(200),
+  role: pageRoleSchema.default('page'),
   seo: seoSchema.partial().optional(),
   sections: pageDocumentSchema.optional(),
 })

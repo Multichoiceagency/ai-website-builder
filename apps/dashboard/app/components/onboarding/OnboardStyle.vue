@@ -75,6 +75,7 @@ onMounted(() => {
         :model-value="templateId"
         cache-key="onboarding-templates"
         max-performance-class="C"
+        page-recipes-only
         @update:model-value="adoptTemplate"
       />
     </div>

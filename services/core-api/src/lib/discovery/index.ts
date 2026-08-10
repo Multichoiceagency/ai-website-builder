@@ -8,9 +8,11 @@ import {
 } from '@platform/schemas'
 import { BlockedUrlError, fetchDocument, normalizeUrl } from './fetch.js'
 import { enrichFromPlaces, isPlacesConfigured } from './places.js'
+import { enrichmentFromGbpLocation, isGbpLocationPayload } from './gbp.js'
 import { isAllowed, loadRobots } from './robots.js'
 import { extractColors, extractPage, type ExtractedPage } from './extract.js'
 import { extractColorsFromSvg, pickBestLogo } from './logo.js'
+import type { GoogleBusinessLocation } from '../integrations/google.js'
 
 /**
  * Business discovery (§8 and §47).
@@ -192,39 +194,49 @@ async function fetchSocialProfile(url: string, platform: SocialProfile['platform
   }
 }
 
-export async function discoverBusiness(input: DiscoveryInput): Promise<DiscoveryResult> {
+export async function discoverBusiness(
+  input: DiscoveryInput,
+  options?: { gbpLocation?: GoogleBusinessLocation | Record<string, unknown> | null },
+): Promise<DiscoveryResult> {
   const startedAt = Date.now()
   const warnings: string[] = []
   const pages: ExtractedPage[] = []
   const rawHtml: string[] = []
 
+  let gbp = null as ReturnType<typeof enrichmentFromGbpLocation> | null
   if (input.googleLocationId) {
-    // The connector lands with the Google integration; until then the request
-    // is honoured through the other sources rather than failing.
-    warnings.push(
-      'Google Business Profile is not connected yet, so its data was not used. Connect it under Growth → Google Business.',
-    )
+    if (options?.gbpLocation && isGbpLocationPayload(options.gbpLocation)) {
+      gbp = enrichmentFromGbpLocation(options.gbpLocation, input.googleLocationId)
+    } else {
+      warnings.push(
+        'Google Business Profile location was selected but its details were not available yet. Connect and refresh locations under Growth → Google, then scan again.',
+      )
+    }
   }
 
-  const needsPlaces =
-    Boolean(input.businessName?.trim()) &&
-    (!input.website || Boolean(input.city) || Boolean(input.googleLocationId))
+  // Prefer GBP website when the user did not supply one.
+  const websiteHint = input.website?.trim() || gbp?.website || undefined
 
-  let places = needsPlaces && isPlacesConfigured()
+  const needsPlaces =
+    Boolean(input.businessName?.trim() || gbp?.companyName) &&
+    (!websiteHint || Boolean(input.city) || Boolean(input.googleLocationId))
+
+  let places = needsPlaces && isPlacesConfigured() && !gbp
     ? await enrichFromPlaces({
-        businessName: input.businessName!,
+        businessName: input.businessName?.trim() || '',
         city: input.city,
         locale: input.locale,
       })
     : null
 
-  if (needsPlaces && !isPlacesConfigured()) {
+  if (needsPlaces && !gbp && !isPlacesConfigured()) {
     warnings.push('Set GOOGLE_API_KEY to enrich incomplete profiles via Places + Geocoding.')
   }
   if (places) warnings.push(...places.warnings)
+  if (gbp) places = gbp
 
-  if (input.website) {
-    const origin = normalizeUrl(input.website)
+  if (websiteHint) {
+    const origin = normalizeUrl(websiteHint)
     const robots = await loadRobots(origin.origin)
 
     const queue: string[] = [origin.toString()]
@@ -295,9 +307,17 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
     }
   }
 
-  const industry = pages.length ? deriveIndustry(pages) : (input.industry ?? 'local')
+  const industry = pages.length
+    ? deriveIndustry(pages)
+    : (gbp?.categories[0]?.toLowerCase().includes('restaurant')
+        ? 'restaurant'
+        : input.industry ?? 'local')
   const companyName =
-    deriveCompanyName(pages, input.businessName ?? '') || places?.companyName || input.businessName || ''
+    gbp?.companyName ||
+    deriveCompanyName(pages, input.businessName ?? '') ||
+    places?.companyName ||
+    input.businessName ||
+    ''
 
   const locations = pages.flatMap((page) => page.locations)
   if (places?.location && !locations.some((entry) => entry.city || entry.street)) {
@@ -363,10 +383,10 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
     },
     locations: locations.slice(0, 10),
     contact: {
-      phone: unique(pages.flatMap((page) => page.phones))[0] ?? places?.phone ?? '',
+      phone: gbp?.phone || unique(pages.flatMap((page) => page.phones))[0] || places?.phone || '',
       email: unique(pages.flatMap((page) => page.emails))[0] ?? '',
-      website: input.website
-        ? normalizeUrl(input.website).origin
+      website: websiteHint
+        ? normalizeUrl(websiteHint).origin
         : places?.website ?? '',
       whatsapp: socials.find((social) => social.platform === 'whatsapp')?.url ?? '',
     },
@@ -387,9 +407,17 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
     media: unique([...pages.flatMap((page) => page.images), ...(places?.media ?? [])]).slice(0, 24),
     locale: input.locale,
     sources: [
-      ...(input.website ? [{ source: 'website' as const, reference: input.website, confidence: 0.9 }] : []),
-      ...(places?.placeId
-        ? [{ source: 'google_business_profile' as const, reference: places.placeId, confidence: 0.85 }]
+      ...(input.website || websiteHint
+        ? [{ source: 'website' as const, reference: websiteHint || input.website!, confidence: 0.9 }]
+        : []),
+      ...(gbp?.placeId || places?.placeId
+        ? [
+            {
+              source: 'google_business_profile' as const,
+              reference: gbp?.placeId || places!.placeId!,
+              confidence: gbp ? 0.95 : 0.85,
+            },
+          ]
         : []),
       ...(socials.some((social) => social.fetched) ? [{ source: 'social' as const, confidence: 0.5 }] : []),
       ...(input.businessName ? [{ source: 'manual' as const, confidence: 1 }] : []),

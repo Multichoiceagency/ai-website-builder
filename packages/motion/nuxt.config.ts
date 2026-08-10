@@ -11,4 +11,5 @@ const { resolve } = createResolver(import.meta.url)
  */
 export default defineNuxtConfig({
   css: [resolve('./assets/css/motion.css')],
+  plugins: [resolve('./plugins/lenis-gsap.client.ts')],
 })

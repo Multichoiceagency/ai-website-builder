@@ -10,6 +10,11 @@ export interface OpenWaClientConfig {
   apiKey: string
 }
 
+export interface OpenWaQrResult {
+  qrCode: string
+  status: string
+}
+
 /**
  * OpenWA HTTP client — the only file that knows OpenWA URLs/headers exist.
  * @see https://github.com/rmyndharis/OpenWA
@@ -56,14 +61,68 @@ export class OpenWaWhatsappProvider implements WhatsappProvider {
         ? ((payload as { data: unknown[] }).data)
         : []
 
-    return rows.map((row) => {
-      const entry = row as Record<string, unknown>
-      return {
-        id: String(entry.id ?? entry.sessionId ?? ''),
-        name: String(entry.name ?? entry.id ?? 'session'),
-        status: String(entry.status ?? entry.state ?? 'unknown'),
-      }
-    }).filter((row) => row.id)
+    return rows
+      .map((row) => {
+        const entry = row as Record<string, unknown>
+        return {
+          id: String(entry.id ?? entry.sessionId ?? ''),
+          name: String(entry.name ?? entry.id ?? 'session'),
+          status: String(entry.status ?? entry.state ?? 'unknown'),
+        }
+      })
+      .filter((row) => row.id)
+  }
+
+  async createSession(name: string): Promise<WhatsappSessionSummary> {
+    this.#assertConfigured()
+    const response = await this.#fetch('/api/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    })
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(`OpenWA create session failed (${response.status}): ${detail.slice(0, 200)}`)
+    }
+    const entry = (await response.json()) as Record<string, unknown>
+    return {
+      id: String(entry.id ?? ''),
+      name: String(entry.name ?? name),
+      status: String(entry.status ?? 'created'),
+    }
+  }
+
+  async startSession(sessionId: string): Promise<WhatsappSessionSummary> {
+    this.#assertConfigured()
+    const response = await this.#fetch(`/api/sessions/${encodeURIComponent(sessionId)}/start`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(`OpenWA start session failed (${response.status}): ${detail.slice(0, 200)}`)
+    }
+    const entry = (await response.json().catch(() => ({}))) as Record<string, unknown>
+    return {
+      id: sessionId,
+      name: String(entry.name ?? sessionId),
+      status: String(entry.status ?? 'starting'),
+    }
+  }
+
+  async getQr(sessionId: string): Promise<OpenWaQrResult> {
+    this.#assertConfigured()
+    const response = await this.#fetch(`/api/sessions/${encodeURIComponent(sessionId)}/qr`)
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(`OpenWA QR not ready (${response.status}): ${detail.slice(0, 200)}`)
+    }
+    const entry = (await response.json()) as Record<string, unknown>
+    const qrCode = String(entry.qrCode ?? entry.qr ?? '')
+    if (!qrCode) throw new Error('OpenWA returned an empty QR payload.')
+    return {
+      qrCode,
+      status: String(entry.status ?? 'qr_ready'),
+    }
   }
 
   async sendText(input: WhatsappSendTextInput): Promise<{ externalId: string | null }> {
@@ -103,7 +162,6 @@ export class OpenWaWhatsappProvider implements WhatsappProvider {
   }
 }
 
-/** @deprecated Prefer `resolveTenantWhatsappProvider` — kept for env-only smoke tests. */
-export function createWhatsappProvider(config?: OpenWaClientConfig | null): WhatsappProvider {
-  return new OpenWaWhatsappProvider(config ?? null)
+export function createWhatsappProvider(config: OpenWaClientConfig | null = null): OpenWaWhatsappProvider {
+  return new OpenWaWhatsappProvider(config)
 }

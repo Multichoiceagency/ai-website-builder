@@ -950,10 +950,26 @@ async function publish() {
 }
 
 const liveUrl = computed(() =>
-  data.value?.site.primaryHostname
-    ? `http://${data.value.site.primaryHostname}:3001${data.value.page.path}`
-    : `${config.public.storefrontUrl}${data.value?.page.path ?? '/'}`,
+  buildStorefrontUrl({
+    storefrontBase: String(config.public.storefrontUrl || 'http://localhost:3001'),
+    primaryHostname: data.value?.site.primaryHostname,
+    path: data.value?.page.path ?? '/',
+  }),
 )
+
+const pageIsLive = computed(() => Boolean(data.value?.page.publishedAt))
+
+async function openLiveView() {
+  if (!pageIsLive.value) {
+    if (!can('page:publish')) {
+      message.value = 'Publish this page first — drafts are not on the live storefront yet.'
+      return
+    }
+    await publish()
+    if (!data.value?.page.publishedAt) return
+  }
+  if (import.meta.client) window.open(liveUrl.value, '_blank', 'noopener,noreferrer')
+}
 
 const ZOOM_STEPS = [50, 70, 100, 125]
 const DEVICES = [
@@ -1132,7 +1148,15 @@ function togglePropertiesPanel() {
         <UiBadge v-else-if="data.page.hasUnpublishedChanges" tone="warning">Not published</UiBadge>
         <UiBadge v-else-if="data.page.status === 'published'" tone="positive">Live</UiBadge>
 
-        <UiButton size="sm" :to="liveUrl" target="_blank" external>View</UiButton>
+        <UiButton
+          size="sm"
+          :loading="publishing && !pageIsLive"
+          :disabled="(!pageIsLive && !can('page:publish')) || publishing"
+          :title="pageIsLive ? liveUrl : 'Publish, then open the live storefront'"
+          @click="openLiveView"
+        >
+          {{ pageIsLive ? 'View' : 'Publish & view' }}
+        </UiButton>
         <UiButton
           size="sm"
           :loading="saving"
@@ -1216,6 +1240,7 @@ function togglePropertiesPanel() {
             @remove="remove"
             @ask-ai="askAi"
             @library-drop="onLibraryDrop"
+            @open-insert="picking = true"
           />
         </div>
 
@@ -1362,7 +1387,18 @@ function togglePropertiesPanel() {
             </li>
           </ul>
 
-          <p v-else class="px-4 py-8 text-center text-[0.75rem] text-faint">No sections yet.</p>
+          <div v-else class="px-4 py-8 text-center">
+            <p class="text-[0.75rem] text-faint">No sections yet.</p>
+            <UiButton
+              v-if="can('page:write')"
+              type="button"
+              size="sm"
+              class="mt-3"
+              @click="picking = true"
+            >
+              Add a section
+            </UiButton>
+          </div>
         </div>
 
         <!-- Pages -->
@@ -1437,6 +1473,7 @@ function togglePropertiesPanel() {
           @remove="remove"
           @ask-ai="askAi"
           @library-drop="onLibraryDrop"
+          @open-insert="picking = true"
         />
       </div>
 

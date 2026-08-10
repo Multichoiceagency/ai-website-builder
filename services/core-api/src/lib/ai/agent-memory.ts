@@ -112,7 +112,7 @@ export async function ensureBaselineMemories(): Promise<void> {
       kind: 'semantic',
       key: 'semantic:allowed-packages',
       content:
-        'Allowed Motionsites codegen packages: react, lucide-react, framer-motion, gsap. No routing. No external CSS libraries. Output must start with /*DEPENDENCIES:{"packages":[...]} */.',
+        'Allowed Motionsites codegen packages: react, lucide-react, framer-motion, gsap, lenis, three, vanta, react-bits. No routing. No external CSS libraries. Output must start with /*DEPENDENCIES:{"packages":[...]} */.',
       tags: ['packages', 'allowlist', 'semantic'],
       createdAt: new Date().toISOString(),
       embeddingModel: EMBEDDING_MODEL,

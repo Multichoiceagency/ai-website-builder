@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineCollectionBlock } from './define-collection.js'
 import { featureItemFields, featureItemSchema } from './shared.js'
-import { field, imageUrl, longText, text } from '../fields.js'
+import { bool, field, href, imageUrl, longText, text } from '../fields.js'
 
 /**
  * The `motion` collection — scroll as choreography.
@@ -327,6 +327,50 @@ export const scrollVideoScrub01 = defineCollectionBlock({
   }),
 })
 
+export const bgVanta01 = defineCollectionBlock({
+  collection: 'motion',
+  tags: ['background', 'vanta', 'webgl', 'three', 'atmosphere'],
+  id: 'hero-vanta-01',
+  name: 'Hero — Vanta atmosphere',
+  description:
+    'Full-bleed WebGL atmosphere (Vanta.js + Three.js): waves, net, fog, or birds behind your content. Class C — use sparingly on heroes.',
+  category: 'hero',
+  capabilities: ['background', 'motion', 'headline', 'cta'],
+  industries: ['agency', 'saas', 'creative', 'ecommerce', '*'],
+  style: ['bold', 'premium', 'modern'],
+  performanceClass: 'C',
+  scores: { performance: 78, accessibility: 94, mobile: 82 },
+  defaultMotion: { preset: 'fade-up', trigger: 'load' },
+  fields: [
+    field.select('effect', 'Effect', [
+      { value: 'waves', label: 'Waves' },
+      { value: 'net', label: 'Net' },
+      { value: 'fog', label: 'Fog' },
+      { value: 'birds', label: 'Birds' },
+      { value: 'halo', label: 'Halo' },
+    ]),
+    field.text('color', 'Accent colour (hex)', { help: 'e.g. #0F766E' }),
+    field.text('backgroundColor', 'Background colour (hex)', { help: 'e.g. #0B1220' }),
+    field.text('eyebrow', 'Eyebrow'),
+    field.textarea('headline', 'Headline'),
+    field.textarea('subheadline', 'Supporting text'),
+    field.text('ctaLabel', 'Button label'),
+    field.url('ctaHref', 'Button link'),
+    field.boolean('mouseControls', 'React to mouse'),
+  ],
+  schema: z.object({
+    effect: z.enum(['waves', 'net', 'fog', 'birds', 'halo']).default('waves'),
+    color: text('#14B8A6'),
+    backgroundColor: text('#0B1220'),
+    eyebrow: text(''),
+    headline: text('Motion that earns attention'),
+    subheadline: longText('WebGL atmosphere powered by Vanta + Three — content stays sharp on top.'),
+    ctaLabel: text('Explore'),
+    ctaHref: href('#work'),
+    mouseControls: bool(true),
+  }),
+})
+
 export const MOTION_COLLECTION_BLOCKS = [
   heroMaskReveal01,
   contentScrollReveal01,
@@ -335,4 +379,5 @@ export const MOTION_COLLECTION_BLOCKS = [
   galleryHorizontalScroll01,
   aboutScrollStory01,
   scrollVideoScrub01,
+  bgVanta01,
 ]

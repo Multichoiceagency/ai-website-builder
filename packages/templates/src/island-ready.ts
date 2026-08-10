@@ -8,6 +8,10 @@ export const MOTIONSITES_ISLAND_READY = [
   'wanderful-hero',
   'nexum-hero',
   'interactive-discovery',
+  'dreamcore-landing',
+  'gen-product-card-ebay-like-product-card',
+  'solar-energy-hero',
+  'bold-studio',
 ] as const
 
 /** System-wide liquid-glass header — inserted once beside exact islands. */

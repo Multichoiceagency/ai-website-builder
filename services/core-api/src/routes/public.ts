@@ -1,16 +1,23 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import {
+  addLineItemInputSchema,
+  commerceIdSchema,
+  completeCheckoutInputSchema,
+  createCartInputSchema,
   feedSettingsSchema,
   publicPageSchema,
+  startCheckoutInputSchema,
   themeSchema,
+  updateLineItemInputSchema,
   type Product,
 } from '@platform/schemas'
 import { commerceProvider, type CommerceContext } from '../adapters/commerce/index.js'
 import { env } from '../config/env.js'
 import { withTenant, withoutTenant } from '../db/client.js'
+import { findProductByHandle } from '../db/repositories/commerce.js'
 import { listNavigation } from '../db/repositories/navigation.js'
-import { findPublishedPage } from '../db/repositories/pages.js'
+import { findPublishedChrome, findPublishedPage } from '../db/repositories/pages.js'
 import { getSeoSettings } from '../db/repositories/seo.js'
 import { findSettingsDocument } from '../db/repositories/settings.js'
 import { findSiteById, listSites, resolveSiteByHost } from '../db/repositories/sites.js'
@@ -20,6 +27,8 @@ import {
   feedOptionsFromSettings,
   type FeedChannel,
 } from '../lib/commerce/feeds.js'
+import { composePageSections } from '../lib/chrome/compose.js'
+import { storefrontPublicOrigin } from '../lib/public-url.js'
 import { NotFoundError } from '../lib/errors.js'
 import { ok } from '../lib/response.js'
 import { parseOrThrow } from '../lib/validate.js'
@@ -29,9 +38,25 @@ const publicPageQuerySchema = z.object({
   path: z.string().min(1).max(512).default('/'),
 })
 
+const publicHostQuerySchema = z.object({
+  host: z.string().min(1).max(253),
+})
+
 const publicFeedParamsSchema = z.object({
   token: z.string().min(24).max(64),
   channel: z.enum(['google', 'meta', 'amazon', 'ebay', 'marktplaats']),
+})
+
+const publicCartParamsSchema = z.object({
+  cartId: commerceIdSchema,
+})
+
+const publicProductsQuerySchema = z.object({
+  host: z.string().min(1).max(253),
+  search: z.string().max(200).optional(),
+  collectionId: commerceIdSchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
 })
 
 /** Port-stripped hostname; map loopback aliases to the seeded `localhost` domain. */
@@ -39,6 +64,17 @@ function normalizePublicHost(raw: string): string {
   const hostname = raw.split(':')[0]!.toLowerCase()
   if (hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1') return 'localhost'
   return hostname
+}
+
+async function resolvePublicCommerce(host: string): Promise<{ tenantId: string; siteId: string }> {
+  const hostname = normalizePublicHost(host)
+  const resolved = await withoutTenant((tx) => resolveSiteByHost(tx, hostname))
+  if (!resolved) throw new NotFoundError('Site for this hostname')
+  return resolved
+}
+
+function publicCommerceContext(tenantId: string): CommerceContext {
+  return { tenantId, actorLabel: 'public-storefront' }
 }
 
 async function resolveFeedTenant(token: string): Promise<string | null> {
@@ -90,11 +126,25 @@ const publicRoutes: FastifyPluginAsync = async (app) => {
       const page = await findPublishedPage(tx, resolved.tenantId, resolved.siteId, query.path)
       if (!page) throw new NotFoundError('Page')
 
-      const [navigation, seoSettings] = await Promise.all([
+      const [navigation, seoSettings, headerChrome, footerChrome] = await Promise.all([
         listNavigation(tx, resolved.tenantId, resolved.siteId),
         getSeoSettings(tx, resolved.tenantId, resolved.siteId),
+        findPublishedChrome(tx, resolved.tenantId, resolved.siteId, 'header'),
+        findPublishedChrome(tx, resolved.tenantId, resolved.siteId, 'footer'),
       ])
-      return { site, page, navigation, logo: seoSettings.business.logo ?? '' }
+
+      const primaryNav = navigation.find((menu) => menu.key === 'primary')?.items ?? []
+      const footerNav = navigation.find((menu) => menu.key === 'footer')?.items ?? []
+      const sections = composePageSections({
+        site,
+        body: page.sections,
+        headerChrome,
+        footerChrome,
+        primaryNav,
+        footerNav,
+      })
+
+      return { site, page: { ...page, sections }, navigation, logo: seoSettings.business.logo ?? '' }
     })
 
     const payload = publicPageSchema.parse({
@@ -138,8 +188,7 @@ const publicRoutes: FastifyPluginAsync = async (app) => {
     const settings = feedSettingsSchema.parse(settingsDoc?.value ?? {})
     if (!settings.publicToken || settings.publicToken !== token) throw new NotFoundError('Feed')
 
-    const storefrontUrl =
-      env.CORS_ORIGINS.find((origin) => origin.includes('3001')) ?? env.CORS_ORIGINS[0] ?? 'http://localhost:3001'
+    const storefrontUrl = storefrontPublicOrigin()
 
     const [products, sites] = await Promise.all([
       loadPublicFeedProducts(tenantId),
@@ -156,6 +205,93 @@ const publicRoutes: FastifyPluginAsync = async (app) => {
     reply.header('cache-control', 'public, max-age=300, stale-while-revalidate=600')
     return reply.send(body)
   })
+
+  // region Guest shop / cart / checkout (host-scoped)
+
+  app.get('/commerce/products', async (request, reply) => {
+    const query = parseOrThrow(publicProductsQuerySchema, request.query ?? {}, 'products query')
+    const { tenantId } = await resolvePublicCommerce(query.host)
+    const page = await commerceProvider.listProducts(publicCommerceContext(tenantId), {
+      status: 'active',
+      search: query.search,
+      collectionId: query.collectionId,
+      page: query.page,
+      limit: query.limit,
+    })
+    reply.header('cache-control', 'public, max-age=30, stale-while-revalidate=120')
+    return reply.send(ok(page))
+  })
+
+  app.get('/commerce/products/:handle', async (request, reply) => {
+    const { host } = parseOrThrow(publicHostQuerySchema, request.query ?? {}, 'host')
+    const { handle } = parseOrThrow(z.object({ handle: z.string().min(1).max(120) }), request.params, 'handle')
+    const { tenantId } = await resolvePublicCommerce(host)
+    const product = await withTenant(tenantId, (tx) => findProductByHandle(tx, tenantId, handle))
+    if (!product || product.status !== 'active') throw new NotFoundError('Product')
+    reply.header('cache-control', 'public, max-age=30, stale-while-revalidate=120')
+    return reply.send(ok(product))
+  })
+
+  app.post('/commerce/carts', async (request, reply) => {
+    const { host } = parseOrThrow(publicHostQuerySchema, request.query ?? {}, 'host')
+    const input = parseOrThrow(createCartInputSchema, request.body ?? {}, 'cart')
+    const { tenantId } = await resolvePublicCommerce(host)
+    const cart = await commerceProvider.createCart(publicCommerceContext(tenantId), input)
+    return reply.status(201).send(ok(cart))
+  })
+
+  app.get('/commerce/carts/:cartId', async (request, reply) => {
+    const { host } = parseOrThrow(publicHostQuerySchema, request.query ?? {}, 'host')
+    const { cartId } = parseOrThrow(publicCartParamsSchema, request.params, 'cart id')
+    const { tenantId } = await resolvePublicCommerce(host)
+    const cart = await commerceProvider.getCart(publicCommerceContext(tenantId), cartId)
+    if (!cart) throw new NotFoundError('Cart')
+    return reply.send(ok(cart))
+  })
+
+  app.post('/commerce/carts/:cartId/items', async (request, reply) => {
+    const { host } = parseOrThrow(publicHostQuerySchema, request.query ?? {}, 'host')
+    const { cartId } = parseOrThrow(publicCartParamsSchema, request.params, 'cart id')
+    const input = parseOrThrow(addLineItemInputSchema, request.body, 'line item')
+    const { tenantId } = await resolvePublicCommerce(host)
+    const cart = await commerceProvider.addLineItem(publicCommerceContext(tenantId), cartId, input)
+    return reply.send(ok(cart))
+  })
+
+  app.patch('/commerce/carts/:cartId/items/:itemId', async (request, reply) => {
+    const { host } = parseOrThrow(publicHostQuerySchema, request.query ?? {}, 'host')
+    const { cartId } = parseOrThrow(publicCartParamsSchema, request.params, 'cart id')
+    const { itemId } = parseOrThrow(z.object({ itemId: commerceIdSchema }), request.params, 'item id')
+    const { quantity } = parseOrThrow(updateLineItemInputSchema, request.body, 'line item')
+    const { tenantId } = await resolvePublicCommerce(host)
+    const cart = await commerceProvider.updateLineItem(
+      publicCommerceContext(tenantId),
+      cartId,
+      itemId,
+      quantity,
+    )
+    return reply.send(ok(cart))
+  })
+
+  app.post('/commerce/carts/:cartId/checkout', async (request, reply) => {
+    const { host } = parseOrThrow(publicHostQuerySchema, request.query ?? {}, 'host')
+    const { cartId } = parseOrThrow(publicCartParamsSchema, request.params, 'cart id')
+    const input = parseOrThrow(startCheckoutInputSchema, request.body, 'checkout')
+    const { tenantId } = await resolvePublicCommerce(host)
+    const checkout = await commerceProvider.startCheckout(publicCommerceContext(tenantId), cartId, input)
+    return reply.send(ok(checkout))
+  })
+
+  app.post('/commerce/carts/:cartId/complete', async (request, reply) => {
+    const { host } = parseOrThrow(publicHostQuerySchema, request.query ?? {}, 'host')
+    const { cartId } = parseOrThrow(publicCartParamsSchema, request.params, 'cart id')
+    const input = parseOrThrow(completeCheckoutInputSchema, request.body ?? {}, 'checkout')
+    const { tenantId } = await resolvePublicCommerce(host)
+    const order = await commerceProvider.completeCheckout(publicCommerceContext(tenantId), cartId, input)
+    return reply.status(201).send(ok(order))
+  })
+
+  // endregion
 }
 
 export default publicRoutes

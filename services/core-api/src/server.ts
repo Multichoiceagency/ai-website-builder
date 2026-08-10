@@ -1,6 +1,7 @@
 import { buildApp } from './app.js'
 import { env } from './config/env.js'
 import { closeDatabase } from './db/client.js'
+import { ensurePlatformKnowledgeSeeded } from './lib/ai/knowledge-rag.js'
 
 const app = await buildApp()
 
@@ -21,6 +22,9 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'))
 
 try {
   await app.listen({ port: env.CORE_API_PORT, host: env.CORE_API_HOST })
+  void ensurePlatformKnowledgeSeeded().catch((error) => {
+    app.log.warn({ err: error }, 'platform knowledge seed skipped')
+  })
 } catch (error) {
   app.log.error({ err: error }, 'failed to start')
   process.exit(1)

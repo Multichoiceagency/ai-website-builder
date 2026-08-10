@@ -1,10 +1,12 @@
 import {
   pageRevisionSchema,
+  pageRoleSchema,
   pageSchema,
   pageSummarySchema,
   seoSchema,
   type Page,
   type PageRevision,
+  type PageRole,
   type PageStatus,
   type PageSummary,
   type Section,
@@ -21,6 +23,7 @@ interface PageRow {
   path: string
   title: string
   status: PageStatus
+  role: string
   seo: unknown
   sections: unknown
   published_at: Date | null
@@ -30,11 +33,6 @@ interface PageRow {
   has_unpublished_changes: boolean
 }
 
-/**
- * `sections` is stored as JSONB, so it is the one column that can drift from
- * the contract. Parsing it on read means a bad document surfaces here, not in
- * a renderer.
- */
 function readDocument(value: unknown): Section[] {
   try {
     return normalizeDocument(readJson<unknown[]>(value, []))
@@ -50,6 +48,7 @@ function toSummary(row: PageRow): PageSummary {
     path: row.path,
     title: row.title,
     status: row.status,
+    role: pageRoleSchema.parse(row.role || 'page'),
     sectionCount: Number(row.section_count),
     hasUnpublishedChanges: row.has_unpublished_changes,
     publishedAt: row.published_at,
@@ -66,13 +65,8 @@ function toPage(row: PageRow): Page {
   })
 }
 
-/**
- * Computed once here rather than at every call site: a page has unpublished
- * changes when the draft differs from what is live, or when it was never
- * published at all.
- */
 const SUMMARY_SELECT = (tx: Tx) => tx`
-  id, tenant_id, site_id, path, title, status, seo, sections, published_at, created_at, updated_at,
+  id, tenant_id, site_id, path, title, status, role, seo, sections, published_at, created_at, updated_at,
   coalesce(jsonb_array_length(sections), 0) AS section_count,
   (
     published_at IS NULL
@@ -85,7 +79,7 @@ const SUMMARY_SELECT = (tx: Tx) => tx`
 export async function listPages(tx: Tx, tenantId: string, siteId: string): Promise<PageSummary[]> {
   const rows = await tx<PageRow[]>`
     SELECT ${SUMMARY_SELECT(tx)} FROM pages
-    WHERE tenant_id = ${tenantId} AND site_id = ${siteId}
+    WHERE tenant_id = ${tenantId} AND site_id = ${siteId} AND role = 'page'
     ORDER BY path ASC
   `
   return rows.map(toSummary)
@@ -113,6 +107,20 @@ export async function findPageByPath(
   return row ? toPage(row) : null
 }
 
+export async function findChromePage(
+  tx: Tx,
+  tenantId: string,
+  siteId: string,
+  role: 'header' | 'footer',
+): Promise<Page | null> {
+  const [row] = await tx<PageRow[]>`
+    SELECT ${SUMMARY_SELECT(tx)} FROM pages
+    WHERE tenant_id = ${tenantId} AND site_id = ${siteId} AND role = ${role}
+    LIMIT 1
+  `
+  return row ? toPage(row) : null
+}
+
 export async function insertPage(
   tx: Tx,
   input: {
@@ -120,14 +128,16 @@ export async function insertPage(
     siteId: string
     path: string
     title: string
+    role?: PageRole
     seo: Seo
     sections: Section[]
   },
 ): Promise<Page> {
+  const role = pageRoleSchema.parse(input.role ?? 'page')
   const [row] = await tx<PageRow[]>`
-    INSERT INTO pages (tenant_id, site_id, path, title, seo, sections)
+    INSERT INTO pages (tenant_id, site_id, path, title, role, seo, sections)
     VALUES (
-      ${input.tenantId}, ${input.siteId}, ${input.path}, ${input.title},
+      ${input.tenantId}, ${input.siteId}, ${input.path}, ${input.title}, ${role},
       ${jsonParam(tx, input.seo)}, ${jsonParam(tx, input.sections)}
     )
     RETURNING ${SUMMARY_SELECT(tx)}
@@ -216,6 +226,23 @@ export async function findPublishedPage(
     sections: readDocument(row.published_sections),
     publishedAt: row.published_at,
   }
+}
+
+export async function findPublishedChrome(
+  tx: Tx,
+  tenantId: string,
+  siteId: string,
+  role: 'header' | 'footer',
+): Promise<Section[] | null> {
+  const [row] = await tx<{ published_sections: unknown; published_at: Date | null }[]>`
+    SELECT published_sections, published_at
+    FROM pages
+    WHERE tenant_id = ${tenantId} AND site_id = ${siteId} AND role = ${role}
+      AND status = 'published' AND published_at IS NOT NULL
+    LIMIT 1
+  `
+  if (!row?.published_at) return null
+  return readDocument(row.published_sections)
 }
 
 export async function insertRevision(

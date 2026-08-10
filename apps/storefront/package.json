@@ -21,9 +21,13 @@
     "@platform/ui": "workspace:*",
     "apexcharts": "^6.7.0",
     "flatpickr": "^4.6.13",
+    "gsap": "^3.13.0",
     "jsvectormap": "^1.7.0",
+    "lenis": "^1.3.26",
     "nuxt": "^4.0.0",
     "swiper": "^14.1.0",
+    "three": "0.134.0",
+    "vanta": "^0.5.24",
     "vue": "^3.5.13",
     "vue3-apexcharts": "^1.11.1"
   },

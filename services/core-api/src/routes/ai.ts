@@ -79,12 +79,13 @@ const aiRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.post('/assist', async (request, reply) => {
-    requireTenant(request, 'ai:use')
+    const context = requireTenant(request, 'ai:use')
     const input = parseOrThrow(assistBodySchema, request.body, 'assist request')
 
     try {
       const result = await assistWithMessage(input.message, {
         includeCatalogue: input.includeCatalogue,
+        tenantId: context.tenantId,
       })
       if (!result) {
         throw new AppError(

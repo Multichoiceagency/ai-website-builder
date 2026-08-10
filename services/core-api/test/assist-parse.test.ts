@@ -62,11 +62,19 @@ describe('parseAssistModelText', () => {
     expect(parsed.actions).toEqual([])
   })
 
-  it('extracts a JSON object embedded in prose', () => {
+  it('parses setHeaderLogoSize and patchSectionProps', () => {
     const parsed = parseAssistModelText(
-      'Of course. {"answer":"Layout set to 1600px.","actions":[{"type":"setContentWidth","width":1600}]} Hope that helps.',
+      JSON.stringify({
+        answer: 'Logo enlarged and section patched.',
+        actions: [
+          { type: 'setHeaderLogoSize', size: 'xl' },
+          { type: 'patchSectionProps', sectionId: 'sec_1', props: { headline: 'Hello' } },
+        ],
+      }),
     )
-    expect(parsed.answer).toContain('1600')
-    expect(parsed.actions?.[0]).toEqual({ type: 'setContentWidth', width: 1600 })
+    expect(parsed.actions).toEqual([
+      { type: 'setHeaderLogoSize', size: 'xl' },
+      { type: 'patchSectionProps', sectionId: 'sec_1', props: { headline: 'Hello' } },
+    ])
   })
 })

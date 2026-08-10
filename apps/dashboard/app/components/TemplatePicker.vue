@@ -61,6 +61,7 @@ const query = computed(() => ({
   search: search.value.trim() || undefined,
   maxPerformanceClass: props.maxPerformanceClass,
   freeOnly: freeOnly.value ? 'true' : undefined,
+  uniqueRecipes: 'true',
   limit: 500,
 }))
 

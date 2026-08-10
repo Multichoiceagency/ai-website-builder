@@ -263,6 +263,18 @@ export const generationRequestSchema = z.object({
 })
 export type GenerationRequest = z.infer<typeof generationRequestSchema>
 
+/** Ambora-style one-prompt website build — synthesizes or discovers a profile first. */
+export const generateFromPromptInputSchema = z.object({
+  prompt: z.string().min(8).max(4000),
+  locale: localeSchema.default('nl'),
+  style: z.enum(['auto', 'minimal', 'modern', 'premium', 'bold', 'editorial']).default('auto'),
+  templateId: z.string().max(120).optional(),
+  publish: z.boolean().default(false),
+  siteName: z.string().max(200).optional(),
+  maxPerformanceClass: z.enum(['A', 'B', 'C', 'D']).default('B'),
+})
+export type GenerateFromPromptInput = z.infer<typeof generateFromPromptInputSchema>
+
 export const qualityReportSchema = z.object({
   seo: z.object({ score: z.number().min(0).max(100), issues: z.array(z.string().max(300)) }),
   accessibility: z.object({ score: z.number().min(0).max(100), issues: z.array(z.string().max(300)) }),

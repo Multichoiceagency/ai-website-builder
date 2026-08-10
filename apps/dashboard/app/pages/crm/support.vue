@@ -14,7 +14,6 @@ import type {
  */
 const api = useApi()
 const can = useCan()
-const activeTenantId = useActiveTenantId()
 
 const statusFilter = ref<'' | WhatsappTicketStatus>('')
 const selectedId = ref('')
@@ -65,12 +64,7 @@ watch(tickets, (list) => {
 }, { immediate: true })
 
 const openCount = computed(() => tickets.value.filter((ticket) => ticket.status === 'open').length)
-const webhookUrl = computed(() => {
-  const config = useRuntimeConfig()
-  const tenant = activeTenantId.value
-  if (!tenant) return ''
-  return `${config.public.coreApiUrl}/api/v1/crm/whatsapp/webhook?tenantId=${tenant}`
-})
+const webhookUrl = computed(() => connection.value?.webhookUrl ?? '')
 
 async function sendReply() {
   if (!selectedId.value || !reply.value.trim() || !can('crm:write')) return

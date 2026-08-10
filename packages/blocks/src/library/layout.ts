@@ -30,6 +30,12 @@ export const headerSimple01 = defineBlock({
     field.media('logo', 'Logo image', {
       help: 'Pick from the media library. Leave empty to use the site brand logo, or the brand name as text.',
     }),
+    field.select('logoHeight', 'Logo size', [
+      { value: 'sm', label: 'Small' },
+      { value: 'md', label: 'Medium' },
+      { value: 'lg', label: 'Large' },
+      { value: 'xl', label: 'Extra large' },
+    ]),
     field.select('layout', 'Layout', HEADER_LAYOUT_OPTIONS, {
       help: 'Left: logo then links. Centre: logo centred. Split: logo left, links centre, button right.',
     }),
@@ -41,6 +47,7 @@ export const headerSimple01 = defineBlock({
   schema: z.object({
     brand: text('Your business'),
     logo: imageUrl(''),
+    logoHeight: z.enum(['sm', 'md', 'lg', 'xl']).default('md'),
     layout: headerLayoutSchema,
     links: z
       .array(linkItem)
@@ -81,6 +88,12 @@ export const headerLiquidGlass01 = defineBlock({
     field.media('logo', 'Logo image', {
       help: 'Optional. Leave empty to keep the wordmark (MotionSites default).',
     }),
+    field.select('logoHeight', 'Logo size', [
+      { value: 'sm', label: 'Small' },
+      { value: 'md', label: 'Medium' },
+      { value: 'lg', label: 'Large' },
+      { value: 'xl', label: 'Extra large' },
+    ]),
     field.boolean('trademark', 'Show ™ after the brand'),
     field.select('layout', 'Layout', HEADER_LAYOUT_OPTIONS, {
       help: 'Split matches the MotionSites default (logo left, links centre, CTA right).',
@@ -92,6 +105,7 @@ export const headerLiquidGlass01 = defineBlock({
   schema: z.object({
     brand: text('Wanderful'),
     logo: imageUrl(''),
+    logoHeight: z.enum(['sm', 'md', 'lg', 'xl']).default('md'),
     trademark: bool(true),
     layout: z.enum(['left', 'center', 'split']).default('split'),
     links: z

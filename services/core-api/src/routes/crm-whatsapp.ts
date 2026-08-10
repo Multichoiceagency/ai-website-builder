@@ -36,8 +36,10 @@ import {
 import { BadRequestError, NotFoundError } from '../lib/errors.js'
 import { ok } from '../lib/response.js'
 import { parseOrThrow } from '../lib/validate.js'
+import { whatsappWebhookUrl } from '../lib/public-url.js'
 import { draftWhatsappAgentReply } from '../lib/whatsapp/agent-reply.js'
 import { resolveTenantWhatsappConnection } from '../lib/whatsapp/resolve-provider.js'
+import { OpenWaWhatsappProvider } from '../adapters/whatsapp/openwa.js'
 import { requireTenant } from '../plugins/auth.js'
 
 function verifyWebhookSignature(rawBody: string, signature: string | undefined, secret: string | null): boolean {
@@ -76,7 +78,7 @@ const crmWhatsappRoutes: FastifyPluginAsync = async (app) => {
         apiKeyConfigured: resolved.apiKeyConfigured,
         webhookSecretConfigured: resolved.webhookSecretConfigured,
         onboardingComplete: resolved.settings.onboardingComplete,
-        webhookUrl: null,
+        webhookUrl: whatsappWebhookUrl(context.tenantId, request),
         sessions,
       }),
     )
@@ -150,10 +152,52 @@ const crmWhatsappRoutes: FastifyPluginAsync = async (app) => {
         apiKeyConfigured: resolved.apiKeyConfigured,
         webhookSecretConfigured: resolved.webhookSecretConfigured,
         onboardingComplete: resolved.settings.onboardingComplete,
-        webhookUrl: null,
+        webhookUrl: whatsappWebhookUrl(context.tenantId, request),
         sessions,
       }),
     )
+  })
+
+  app.post('/whatsapp/sessions', async (request, reply) => {
+    const context = requireTenant(request, 'crm:write')
+    const body = parseOrThrow(
+      z.object({ name: z.string().trim().min(3).max(50).regex(/^[a-zA-Z0-9-]+$/) }),
+      request.body ?? {},
+      'body',
+    )
+    const resolved = await resolveTenantWhatsappConnection(context.tenantId)
+    if (!(resolved.provider instanceof OpenWaWhatsappProvider) || !resolved.provider.isConfigured()) {
+      throw new BadRequestError('Connect OpenWA first (base URL + API key).')
+    }
+    const session = await resolved.provider.createSession(body.name)
+    await resolved.provider.startSession(session.id).catch(() => null)
+    return reply.code(201).send(ok(session))
+  })
+
+  app.post('/whatsapp/sessions/:sessionId/start', async (request, reply) => {
+    const context = requireTenant(request, 'crm:write')
+    const { sessionId } = parseOrThrow(z.object({ sessionId: z.string().min(1).max(128) }), request.params, 'params')
+    const resolved = await resolveTenantWhatsappConnection(context.tenantId)
+    if (!(resolved.provider instanceof OpenWaWhatsappProvider) || !resolved.provider.isConfigured()) {
+      throw new BadRequestError('Connect OpenWA first (base URL + API key).')
+    }
+    const session = await resolved.provider.startSession(sessionId)
+    return reply.send(ok(session))
+  })
+
+  app.get('/whatsapp/sessions/:sessionId/qr', async (request, reply) => {
+    const context = requireTenant(request, 'crm:read')
+    const { sessionId } = parseOrThrow(z.object({ sessionId: z.string().min(1).max(128) }), request.params, 'params')
+    const resolved = await resolveTenantWhatsappConnection(context.tenantId)
+    if (!(resolved.provider instanceof OpenWaWhatsappProvider) || !resolved.provider.isConfigured()) {
+      throw new BadRequestError('Connect OpenWA first (base URL + API key).')
+    }
+    try {
+      const qr = await resolved.provider.getQr(sessionId)
+      return reply.send(ok(qr))
+    } catch (error) {
+      throw new BadRequestError(error instanceof Error ? error.message : 'QR not ready yet. Wait a few seconds and retry.')
+    }
   })
 
   app.get('/whatsapp/agents', async (request, reply) => {

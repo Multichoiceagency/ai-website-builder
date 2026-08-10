@@ -222,6 +222,12 @@ export const templateQuerySchema = z.object({
   maxPerformanceClass: performanceClassSchema.optional(),
   mobileSafe: z.coerce.boolean().optional(),
   freeOnly: z.coerce.boolean().optional(),
+  /**
+   * Collapse catalogue cards that share an identical `blockRecipe` (MotionSites
+   * often maps many ids onto one Vue block). Prefer island-ready / landing /
+   * earlier catalogue order as the survivor.
+   */
+  uniqueRecipes: z.coerce.boolean().optional(),
   limit: z.coerce.number().int().min(1).max(500).default(500),
 })
 export type TemplateQuery = z.infer<typeof templateQuerySchema>

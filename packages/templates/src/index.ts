@@ -29,6 +29,7 @@ import { MAGICUI_CATALOG } from './magicui.generated.js'
 import { SHADCNSPACE_CATALOG } from './shadcnspace.generated.js'
 import { SHADCNSPACE_LANDINGS_CATALOG } from './shadcnspace-landings.generated.js'
 import { STUDIO_LAYOUTS_CATALOG } from './studio-layouts.generated.js'
+import { WEBSITE_PACKS_CATALOG } from './website-packs.js'
 
 export { MOTIONSITES_CATALOG } from './catalog.generated.js'
 export { MOTIONSITES_BACKGROUNDS } from './backgrounds.generated.js'
@@ -37,6 +38,7 @@ export { SHADCNSPACE_CATALOG } from './shadcnspace.generated.js'
 export { SHADCNSPACE_LANDINGS_CATALOG } from './shadcnspace-landings.generated.js'
 export { MAGICUI_CATALOG } from './magicui.generated.js'
 export { STUDIO_LAYOUTS_CATALOG } from './studio-layouts.generated.js'
+export { WEBSITE_PACKS_CATALOG } from './website-packs.js'
 export {
   detectExactIslandIntent,
   isMotionsitesCodegenBrief,
@@ -115,6 +117,7 @@ export const templateCatalog: TemplateCatalog = mergeCatalogs(
   SHADCNSPACE_LANDINGS_CATALOG,
   MAGICUI_CATALOG,
   STUDIO_LAYOUTS_CATALOG,
+  WEBSITE_PACKS_CATALOG,
 )
 
 const ISLAND_READY = new Set<string>(MOTIONSITES_ISLAND_READY)
@@ -186,7 +189,30 @@ export function searchTemplates(query: TemplateQuery = { limit: 500 }): SiteTemp
     return true
   })
 
-  return matches.slice(0, query.limit ?? 300)
+  const collapsed = query.uniqueRecipes ? collapseDuplicateRecipes(matches) : matches
+  return collapsed.slice(0, query.limit ?? 300)
+}
+
+/** Keep one card per identical block recipe; prefer packs, landings, island-ready. */
+function collapseDuplicateRecipes(templates: SiteTemplate[]): SiteTemplate[] {
+  const score = (template: SiteTemplate): number => {
+    let value = 0
+    if (template.id.startsWith('pack-')) value += 100
+    if (template.id.startsWith('studio-')) value += 80
+    if (template.pageType === 'landing') value += 40
+    if (template.islandReady) value += 30
+    if (template.blockRecipe.length > 1) value += Math.min(20, template.blockRecipe.length * 2)
+    if (template.category === 'website-pack') value += 50
+    return value
+  }
+
+  const best = new Map<string, SiteTemplate>()
+  for (const template of templates) {
+    const key = template.blockRecipe.join('|') || template.id
+    const current = best.get(key)
+    if (!current || score(template) > score(current)) best.set(key, template)
+  }
+  return [...best.values()]
 }
 
 export function listBackgrounds(): MotionBackground[] {

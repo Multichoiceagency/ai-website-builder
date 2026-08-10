@@ -71,6 +71,7 @@ const emit = defineEmits<{
   askAi: [index: number]
   /** InsertPanel / library card dropped at an insertion index. */
   libraryDrop: [payload: LibraryDragPayload, index: number]
+  openInsert: []
 }>()
 
 /** Desktop base is wide enough that 1280 / 1440 / 1600 show gutters vs full. */
@@ -539,8 +540,16 @@ onBeforeUnmount(cancelDrag)
             <div>
               <p class="text-[1.0625rem] font-semibold text-[var(--site-text)]">This page is empty</p>
               <p class="mt-1.5 text-[0.9375rem] text-[var(--site-text-muted)]">
-                Add a section from the left panel to start.
+                Add a section to start building this page.
               </p>
+              <button
+                v-if="canWrite"
+                type="button"
+                class="mt-5 rounded-lg bg-[var(--site-primary)] px-4 py-2 text-sm font-semibold text-[var(--site-primary-ink,#fff)]"
+                @click="emit('openInsert')"
+              >
+                Add a section
+              </button>
             </div>
           </div>
         </div>

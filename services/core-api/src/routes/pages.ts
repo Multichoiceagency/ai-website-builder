@@ -51,6 +51,7 @@ const pagesRoutes: FastifyPluginAsync = async (app) => {
         siteId,
         path: input.path,
         title: input.title,
+        role: input.role,
         seo: seoSchema.parse(input.seo ?? {}),
         sections,
       })
