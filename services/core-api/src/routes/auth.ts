@@ -59,6 +59,7 @@ function buildSessionContext(
   user: SessionContext['user'],
   memberships: SessionContext['memberships'],
   requestedTenantId?: string,
+  impersonatorUserId?: string | null,
 ): SessionContext {
   const active =
     memberships.find((membership) => membership.tenantId === requestedTenantId) ?? memberships[0] ?? null
@@ -68,6 +69,7 @@ function buildSessionContext(
     memberships,
     activeTenantId: active?.tenantId ?? null,
     permissions: active ? resolvePermissions(active.role) : [],
+    impersonatorUserId: impersonatorUserId ?? null,
   }
 }
 
@@ -486,10 +488,77 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(ok({ loggedOut: true }))
   })
 
+  /**
+   * Exchange an admin-issued impersonation token for a dashboard session cookie.
+   * Token is single-use in practice (admin opens once); validation is findValidSession.
+   */
+  app.post('/claim-impersonation', async (request, reply) => {
+    const body = parseOrThrow(
+      z.object({
+        token: z.string().min(20).max(200),
+        tenantId: z.string().uuid().optional(),
+      }),
+      request.body,
+      'claim',
+    )
+
+    const { findValidSession } = await import('../db/repositories/sessions.js')
+    const { findUserById } = await import('../db/repositories/users.js')
+
+    const claimed = await withoutTenant(async (tx) => {
+      const session = await findValidSession(tx, body.token)
+      if (!session?.impersonatorUserId) return null
+      const user = await findUserById(tx, session.userId)
+      if (!user) return null
+      const memberships = await listMembershipsForUser(tx, user.id)
+      return { user, memberships, impersonatorUserId: session.impersonatorUserId }
+    })
+
+    if (!claimed) throw new UnauthorizedError()
+
+    setSessionCookie(reply, body.token)
+    return reply.send(
+      ok(buildSessionContext(claimed.user, claimed.memberships, body.tenantId, claimed.impersonatorUserId)),
+    )
+  })
+
+  /** End impersonation and restore a normal session for the staff user. */
+  app.post('/exit-impersonation', async (request, reply) => {
+    const auth = requireUser(request)
+    if (!auth.impersonatorUserId) {
+      throw new BadRequestError('Not impersonating.')
+    }
+
+    const { findUserById } = await import('../db/repositories/users.js')
+    const restored = await withoutTenant(async (tx) => {
+      await deleteSession(tx, auth.sessionToken)
+      const admin = await findUserById(tx, auth.impersonatorUserId!)
+      if (!admin) return null
+      const token = generateSessionToken()
+      await insertSession(tx, {
+        userId: admin.id,
+        token,
+        ttlSeconds: env.SESSION_TTL_SECONDS,
+      })
+      const memberships = await listMembershipsForUser(tx, admin.id)
+      return { user: admin, memberships, token }
+    })
+
+    if (!restored) {
+      clearSessionCookie(reply)
+      throw new UnauthorizedError()
+    }
+
+    setSessionCookie(reply, restored.token)
+    return reply.send(ok(buildSessionContext(restored.user, restored.memberships)))
+  })
+
   app.get('/session', async (request, reply) => {
     const auth = requireUser(request)
     const requested = request.headers['x-tenant-id'] as string | undefined
-    return reply.send(ok(buildSessionContext(auth.user, auth.memberships, requested)))
+    return reply.send(
+      ok(buildSessionContext(auth.user, auth.memberships, requested, auth.impersonatorUserId)),
+    )
   })
 }
 

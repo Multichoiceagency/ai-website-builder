@@ -14,18 +14,20 @@ export interface SessionRecord {
   id: string
   userId: string
   expiresAt: Date
+  impersonatorUserId?: string | null
 }
 
 export async function insertSession(
   tx: Tx,
-  input: { userId: string; token: string; ttlSeconds: number },
+  input: { userId: string; token: string; ttlSeconds: number; impersonatorUserId?: string | null },
 ): Promise<SessionRecord> {
   const [row] = await tx<{ id: string; user_id: string; expires_at: Date }[]>`
-    INSERT INTO sessions (user_id, token_hash, expires_at)
+    INSERT INTO sessions (user_id, token_hash, expires_at, impersonator_user_id)
     VALUES (
       ${input.userId},
       ${hashSessionToken(input.token)},
-      now() + make_interval(secs => ${input.ttlSeconds})
+      now() + make_interval(secs => ${input.ttlSeconds}),
+      ${input.impersonatorUserId ?? null}
     )
     RETURNING id, user_id, expires_at
   `
@@ -33,14 +35,24 @@ export async function insertSession(
 }
 
 /** Returns null for unknown *and* expired tokens — the caller cannot tell them apart. */
-export async function findValidSession(tx: Tx, token: string): Promise<SessionRecord | null> {
-  const [row] = await tx<{ id: string; user_id: string; expires_at: Date }[]>`
-    SELECT id, user_id, expires_at
+export async function findValidSession(
+  tx: Tx,
+  token: string,
+): Promise<(SessionRecord & { impersonatorUserId: string | null }) | null> {
+  const [row] = await tx<{ id: string; user_id: string; expires_at: Date; impersonator_user_id: string | null }[]>`
+    SELECT id, user_id, expires_at, impersonator_user_id
     FROM sessions
     WHERE token_hash = ${hashSessionToken(token)} AND expires_at > now()
     LIMIT 1
   `
-  return row ? { id: row.id, userId: row.user_id, expiresAt: row.expires_at } : null
+  return row
+    ? {
+        id: row.id,
+        userId: row.user_id,
+        expiresAt: row.expires_at,
+        impersonatorUserId: row.impersonator_user_id,
+      }
+    : null
 }
 
 export async function deleteSession(tx: Tx, token: string): Promise<void> {

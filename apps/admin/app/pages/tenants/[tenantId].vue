@@ -4,6 +4,7 @@ import type { WhiteLabelSettings } from '@platform/schemas'
 
 const route = useRoute()
 const api = useAdminApi()
+const config = useRuntimeConfig()
 
 interface Detail {
   tenant: {
@@ -32,6 +33,14 @@ interface Detail {
   branding: WhiteLabelSettings
 }
 
+const PLAN_OPTIONS = [
+  { label: 'Launch', value: 'launch' },
+  { label: 'Grow', value: 'grow' },
+  { label: 'Scale', value: 'scale' },
+  { label: 'Advanced', value: 'advanced' },
+  { label: 'Enterprise', value: 'enterprise' },
+]
+
 const { data, refresh } = await useAsyncData(`admin:tenant:${route.params.tenantId}`, () =>
   api.get<Detail>(`/tenants/${route.params.tenantId}`),
 )
@@ -55,6 +64,12 @@ const form = reactive({
 const saving = ref(false)
 const saveError = ref('')
 const saveOk = ref(false)
+const plan = ref('launch')
+const planBusy = ref(false)
+const planError = ref('')
+const planOk = ref(false)
+const impersonating = ref<string | null>(null)
+const impersonateError = ref('')
 
 const FONT_OPTIONS = [
   'Figtree',
@@ -97,6 +112,48 @@ watch(
   },
   { immediate: true },
 )
+
+watch(
+  () => data.value?.tenant.plan,
+  (value) => {
+    if (value) plan.value = value
+  },
+  { immediate: true },
+)
+
+async function savePlan() {
+  planError.value = ''
+  planOk.value = false
+  planBusy.value = true
+  try {
+    await api.patch(`/tenants/${route.params.tenantId}/plan`, { plan: plan.value })
+    await refresh()
+    planOk.value = true
+  } catch (caught) {
+    planError.value = caught instanceof Error ? caught.message : 'Could not update plan.'
+  } finally {
+    planBusy.value = false
+  }
+}
+
+async function impersonate(userId: string) {
+  impersonateError.value = ''
+  impersonating.value = userId
+  try {
+    const result = await api.post<{ token: string; tenantId: string }>('/impersonate', {
+      userId,
+      tenantId: String(route.params.tenantId),
+    })
+    const url = new URL('/impersonate', config.public.dashboardUrl)
+    url.searchParams.set('token', result.token)
+    url.searchParams.set('tenantId', result.tenantId)
+    window.open(url.toString(), '_blank', 'noopener')
+  } catch (caught) {
+    impersonateError.value = caught instanceof Error ? caught.message : 'Impersonation failed.'
+  } finally {
+    impersonating.value = null
+  }
+}
 
 async function saveBranding() {
   saveError.value = ''
@@ -145,6 +202,25 @@ async function saveBranding() {
       <UiStat label="Pages" :value="data.tenant.pages" />
       <UiStat label="Published" :value="data.tenant.publishedPages" />
     </div>
+
+    <UiCard class="mt-7">
+      <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 class="text-heading font-semibold text-ink">Plan</h2>
+          <p class="mt-1 text-[0.8125rem] text-soft">Billing entitlement for this workspace.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <UiSelect v-model="plan" :options="PLAN_OPTIONS" />
+          <UiButton variant="primary" :loading="planBusy" @click="savePlan">Update plan</UiButton>
+        </div>
+      </div>
+      <p v-if="planError" class="rounded-lg bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger" role="alert">
+        {{ planError }}
+      </p>
+      <p v-else-if="planOk" class="rounded-lg bg-positive-soft px-3 py-2 text-[0.8125rem] text-positive" role="status">
+        Plan updated.
+      </p>
+    </UiCard>
 
     <UiCard class="mt-7">
       <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -255,13 +331,30 @@ async function saveBranding() {
     <div class="mt-7 grid gap-5 lg:grid-cols-2 lg:items-start">
       <UiCard :padded="false">
         <h2 class="border-b border-line px-4 py-3 text-heading font-semibold text-ink">Team</h2>
+        <p
+          v-if="impersonateError"
+          class="mx-4 mt-3 rounded-lg bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger"
+          role="alert"
+        >
+          {{ impersonateError }}
+        </p>
         <ul class="divide-y divide-line">
           <li v-for="member in data.members" :key="member.id" class="flex items-center justify-between gap-4 px-4 py-3">
             <span class="min-w-0">
               <span class="block truncate text-[0.8125rem] font-medium text-ink">{{ member.name }}</span>
               <span class="block truncate text-[0.75rem] text-faint">{{ member.email }}</span>
             </span>
-            <UiBadge class="shrink-0">{{ member.role.replace('_', ' ') }}</UiBadge>
+            <div class="flex shrink-0 items-center gap-2">
+              <UiBadge>{{ member.role.replace('_', ' ') }}</UiBadge>
+              <UiButton
+                size="sm"
+                :loading="impersonating === member.id"
+                :disabled="Boolean(impersonating)"
+                @click="impersonate(member.id)"
+              >
+                Impersonate
+              </UiButton>
+            </div>
           </li>
         </ul>
       </UiCard>

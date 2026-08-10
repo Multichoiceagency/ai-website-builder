@@ -30,6 +30,7 @@ import sitesRoutes from './routes/sites.js'
 import stockRoutes from './routes/stock.js'
 import templatesRoutes from './routes/templates.js'
 import tenantsRoutes from './routes/tenants.js'
+import feedbackRoutes from './routes/feedback.js'
 import { ok } from './lib/response.js'
 
 /**
@@ -140,6 +141,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(integrationsRoutes, { prefix: '/api/v1/integrations' })
 
   await app.register(settingsRoutes, { prefix: '/api/v1/settings' })
+  await app.register(feedbackRoutes, { prefix: '/api/v1/feedback' })
 
   await app.register(publicRoutes, { prefix: '/public/v1' })
 

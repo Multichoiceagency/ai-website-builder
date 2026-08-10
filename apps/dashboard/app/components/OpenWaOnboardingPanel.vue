@@ -251,7 +251,9 @@ async function dismissChecklist() {
         <h2 class="type-button text-ink">Connect OpenWA</h2>
         <p class="mt-0.5 type-caption-12 text-soft">
           {{ gatewayLabel }}
-          <span v-if="connection?.source"> · via {{ connection.source === 'tenant' ? 'your credentials' : 'platform .env' }}</span>
+          <span v-if="connection?.source">
+            · via {{ connection.source === 'tenant' ? 'workspace settings' : 'platform defaults' }}
+          </span>
           <span v-if="connection?.sessions?.length"> · {{ connection.sessions.length }} session{{ connection.sessions.length === 1 ? '' : 's' }}</span>
         </p>
       </div>
@@ -274,8 +276,8 @@ async function dismissChecklist() {
             <h3 class="type-button text-ink">Save gateway</h3>
           </div>
           <p class="type-caption-12 text-soft">
-            Enter the OpenWA gateway this workspace should use. Credentials are stored encrypted per tenant.
-            Platform <code class="rounded bg-sunken px-1">.env</code> values are used only when you have not saved your own.
+            Enter the public OpenWA HTTPS URL and API key for this workspace. Credentials are stored encrypted.
+            Platform defaults apply only when you have not saved your own settings here.
           </p>
 
           <div class="grid gap-4 lg:grid-cols-2">

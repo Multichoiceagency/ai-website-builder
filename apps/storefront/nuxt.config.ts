@@ -19,6 +19,9 @@ export default defineNuxtConfig({
       /** Optional: required together with tenantId for the tracking plugin. */
       siteId: process.env.STOREFRONT_SITE_ID ?? '',
       tenantId: process.env.STOREFRONT_TENANT_ID ?? '',
+      motion: {
+        enableLenis: true,
+      },
     },
   },
 

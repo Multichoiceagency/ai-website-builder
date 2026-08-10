@@ -22,7 +22,7 @@ export function useAdminApi() {
   const config = useRuntimeConfig()
 
   async function request<T>(
-    method: 'GET' | 'PUT' | 'POST',
+    method: 'GET' | 'PUT' | 'POST' | 'PATCH',
     path: string,
     options?: {
       query?: Record<string, string | number | undefined>
@@ -53,6 +53,7 @@ export function useAdminApi() {
       request<T>('GET', path, { query }),
     put: <T>(path: string, body: unknown) => request<T>('PUT', path, { body }),
     post: <T>(path: string, body?: unknown) => request<T>('POST', path, { body }),
+    patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, { body }),
   }
 }
 

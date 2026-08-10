@@ -38,6 +38,57 @@ const {
 const assistantOpen = useAssistantOpen()
 const connectorsOpen = ref(false)
 const commandOpen = ref(false)
+const feedbackOpen = ref(false)
+const feedbackMessage = ref('')
+const feedbackBusy = ref(false)
+const feedbackError = ref('')
+const feedbackSent = ref(false)
+const exitImpersonating = ref(false)
+
+const isImpersonating = computed(() => Boolean(session.value?.impersonatorUserId))
+
+async function submitFeedback() {
+  feedbackError.value = ''
+  feedbackSent.value = false
+  const message = feedbackMessage.value.trim()
+  if (!message) {
+    feedbackError.value = 'Write a short message.'
+    return
+  }
+  feedbackBusy.value = true
+  try {
+    await api.post('/api/v1/feedback', { message, pagePath: route.fullPath })
+    feedbackSent.value = true
+    feedbackMessage.value = ''
+    setTimeout(() => {
+      feedbackOpen.value = false
+      feedbackSent.value = false
+    }, 1200)
+  } catch (caught) {
+    feedbackError.value = caught instanceof ApiError ? caught.message : 'Could not send feedback.'
+  } finally {
+    feedbackBusy.value = false
+  }
+}
+
+async function exitImpersonation() {
+  exitImpersonating.value = true
+  try {
+    const context = await api.post<NonNullable<typeof session.value>>('/api/v1/auth/exit-impersonation')
+    session.value = context
+    tenantId.value = context.activeTenantId
+    const adminUrl = String(config.public.adminUrl || '').trim()
+    if (adminUrl) {
+      window.location.href = adminUrl
+      return
+    }
+    await navigateTo('/')
+  } catch {
+    await signOut()
+  } finally {
+    exitImpersonating.value = false
+  }
+}
 
 const section = computed(() => sectionForPath(route.path))
 const subNav = computed(() =>
@@ -51,7 +102,8 @@ const { data: sites } = await useAsyncData('shell:sites', () => api.get<Site[]>(
   default: () => [] as Site[],
 })
 
-if (!activeSiteId.value && sites.value?.length) activeSiteId.value = sites.value[0]!.id
+syncActiveSiteId(sites.value)
+watch(sites, (list) => syncActiveSiteId(list), { deep: true })
 
 const activeSite = computed(() => sites.value?.find((site) => site.id === activeSiteId.value) ?? null)
 
@@ -114,6 +166,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <div class="relative flex h-screen overflow-hidden">
+    <div
+      v-if="isImpersonating"
+      class="absolute inset-x-0 top-0 z-50 flex items-center justify-between gap-3 bg-ink px-4 py-2 text-[0.75rem] text-paper"
+      role="status"
+    >
+      <span>
+        Viewing as <strong>{{ session?.user.email }}</strong> — staff impersonation
+      </span>
+      <button
+        type="button"
+        class="rounded-md border border-white/30 px-2.5 py-1 font-medium hover:bg-white/10"
+        :disabled="exitImpersonating"
+        @click="exitImpersonation"
+      >
+        {{ exitImpersonating ? 'Exiting…' : 'Exit impersonation' }}
+      </button>
+    </div>
+
     <div class="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
       <div class="absolute inset-0 bg-[#f3f1ec]" />
       <div class="absolute -left-24 top-0 h-[28rem] w-[28rem] rounded-full bg-[#d8ebe3]/55 blur-3xl" />
@@ -123,7 +193,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
     <aside
       class="relative z-10 m-3 flex shrink-0 flex-col overflow-hidden rounded-3xl border border-white/50 bg-white/55 shadow-[0_8px_40px_rgba(0,0,0,0.06)] backdrop-blur-2xl transition-[width] duration-200"
-      :class="sidebarCollapsed ? 'w-[4.25rem]' : 'w-[16.5rem]'"
+      :class="[
+        sidebarCollapsed ? 'w-[4.25rem]' : 'w-[16.5rem]',
+        isImpersonating ? 'mt-12' : '',
+      ]"
       aria-label="Workspace"
     >
       <div
@@ -307,7 +380,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       </div>
     </aside>
 
-    <div class="relative z-0 flex min-w-0 flex-1 flex-col py-3 pr-3">
+    <div
+      class="relative z-0 flex min-w-0 flex-1 flex-col py-3 pr-3"
+      :class="isImpersonating ? 'pt-12' : ''"
+    >
       <header class="mb-3 flex h-12 shrink-0 items-center gap-3 rounded-2xl border border-white/50 bg-white/45 px-4 shadow-sm backdrop-blur-xl">
         <button
           type="button"
@@ -334,6 +410,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             Search
             <kbd class="rounded border border-black/10 px-1 text-[0.625rem]">⌘K</kbd>
           </button>
+          <UiButton size="sm" @click="feedbackOpen = true">Feedback</UiButton>
           <UiButton size="sm" :to="previewUrl" target="_blank" external>
             View site
             <ExternalLink class="ml-1 h-3.5 w-3.5" :stroke-width="1.75" />
@@ -365,5 +442,37 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
     <AdminCommandSearch v-model:open="commandOpen" />
     <ConnectorsModal v-model:open="connectorsOpen" />
+
+    <Teleport to="body">
+      <div
+        v-if="feedbackOpen"
+        class="fixed inset-0 z-[var(--z-modal,60)] grid place-items-center bg-[#1a1a1a]/30 p-4 backdrop-blur-[2px]"
+      >
+        <div
+          class="w-full max-w-md rounded-2xl border border-white/60 bg-white p-5 shadow-2xl"
+          role="dialog"
+          aria-labelledby="feedback-title"
+        >
+          <h2 id="feedback-title" class="text-[1rem] font-semibold text-ink">Send feedback</h2>
+          <p class="mt-1 text-[0.8125rem] text-soft">
+            Tell us what broke or what you want next. Staff reads this in the admin inbox.
+          </p>
+          <textarea
+            v-model="feedbackMessage"
+            rows="5"
+            class="mt-4 w-full rounded-xl border border-line bg-sunken/40 px-3 py-2 text-[0.875rem] text-ink"
+            placeholder="What should we know?"
+          />
+          <p v-if="feedbackError" class="mt-2 text-[0.8125rem] text-danger" role="alert">{{ feedbackError }}</p>
+          <p v-else-if="feedbackSent" class="mt-2 text-[0.8125rem] text-positive" role="status">Thanks — sent.</p>
+          <div class="mt-4 flex justify-end gap-2">
+            <UiButton size="sm" @click="feedbackOpen = false">Cancel</UiButton>
+            <UiButton size="sm" variant="primary" :loading="feedbackBusy" @click="submitFeedback">
+              Send
+            </UiButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

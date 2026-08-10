@@ -379,6 +379,275 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
       }),
     )
   })
+
+  /** Every registered person on the platform (email + tenant names only). */
+  app.get('/users', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request)
+    const { search } = parseOrThrow(
+      z.object({ search: z.string().max(120).optional() }),
+      request.query ?? {},
+      'query',
+    )
+
+    const rows = await withoutTenant(
+      (tx) =>
+        tx<
+          {
+            user_id: string
+            email: string
+            name: string
+            created_at: Date
+            tenant_count: string
+            tenants: string
+          }[]
+        >`SELECT * FROM platform_users_overview()`,
+    )
+
+    const term = search?.trim().toLowerCase()
+    const filtered = term
+      ? rows.filter((row) => `${row.email} ${row.name} ${row.tenants}`.toLowerCase().includes(term))
+      : rows
+
+    await recordAccess(admin.userId, 'list_users', null, { results: filtered.length })
+
+    return reply.send(
+      ok(
+        filtered.map((row) => ({
+          id: row.user_id,
+          email: row.email,
+          name: row.name,
+          createdAt: row.created_at.toISOString(),
+          tenantCount: Number(row.tenant_count),
+          tenants: row.tenants,
+        })),
+      ),
+    )
+  })
+
+  /**
+   * Start acting as a customer user. Returns a one-shot session token the
+   * dashboard claims via POST /api/v1/auth/claim-impersonation (sets cookie).
+   */
+  app.post('/impersonate', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request)
+    const body = parseOrThrow(
+      z.object({
+        userId: uuidSchema,
+        tenantId: uuidSchema.optional(),
+      }),
+      request.body,
+      'impersonate',
+    )
+
+    if (body.userId === admin.userId) {
+      throw new ForbiddenError('Cannot impersonate yourself.')
+    }
+
+    const { generateSessionToken, insertSession } = await import('../db/repositories/sessions.js')
+    const { findUserById } = await import('../db/repositories/users.js')
+    const { listMembershipsForUser } = await import('../db/repositories/tenants.js')
+    const { env } = await import('../config/env.js')
+    const { dashboardPublicOrigin } = await import('../lib/public-url.js')
+
+    const result = await withoutTenant(async (tx) => {
+      const user = await findUserById(tx, body.userId)
+      if (!user) throw new NotFoundError('User')
+      const memberships = await listMembershipsForUser(tx, user.id)
+      if (!memberships.length) throw new ForbiddenError('User has no workspace membership.')
+      if (body.tenantId && !memberships.some((m) => m.tenantId === body.tenantId)) {
+        throw new ForbiddenError('User is not a member of that workspace.')
+      }
+      const token = generateSessionToken()
+      const ttl = Math.min(env.SESSION_TTL_SECONDS, 60 * 60)
+      await insertSession(tx, {
+        userId: user.id,
+        token,
+        ttlSeconds: ttl,
+        impersonatorUserId: admin.userId,
+      })
+      return {
+        token,
+        user: { id: user.id, email: user.email, name: user.name },
+        tenantId: body.tenantId ?? memberships[0]!.tenantId,
+        expiresIn: ttl,
+      }
+    })
+
+    await recordAccess(admin.userId, 'impersonate_user', result.tenantId, {
+      targetUserId: result.user.id,
+      targetEmail: result.user.email,
+    })
+
+    const dashboard = dashboardPublicOrigin().replace(/\/$/, '')
+    return reply.send(
+      ok({
+        ...result,
+        claimPath: '/impersonate',
+        dashboardUrl: `${dashboard}/impersonate`,
+      }),
+    )
+  })
+
+  /** Change a workspace plan (billing entitlement). */
+  app.patch('/tenants/:tenantId/plan', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request)
+    const { tenantId } = parseOrThrow(z.object({ tenantId: uuidSchema }), request.params, 'tenant id')
+    const { plan } = parseOrThrow(
+      z.object({ plan: z.enum(['launch', 'grow', 'scale', 'advanced', 'enterprise']) }),
+      request.body,
+      'plan',
+    )
+
+    const updated = await withoutTenant(async (tx) => {
+      const [row] = await tx<{ id: string; plan: string; name: string }[]>`
+        UPDATE tenants SET plan = ${plan}
+        WHERE id = ${tenantId}
+        RETURNING id, plan, name
+      `
+      return row ?? null
+    })
+    if (!updated) throw new NotFoundError('Workspace')
+
+    await recordAccess(admin.userId, 'update_tenant_plan', tenantId, {
+      plan,
+      name: updated.name,
+    })
+    return reply.send(ok({ id: updated.id, plan: updated.plan, name: updated.name }))
+  })
+
+  /** MRR / ARR from plan seat counts × fixed list prices (EUR / month). */
+  app.get('/revenue', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request)
+
+    const PLAN_MRR_EUR: Record<string, number> = {
+      launch: 29,
+      grow: 79,
+      scale: 149,
+      advanced: 299,
+      enterprise: 999,
+    }
+
+    const plans = await withoutTenant(
+      (tx) => tx<{ plan: string; tenant_count: string }[]>`SELECT * FROM platform_plan_distribution()`,
+    )
+
+    const breakdown = plans.map((row) => {
+      const count = Number(row.tenant_count)
+      const price = PLAN_MRR_EUR[row.plan] ?? 0
+      return {
+        plan: row.plan,
+        tenants: count,
+        priceEur: price,
+        mrrEur: count * price,
+      }
+    })
+    const mrr = breakdown.reduce((sum, row) => sum + row.mrrEur, 0)
+
+    await recordAccess(admin.userId, 'view_revenue', null)
+    return reply.send(
+      ok({
+        currency: 'EUR',
+        mrr,
+        arr: mrr * 12,
+        breakdown,
+        note: 'Estimated from plan list prices × tenant counts — not live Stripe invoices.',
+      }),
+    )
+  })
+
+  app.get('/feedback', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request)
+    const rows = await withoutTenant(
+      (tx) =>
+        tx<
+          {
+            id: string
+            message: string
+            page_path: string
+            created_at: Date
+            email: string | null
+            name: string | null
+            tenant_name: string | null
+          }[]
+        >`
+        SELECT f.id, f.message, f.page_path, f.created_at, u.email, u.name, t.name AS tenant_name
+        FROM platform_feedback f
+        LEFT JOIN users u ON u.id = f.user_id
+        LEFT JOIN tenants t ON t.id = f.tenant_id
+        ORDER BY f.created_at DESC
+        LIMIT 200
+      `,
+    )
+    await recordAccess(admin.userId, 'list_feedback', null)
+    return reply.send(
+      ok(
+        rows.map((row) => ({
+          id: row.id,
+          message: row.message,
+          pagePath: row.page_path,
+          createdAt: row.created_at.toISOString(),
+          userEmail: row.email,
+          userName: row.name,
+          tenantName: row.tenant_name,
+        })),
+      ),
+    )
+  })
+
+  app.get('/marketing/campaigns', async (request, reply) => {
+    await requirePlatformAdmin(request)
+    const rows = await withoutTenant(
+      (tx) =>
+        tx<{ id: string; title: string; status: string; body: string; created_at: Date; updated_at: Date }[]>`
+        SELECT id, title, status, body, created_at, updated_at
+        FROM platform_marketing_campaigns
+        ORDER BY updated_at DESC
+        LIMIT 100
+      `,
+    )
+    return reply.send(
+      ok(
+        rows.map((row) => ({
+          id: row.id,
+          title: row.title,
+          status: row.status,
+          body: row.body,
+          createdAt: row.created_at.toISOString(),
+          updatedAt: row.updated_at.toISOString(),
+        })),
+      ),
+    )
+  })
+
+  app.post('/marketing/campaigns', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request)
+    const body = parseOrThrow(
+      z.object({
+        title: z.string().min(1).max(200),
+        body: z.string().max(20_000).default(''),
+        status: z.enum(['draft', 'scheduled', 'sent', 'archived']).default('draft'),
+      }),
+      request.body,
+      'campaign',
+    )
+    const [row] = await withoutTenant(
+      (tx) =>
+        tx<{ id: string; title: string; status: string; created_at: Date }[]>`
+        INSERT INTO platform_marketing_campaigns (title, body, status)
+        VALUES (${body.title}, ${body.body}, ${body.status})
+        RETURNING id, title, status, created_at
+      `,
+    )
+    await recordAccess(admin.userId, 'create_marketing_campaign', null, { id: row!.id })
+    return reply.status(201).send(
+      ok({
+        id: row!.id,
+        title: row!.title,
+        status: row!.status,
+        createdAt: row!.created_at.toISOString(),
+      }),
+    )
+  })
 }
 
 export default adminRoutes

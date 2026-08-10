@@ -1,26 +1,40 @@
-# Optional WhatsApp gateway — OpenWA (https://github.com/rmyndharis/OpenWA)
+# OpenWA for Coolify — single-container WhatsApp gateway
 #
-# From repo root:
-#   docker compose -f infrastructure/docker/docker-compose.yml -f infrastructure/docker/docker-compose.openwa.yml --profile openwa up -d openwa
+# Deploy as a Coolify Docker Compose service from this file, or from the
+# OpenWA repo (https://github.com/rmyndharis/OpenWA) with the same env.
 #
-# First build clones/builds from GitHub (slow once). Dashboard: http://localhost:2785
-# Point core-api at it with OPENWA_BASE_URL + OPENWA_API_KEY (see .env.example).
+# Required Coolify env:
+#   OPENWA_API_KEY          — shared secret (also set on core-api)
+# Optional:
+#   OPENWA_PORT=2785
 #
-# Risk: unofficial WhatsApp client — use a dedicated number only (see OpenWA README).
+# After deploy, attach a public HTTPS domain and set on core-api:
+#   OPENWA_BASE_URL=https://openwa.your-domain
+#   OPENWA_API_KEY=<same key>
+#
+# Tenants paste that HTTPS URL + API key in Dashboard → CRM → Support → Connect OpenWA.
 
 services:
   openwa:
-    profiles: ['openwa']
     build:
       context: https://github.com/rmyndharis/OpenWA.git#main
       dockerfile: Dockerfile
-    container_name: platform-openwa
     restart: unless-stopped
     stop_grace_period: 45s
     ports:
       - '${OPENWA_PORT:-2785}:2785'
+    security_opt:
+      - 'no-new-privileges:true'
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: 2785
       HOME: /tmp
       XDG_CONFIG_HOME: /tmp/.config
@@ -29,14 +43,13 @@ services:
       AUTO_START_SESSIONS: 'true'
       DATABASE_TYPE: sqlite
       DATABASE_SYNCHRONIZE: 'true'
-      # Bootstrap key — replace after first login in the OpenWA dashboard.
-      API_KEY: ${OPENWA_API_KEY:-dev-openwa-change-me}
       SESSION_DATA_PATH: /app/data/sessions
       STORAGE_TYPE: local
       STORAGE_LOCAL_PATH: /app/data/media
       PLUGINS_DIR: /app/data/plugins
       PUPPETEER_HEADLESS: 'true'
       PUPPETEER_ARGS: '--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu'
+      API_KEY: ${OPENWA_API_KEY:?set OPENWA_API_KEY}
     volumes:
       - openwa-data:/app/data
     healthcheck:
@@ -48,7 +61,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 20
-      start_period: 60s
+      start_period: 90s
 
 volumes:
   openwa-data:

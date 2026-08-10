@@ -30,6 +30,7 @@ import {
   PanelTop,
   Percent,
   Plug,
+  Plus,
   Receipt,
   Rss,
   Settings,
@@ -85,13 +86,14 @@ export const NAV_SECTIONS: NavSection[] = [
     to: '/website/pages',
     icon: Globe,
     items: [
+      { label: 'Make website', to: '/website/new', icon: Plus, permission: 'site:write' },
       { label: 'Pages', to: '/website/pages', icon: FileText, permission: 'page:read' },
-      { label: 'Header', to: '/website/header', icon: PanelTop, permission: 'page:write' },
+      { label: 'Top bar', to: '/website/header', icon: PanelTop, permission: 'page:write' },
       { label: 'Footer', to: '/website/footer', icon: PanelBottom, permission: 'page:write' },
       { label: 'Blog', to: '/website/blog', icon: LayoutTemplate, permission: 'page:read' },
-      { label: 'Navigation', to: '/website/navigation', icon: Navigation, permission: 'site:read' },
-      { label: 'Media', to: '/website/media', icon: Image, permission: 'media:read' },
-      { label: 'Theme', to: '/website/theme', icon: Palette, permission: 'site:read' },
+      { label: 'Menu links', to: '/website/navigation', icon: Navigation, permission: 'site:read' },
+      { label: 'Photos & files', to: '/website/media', icon: Image, permission: 'media:read' },
+      { label: 'Colors & fonts', to: '/website/theme', icon: Palette, permission: 'site:read' },
       { label: 'Style Guide', to: '/website/style-guide', icon: Sparkles, permission: 'site:read' },
       { label: 'Components', to: '/website/components', icon: Boxes, permission: 'site:read' },
       { label: 'Templates', to: '/website/templates', icon: LayoutGrid, permission: 'site:read' },
@@ -105,12 +107,12 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: ShoppingBag,
     items: [
       { label: 'Overview', to: '/commerce', icon: Store, permission: 'commerce:read' },
-      { label: 'Store builder', to: '/commerce/builder', icon: LayoutTemplate, permission: 'commerce:read' },
-      { label: 'Header', to: '/commerce/header', icon: PanelTop, permission: 'page:write' },
+      { label: 'Make a webshop', to: '/commerce/builder', icon: LayoutTemplate, permission: 'commerce:read' },
+      { label: 'Top bar', to: '/commerce/header', icon: PanelTop, permission: 'page:write' },
       { label: 'Footer', to: '/commerce/footer', icon: PanelBottom, permission: 'page:write' },
       { label: 'Products', to: '/commerce/products', icon: Package, permission: 'commerce:read' },
       { label: 'Collections', to: '/commerce/collections', icon: Tags, permission: 'commerce:read' },
-      { label: 'Inventory', to: '/commerce/inventory', icon: Warehouse, permission: 'commerce:read' },
+      { label: 'Stock', to: '/commerce/inventory', icon: Warehouse, permission: 'commerce:read' },
       { label: 'Orders', to: '/commerce/orders', icon: ListOrdered, permission: 'order:read' },
       { label: 'Customers', to: '/commerce/customers', icon: Users, permission: 'customer:read' },
       { label: 'Discounts', to: '/commerce/discounts', icon: Percent, permission: 'commerce:read' },
@@ -238,4 +240,58 @@ export function sectionForPath(path: string): NavSection | undefined {
 }
 
 /** The site the Website section operates on. Remembered across visits. */
-export const useActiveSiteId = () => useState<string | null>('active-site', () => null)
+const ACTIVE_SITE_KEY = 'platform.active-site-id'
+
+export const useActiveSiteId = () => {
+  const id = useState<string | null>('active-site', () => {
+    if (!import.meta.client) return null
+    try {
+      const stored = localStorage.getItem(ACTIVE_SITE_KEY)
+      return stored && /^[0-9a-f-]{36}$/i.test(stored) ? stored : null
+    } catch {
+      return null
+    }
+  })
+
+  watch(
+    id,
+    (value) => {
+      if (!import.meta.client) return
+      try {
+        if (value) localStorage.setItem(ACTIVE_SITE_KEY, value)
+        else localStorage.removeItem(ACTIVE_SITE_KEY)
+      } catch {
+        // Ignore quota / private mode.
+      }
+    },
+    { flush: 'post' },
+  )
+
+  return id
+}
+
+/**
+ * Keep `activeSiteId` pointing at a real site from the current tenant list.
+ * Clears stale ids and picks the first site when none is selected.
+ * When `preferKind` is set, prefer that kind (e.g. website pages vs shop builder).
+ */
+export function syncActiveSiteId(
+  sites: { id: string; kind?: string }[] | null | undefined,
+  options?: { preferKind?: 'website' | 'ecommerce' },
+) {
+  const activeSiteId = useActiveSiteId()
+  const list = sites ?? []
+  if (!list.length) {
+    if (activeSiteId.value) activeSiteId.value = null
+    return
+  }
+
+  const preferred = options?.preferKind
+    ? list.filter((site) => (site.kind ?? 'website') === options.preferKind)
+    : list
+  const pool = preferred.length ? preferred : list
+
+  if (!activeSiteId.value || !pool.some((site) => site.id === activeSiteId.value)) {
+    activeSiteId.value = pool[0]!.id
+  }
+}

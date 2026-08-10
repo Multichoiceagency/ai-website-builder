@@ -1,14 +1,30 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { Page, PageSummary } from '@platform/schemas'
+import { computed, ref, watch } from 'vue'
+import type { Page, PageSummary, Site } from '@platform/schemas'
 
 const api = useApi()
 const can = useCan()
 const activeSiteId = useActiveSiteId()
 
+const { data: sites, refresh: refreshSites } = await useAsyncData(
+  'website:pages:sites',
+  () => api.get<Site[]>('/api/v1/sites'),
+  { default: () => [] as Site[] },
+)
+
+syncActiveSiteId(sites.value, { preferKind: 'website' })
+watch(sites, (list) => syncActiveSiteId(list, { preferKind: 'website' }), { deep: true })
+
+const websiteSites = computed(() =>
+  (sites.value ?? []).filter((site) => (site.kind ?? 'website') === 'website'),
+)
+
 const { data: pages, refresh } = await useAsyncData(
   () => `website:pages:${activeSiteId.value}`,
-  () => (activeSiteId.value ? api.get<PageSummary[]>(`/api/v1/sites/${activeSiteId.value}/pages`) : Promise.resolve([])),
+  () =>
+    activeSiteId.value && websiteSites.value.some((site) => site.id === activeSiteId.value)
+      ? api.get<PageSummary[]>(`/api/v1/sites/${activeSiteId.value}/pages`)
+      : Promise.resolve([]),
   { watch: [activeSiteId], default: () => [] as PageSummary[] },
 )
 
@@ -18,8 +34,21 @@ const path = ref('/')
 const error = ref('')
 const busy = ref(false)
 
+function openCreatePage() {
+  error.value = ''
+  if (!activeSiteId.value) {
+    void navigateTo('/website/new')
+    return
+  }
+  creating.value = true
+}
+
 async function createPage() {
   error.value = ''
+  if (!activeSiteId.value || !/^[0-9a-f-]{36}$/i.test(activeSiteId.value)) {
+    error.value = 'Select or create a website first.'
+    return
+  }
   busy.value = true
   try {
     const page = await api.post<Page>(`/api/v1/sites/${activeSiteId.value}/pages`, {
@@ -27,6 +56,7 @@ async function createPage() {
       path: path.value.startsWith('/') ? path.value : `/${path.value}`,
     })
     creating.value = false
+    await refresh()
     await navigateTo(`/pages/${page.id}`)
   } catch (caught) {
     error.value = caught instanceof ApiError ? caught.message : 'Could not create the page.'
@@ -36,31 +66,60 @@ async function createPage() {
 }
 
 const needsPublishing = computed(() => (pages.value ?? []).filter((page) => page.hasUnpublishedChanges).length)
+const hasSites = computed(() => websiteSites.value.length > 0)
+
+async function ensureSites() {
+  await refreshSites()
+  syncActiveSiteId(sites.value, { preferKind: 'website' })
+}
+onMounted(() => {
+  void ensureSites()
+})
 </script>
 
 <template>
   <div>
     <UiPageHeader
       title="Pages"
-      :description="`${pages?.length ?? 0} page(s)${needsPublishing ? ` · ${needsPublishing} with unpublished changes` : ''}`"
+      :description="
+        hasSites
+          ? `${pages?.length ?? 0} page(s)${needsPublishing ? ` · ${needsPublishing} not published yet` : ''}`
+          : 'Your website pages will show here.'
+      "
     >
       <template #actions>
-        <UiButton size="sm" variant="primary" to="/onboarding" arrow>Build with AI</UiButton>
-        <UiButton v-if="can('page:write')" size="sm" @click="creating = true">New page</UiButton>
+        <UiButton size="sm" variant="primary" to="/website/new?mode=ai" arrow>Make website with AI</UiButton>
+        <UiButton
+          v-if="can('page:write')"
+          size="sm"
+          :disabled="!hasSites"
+          @click="openCreatePage"
+        >
+          New page
+        </UiButton>
       </template>
     </UiPageHeader>
 
     <UiEmptyState
-      v-if="!activeSiteId"
-      title="No website selected"
-      description="Pick a site in the sidebar, open All websites, or let the builder make one."
+      v-if="!hasSites"
+      title="No website yet"
+      description="First make a website. Then you can add more pages."
     >
+      <UiButton variant="primary" to="/website/new?mode=ai" arrow>Make website with AI</UiButton>
       <UiButton to="/sites">All websites</UiButton>
-      <UiButton variant="primary" to="/onboarding">Build a website</UiButton>
     </UiEmptyState>
 
-    <UiEmptyState v-else-if="!pages?.length" title="No pages yet" description="A website needs at least a home page.">
-      <UiButton variant="primary" @click="creating = true">New page</UiButton>
+    <UiEmptyState
+      v-else-if="!activeSiteId"
+      title="Pick a website"
+      description="Choose a website in the menu on the left."
+    >
+      <UiButton to="/sites">All websites</UiButton>
+      <UiButton variant="primary" to="/website/new?mode=ai">Make website with AI</UiButton>
+    </UiEmptyState>
+
+    <UiEmptyState v-else-if="!pages?.length" title="No pages yet" description="Every website needs a home page.">
+      <UiButton variant="primary" @click="openCreatePage">Make home page</UiButton>
     </UiEmptyState>
 
     <UiCard v-else :padded="false">
@@ -101,7 +160,9 @@ const needsPublishing = computed(() => (pages.value ?? []).filter((page) => page
       </form>
       <template #footer>
         <UiButton @click="creating = false">Cancel</UiButton>
-        <UiButton variant="primary" :loading="busy" :disabled="!title.trim()" @click="createPage">Create</UiButton>
+        <UiButton variant="primary" :loading="busy" :disabled="!title.trim() || !activeSiteId" @click="createPage">
+          Create
+        </UiButton>
       </template>
     </UiDialog>
   </div>

@@ -331,7 +331,7 @@ const launchChecklist = computed<ChecklistRow[]>(() => {
       title="No website selected"
       description="Create a website first — there is nothing to audit yet."
     >
-      <UiButton variant="primary" to="/onboarding">Build a website</UiButton>
+      <UiButton variant="primary" to="/website/new?mode=ai">Make website with AI</UiButton>
     </UiEmptyState>
 
     <div v-else-if="pending && !audit" class="py-16 text-center text-sm text-soft">Auditing your pages…</div>

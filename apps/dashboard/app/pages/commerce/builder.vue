@@ -36,14 +36,61 @@ const busy = ref(false)
 const error = ref('')
 const plan = ref<StoreBuildPlan | null>(null)
 const result = ref<StoreBuildResult | null>(null)
+const shopName = ref('My shop')
+const creatingShop = ref(false)
 
-const { data: sites } = await useAsyncData(
+const { data: sites, refresh: refreshSites } = await useAsyncData(
   'commerce-builder:sites',
   () => api.get<Site[]>('/api/v1/sites'),
   { default: () => [] as Site[] },
 )
 
-const siteId = computed(() => activeSiteId.value ?? sites.value?.[0]?.id ?? '')
+const ecommerceSites = computed(() => (sites.value ?? []).filter((site) => site.kind === 'ecommerce'))
+
+syncActiveSiteId(sites.value, { preferKind: 'ecommerce' })
+watch(sites, (list) => syncActiveSiteId(list, { preferKind: 'ecommerce' }), { deep: true })
+
+function slugFor(value: string): string {
+  return (
+    value
+      .normalize('NFKD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'shop'
+  )
+}
+
+async function ensureEcommerceSite(): Promise<string | null> {
+  const existing =
+    (activeSiteId.value && sites.value?.find((s) => s.id === activeSiteId.value && s.kind === 'ecommerce')?.id) ||
+    ecommerceSites.value[0]?.id ||
+    null
+  if (existing) {
+    activeSiteId.value = existing
+    return existing
+  }
+
+  creatingShop.value = true
+  error.value = ''
+  try {
+    const site = await api.post<Site>('/api/v1/sites', {
+      name: shopName.value.trim() || 'My shop',
+      slug: slugFor(shopName.value.trim() || 'My shop'),
+      locale: 'en',
+      kind: 'ecommerce',
+    })
+    await refreshSites()
+    activeSiteId.value = site.id
+    return site.id
+  } catch (caught) {
+    error.value = caught instanceof ApiError ? caught.message : 'Could not create an ecommerce site.'
+    return null
+  } finally {
+    creatingShop.value = false
+  }
+}
 
 const themeOptions = STORE_BUILDER_THEME_PRESETS.map((id) => ({
   value: id,
@@ -68,7 +115,7 @@ const sourceUrlValid = computed(() => isValidHttpUrl(sourceUrl.value))
 const promptReady = computed(() => prompt.value.trim().length >= 12)
 
 const canBuild = computed(() => {
-  if (!siteId.value || busy.value) return false
+  if (busy.value || creatingShop.value) return false
   if (mode.value === 'url') return sourceUrlValid.value || promptReady.value
   return promptReady.value
 })
@@ -81,15 +128,19 @@ watch(mode, (next) => {
 })
 
 async function buildShop() {
-  if (!canBuild.value || !siteId.value) return
+  if (!canBuild.value) return
   busy.value = true
   error.value = ''
   plan.value = null
   result.value = null
   try {
+    // Always resolve an ecommerce site — never build against a brochure website.
+    const resolvedSiteId = await ensureEcommerceSite()
+    if (!resolvedSiteId) return
+
     const body: StoreBuildInput = {
       prompt: prompt.value.trim(),
-      siteId: siteId.value,
+      siteId: resolvedSiteId,
       currency: currency.value,
       locale: 'en',
       productCount: productCount.value,
@@ -129,16 +180,16 @@ async function buildShop() {
     }"
   >
     <UiPageHeader
-      title="Ecommerce builder"
-      description="Builds a full shop — products, collections, shipping, discount, and home + /shop pages. Not the same as Website → Generate (brochure sites)."
+      title="Make a webshop"
+      description="Sell products online. Paste a product link or write what you sell — we set up the shop."
       back="/commerce"
       back-label="Commerce"
     />
 
-    <p class="mx-auto mb-5 max-w-5xl text-[0.875rem] leading-relaxed" :style="{ color: theme.textMuted }">
-      Need a marketing / brochure site instead?
-      <NuxtLink to="/website/generate" class="font-medium underline-offset-2 hover:underline" :style="{ color: theme.cta }">
-        Website → Generate
+    <p class="mx-auto mb-5 max-w-5xl text-[1rem] leading-relaxed" :style="{ color: theme.textMuted }">
+      Need a normal website (no shop)?
+      <NuxtLink to="/website/new?mode=ai" class="font-semibold underline-offset-2 hover:underline" :style="{ color: theme.cta }">
+        Make website with AI
       </NuxtLink>
     </p>
 
@@ -151,15 +202,13 @@ async function buildShop() {
           class="text-[0.6875rem] font-semibold uppercase tracking-[0.14em]"
           :style="{ color: theme.primary }"
         >
-          Store builder agent
+          Easy setup
         </p>
         <h2 class="mt-2 text-[1.35rem] font-semibold tracking-tight" :style="{ fontFamily: theme.fontHeading }">
-          Seed a complete online shop
+          Make your webshop
         </h2>
-        <p class="mt-2 text-[0.875rem] leading-relaxed" :style="{ color: theme.textMuted }">
-          Paste an Amazon or AliExpress product URL, or describe the brand. One run creates catalog,
-          collections, inventory location, shipping, a welcome discount, theme tokens, and shop pages —
-          ready for carts and checkout via CommerceProvider.
+        <p class="mt-2 text-[1rem] leading-relaxed" :style="{ color: theme.textMuted }">
+          Paste a product link, or write what you sell. We add products, pages, and a shop for you.
         </p>
 
         <div class="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Build mode">
@@ -191,6 +240,28 @@ async function buildShop() {
           >
             From prompt
           </button>
+        </div>
+
+        <div
+          v-if="!ecommerceSites.length"
+          class="mt-5 rounded-xl border px-3.5 py-3"
+          :style="{ borderColor: theme.line, background: theme.background }"
+        >
+          <p class="text-[0.8125rem] font-semibold" :style="{ color: theme.text }">New webshop</p>
+          <p class="mt-1 text-[0.75rem]" :style="{ color: theme.textMuted }">
+            You do not have a shop yet — we make one when you tap Build.
+          </p>
+          <label class="mt-3 block text-[0.75rem] font-semibold" :style="{ color: theme.textMuted }" for="shop-name">
+            Shop name
+          </label>
+          <input
+            id="shop-name"
+            v-model="shopName"
+            type="text"
+            class="mt-1.5 w-full rounded-xl border px-3.5 py-2.5 text-[0.9375rem] outline-none"
+            :style="{ borderColor: theme.line, color: theme.text, background: theme.surface }"
+            placeholder="My shop"
+          />
         </div>
 
         <template v-if="mode === 'url'">
@@ -279,21 +350,18 @@ async function buildShop() {
           Publish shop (and home) pages after seed
         </label>
 
-        <p v-if="!siteId" class="mt-3 text-[0.8125rem] text-red-700">
-          Select or create a site first under Website → Sites.
-        </p>
-        <p v-if="error" class="mt-3 text-[0.8125rem] text-red-700">{{ error }}</p>
+        <p v-if="error" class="mt-3 text-[1rem] font-medium text-red-700">{{ error }}</p>
 
         <div class="mt-5 flex flex-wrap gap-2">
           <UiButton
-            size="sm"
+            size="md"
             variant="primary"
             class="cursor-pointer"
             :disabled="!canBuild"
             :loading="busy"
             @click="buildShop"
           >
-            {{ busy ? 'Building shop…' : 'Build full shop' }}
+            {{ busy || creatingShop ? 'Working…' : 'Make my webshop' }}
           </UiButton>
           <UiButton size="sm" to="/commerce/products" class="cursor-pointer">Products</UiButton>
           <UiButton size="sm" to="/commerce/payments" class="cursor-pointer">Payments</UiButton>

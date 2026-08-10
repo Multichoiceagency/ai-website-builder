@@ -63,7 +63,7 @@ async function submit() {
     // with a stale service worker / in-memory session wipe.
     const next =
       mode.value === 'register'
-        ? '/onboarding'
+        ? '/website/new?mode=ai'
         : typeof route.query.redirect === 'string' &&
             route.query.redirect.startsWith('/') &&
             !route.query.redirect.startsWith('//')
@@ -83,7 +83,7 @@ async function continueWithGoogle() {
   try {
     const redirectTo =
       mode.value === 'register'
-        ? '/onboarding'
+        ? '/website/new?mode=ai'
         : typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
           ? route.query.redirect
           : '/'

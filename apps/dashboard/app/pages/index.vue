@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import type {
   AnalyticsOverview,
   CommerceStatus,
-  OnboardingFunnel,
   OrderSummary,
   PageSummary,
   PlanLimits,
@@ -18,7 +17,7 @@ import { Globe, Search, ShoppingBag, Sparkles, TrendingUp } from '@lucide/vue'
  * KPIs come from the analytics overview when events exist; otherwise the strip
  * states that clearly. Setup cards only appear for real gaps (no site, domain,
  * SEO score, commerce). First-sale hero only when there are no orders.
- * Soft-gate: no sites + incomplete funnel → prompt to /onboarding.
+ * Soft-gate: no sites → prompt to /website/new (simple AI create).
  */
 
 const api = useApi()
@@ -45,7 +44,7 @@ const { data, pending, refresh } = await useAsyncData('home', async () => {
   const sites = await api.get<Site[]>('/api/v1/sites')
   const siteId = activeSiteId.value || sites[0]?.id || null
 
-  const [usage, activity, pageLists, overview, orders, commerce, domains, seo, funnel] = await Promise.all([
+  const [usage, activity, pageLists, overview, orders, commerce, domains, seo] = await Promise.all([
     api.get<{ plan: string; limits: PlanLimits; usage: { sites: number; users: number } }>(
       '/api/v1/tenants/current/usage',
     ),
@@ -62,7 +61,6 @@ const { data, pending, refresh } = await useAsyncData('home', async () => {
     siteId
       ? api.get<SeoAudit>(`/api/v1/seo/sites/${siteId}/audit`).catch(() => null)
       : Promise.resolve(null),
-    api.get<OnboardingFunnel>('/api/v1/onboarding/progress').catch(() => null),
   ])
 
   return {
@@ -75,7 +73,6 @@ const { data, pending, refresh } = await useAsyncData('home', async () => {
     commerce,
     domains: domains.domains,
     seo,
-    funnel,
   }
 })
 
@@ -86,15 +83,8 @@ const orders = computed(() => data.value?.orders ?? [])
 const hasOrders = computed(() => orders.value.length > 0)
 const overview = computed(() => data.value?.overview ?? null)
 
-/** Soft-gate: empty workspace that has not finished the signup funnel. */
-const showOnboardingGate = computed(() => {
-  const sites = data.value?.sites ?? []
-  if (sites.length > 0) return false
-  const funnel = data.value?.funnel
-  if (!funnel) return true
-  return funnel.step !== 'complete'
-})
-
+/** Empty workspace — send people to the simple create wizard. */
+const needsWebsite = computed(() => (data.value?.sites ?? []).length === 0)
 
 const noTraffic = computed(() => {
   const metrics = overview.value?.metrics
@@ -122,13 +112,11 @@ const setupCards = computed((): SetupCard[] => {
 
   if (!sites.length) {
     cards.push({
-      id: 'onboarding',
-      title: showOnboardingGate.value ? 'Continue onboarding' : 'Build your website',
-      description: showOnboardingGate.value
-        ? 'Pick Website, Store or Both — then connect a business and generate.'
-        : 'Start onboarding — AI drafts pages from your business.',
-      to: '/onboarding',
-      cta: 'Get started',
+      id: 'create-website',
+      title: 'Make your website',
+      description: 'Write a short text about your business. AI builds the pages.',
+      to: '/website/new',
+      cta: 'Make website with AI',
       icon: Sparkles,
       tone: 'brand',
     })
@@ -225,24 +213,39 @@ function openAssistant() {
     >
       <template #actions>
         <UiButton size="sm" :loading="pending" @click="refresh()">Refresh</UiButton>
-        <UiButton size="sm" to="/analytics/live">Live View</UiButton>
-        <UiButton size="sm" variant="primary" to="/sites">Open websites</UiButton>
+        <UiButton
+          v-if="needsWebsite"
+          size="sm"
+          variant="primary"
+          to="/website/new?mode=ai"
+          arrow
+        >
+          Make website with AI
+        </UiButton>
+        <UiButton v-else size="sm" variant="primary" to="/sites">My websites</UiButton>
       </template>
     </UiPageHeader>
 
-    <!-- Soft-gate: finish onboarding when the workspace has no sites yet ---- -->
+    <!-- Soft-gate: no website yet ----------------------------------------- -->
     <div
-      v-if="showOnboardingGate"
-      class="mb-6 flex flex-col gap-3 rounded-xl border border-brand/25 bg-brand/5 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+      v-if="needsWebsite"
+      class="mb-6 flex flex-col gap-4 rounded-3xl border-2 border-ink bg-ink px-5 py-5 text-paper sm:flex-row sm:items-center sm:justify-between"
       role="status"
     >
       <div class="min-w-0">
-        <p class="text-[0.875rem] font-semibold text-ink">Finish setting up your workspace</p>
-        <p class="mt-0.5 text-[0.8125rem] leading-relaxed text-soft">
-          You do not have a website yet. Continue onboarding to connect a business and generate pages.
+        <p class="text-[1.15rem] font-semibold">You do not have a website yet</p>
+        <p class="mt-1 text-[1rem] leading-relaxed text-paper/80">
+          Tell us what your business does. We make the website for you.
         </p>
       </div>
-      <UiButton size="sm" variant="primary" class="shrink-0" to="/onboarding" arrow>Continue onboarding</UiButton>
+      <UiButton
+        size="md"
+        class="!bg-paper !text-ink shrink-0"
+        to="/website/new?mode=ai"
+        arrow
+      >
+        Make website with AI
+      </UiButton>
     </div>
 
     <!-- Ask anything ------------------------------------------------------- -->
@@ -255,9 +258,9 @@ function openAssistant() {
         <Search class="h-4 w-4" :stroke-width="1.75" aria-hidden="true" />
       </span>
       <span class="min-w-0 flex-1">
-        <span class="block text-sm font-medium text-ink">Ask anything</span>
+        <span class="block text-sm font-medium text-ink">Need help?</span>
         <span class="block truncate text-[0.8125rem] text-faint">
-          Open the assistant — draft a page, fix SEO, or set up checkout.
+          Ask AI — for example: “make a home page” or “fix my SEO”.
         </span>
       </span>
       <kbd
@@ -268,7 +271,7 @@ function openAssistant() {
     </button>
 
     <!-- First-sale / get-started hero -------------------------------------- -->
-    <UiCard v-if="!hasOrders" class="mb-6 overflow-hidden !p-0">
+    <UiCard v-if="!hasOrders && !needsWebsite" class="mb-6 overflow-hidden !p-0">
       <div class="relative px-5 py-6 sm:px-7 sm:py-8">
         <div
           class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,color-mix(in_oklab,var(--brand)_18%,transparent),transparent_55%)]"
@@ -276,18 +279,17 @@ function openAssistant() {
         />
         <div class="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div class="max-w-lg">
-            <UiBadge tone="brand">First sale</UiBadge>
+            <UiBadge tone="brand">Sell online</UiBadge>
             <h2 class="mt-2 text-[1.25rem] font-semibold tracking-[-0.02em] text-ink">
-              Get ready for your first order
+              Ready for your first order?
             </h2>
             <p class="mt-1.5 text-sm text-soft">
-              Add a product, connect payments, and publish a page — then watch Live View as traffic arrives.
+              Add a product and turn on payments. Then people can buy from your site.
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
             <UiButton size="sm" variant="primary" to="/commerce/products/new" arrow>Add a product</UiButton>
-            <UiButton size="sm" to="/commerce/settings">Commerce settings</UiButton>
-            <UiButton size="sm" to="/onboarding">Onboarding</UiButton>
+            <UiButton size="sm" to="/commerce/settings">Payment settings</UiButton>
           </div>
         </div>
       </div>

@@ -6,6 +6,9 @@ const route = useRoute()
 const NAV = [
   { to: '/', label: 'Overview' },
   { to: '/tenants', label: 'Clients' },
+  { to: '/users', label: 'Users' },
+  { to: '/feedback', label: 'Feedback' },
+  { to: '/marketing', label: 'Marketing' },
   { to: '/activity', label: 'Activity' },
   { to: '/health', label: 'Health' },
   { to: '/access-log', label: 'Staff access' },

@@ -97,7 +97,7 @@ const isMotionPage = computed(() =>
   <div>
     <UiPageHeader
       title="Templates"
-      description="Full-page and multi-section recipes by collection — including Motionsites page designs. Preview in your theme, then apply to a page or start onboarding. Single Motionsites islands live under Components."
+      description="Full-page and multi-section recipes by collection — including Motionsites page designs. Preview in your theme, then apply to a page or create a website. Single Motionsites islands live under Components."
     >
       <template #actions>
         <UiButton size="sm" to="/website/components">Components</UiButton>
@@ -105,10 +105,10 @@ const isMotionPage = computed(() =>
         <UiButton
           size="sm"
           variant="primary"
-          :to="selected ? `/onboarding?template=${selected}` : '/onboarding'"
+          :to="selected ? `/website/new?mode=manual&template=${selected}` : '/website/new'"
           arrow
         >
-          {{ selected ? 'Build with this template' : 'Build a website' }}
+          {{ selected ? 'Create with this template' : 'Create website' }}
         </UiButton>
       </template>
     </UiPageHeader>
@@ -258,7 +258,7 @@ const isMotionPage = computed(() =>
         <UiButton
           v-if="detail"
           variant="primary"
-          :to="`/onboarding?template=${detail.template.id}`"
+          :to="`/website/new?mode=manual&template=${detail.template.id}`"
           arrow
         >
           Preview &amp; build new site

@@ -341,7 +341,7 @@ function when(value: string | null): string {
       title="No website selected"
       description="A blog belongs to a website. Create one first."
     >
-      <UiButton variant="primary" to="/onboarding">Build a website</UiButton>
+      <UiButton variant="primary" to="/website/new?mode=ai">Make website with AI</UiButton>
     </UiEmptyState>
 
     <template v-else>

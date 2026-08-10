@@ -1,6 +1,7 @@
 /**
- * Lenis smooth scroll + GSAP ScrollTrigger sync for Nuxt hosts (storefront / dashboard).
- * Respects prefers-reduced-motion. Motionsites islands keep their own scroll — do not use there.
+ * Lenis smooth scroll + GSAP ScrollTrigger sync for Nuxt hosts.
+ * Storefront only by default — dashboard uses nested `overflow-y-auto` mains
+ * and Lenis on `document` steals wheel events (broken page scroll).
  */
 import Lenis from 'lenis'
 import gsap from 'gsap'
@@ -10,7 +11,20 @@ import 'lenis/dist/lenis.css'
 export default defineNuxtPlugin(() => {
   if (!import.meta.client) return
 
+  const config = useRuntimeConfig()
+  const enableLenis = Boolean(config.public.motion?.enableLenis)
+
   gsap.registerPlugin(ScrollTrigger)
+
+  if (!enableLenis) {
+    return {
+      provide: {
+        lenis: null as Lenis | null,
+        gsap,
+        ScrollTrigger,
+      },
+    }
+  }
 
   const reduced =
     typeof window !== 'undefined' &&

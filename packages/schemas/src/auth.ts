@@ -41,5 +41,7 @@ export const sessionContextSchema = z.object({
   memberships: z.array(membershipSchema),
   activeTenantId: uuidSchema.nullable(),
   permissions: z.array(permissionSchema),
+  /** Set when a platform admin is viewing as this user. */
+  impersonatorUserId: uuidSchema.nullable().optional(),
 })
 export type SessionContext = z.infer<typeof sessionContextSchema>

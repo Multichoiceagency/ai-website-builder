@@ -29,6 +29,7 @@ export default defineNuxtConfig({
       /** Empty = same origin; browser calls go through the Nitro proxy. */
       coreApiUrl: '',
       storefrontUrl: process.env.STOREFRONT_URL ?? 'http://localhost:3001',
+      adminUrl: process.env.ADMIN_URL ?? 'http://localhost:3002',
     },
   },
 

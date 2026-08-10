@@ -13,6 +13,7 @@ export interface AuthContext {
   user: User
   memberships: Membership[]
   sessionToken: string
+  impersonatorUserId: string | null
 }
 
 /**
@@ -53,7 +54,12 @@ const authPlugin: FastifyPluginAsync = async (app) => {
       if (!user) return null
 
       const memberships = await listMembershipsForUser(tx, user.id)
-      return { user, memberships, sessionToken: token } satisfies AuthContext
+      return {
+        user,
+        memberships,
+        sessionToken: token,
+        impersonatorUserId: session.impersonatorUserId,
+      } satisfies AuthContext
     })
 
     request.auth = context

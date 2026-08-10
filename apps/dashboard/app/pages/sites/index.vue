@@ -7,17 +7,7 @@ const can = useCan()
 
 const { data: sites, pending } = await useAsyncData('sites', () => api.get<Site[]>('/api/v1/sites'))
 
-const creating = ref(false)
-const name = ref('')
-const kind = ref<SiteKind>('website')
-const error = ref('')
-const busy = ref(false)
 const kindFilter = ref<'all' | SiteKind>('all')
-
-const KIND_OPTIONS: { label: string; value: SiteKind }[] = [
-  { label: 'Website', value: 'website' },
-  { label: 'Ecommerce', value: 'ecommerce' },
-]
 
 const FILTER_TABS: { label: string; value: 'all' | SiteKind }[] = [
   { label: 'All', value: 'all' },
@@ -36,50 +26,18 @@ const filteredSites = computed(() => {
 function kindLabel(value: SiteKind): string {
   return value === 'ecommerce' ? 'Ecommerce' : 'Website'
 }
-
-/** Slug is derived, not asked for — one less decision at creation time. */
-function slugFor(value: string): string {
-  return (
-    value
-      .normalize('NFKD')
-      .replace(/[̀-ͯ]/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 60) || 'website'
-  )
-}
-
-async function createSite() {
-  error.value = ''
-  busy.value = true
-  try {
-    const site = await api.post<Site>('/api/v1/sites', {
-      name: name.value,
-      slug: slugFor(name.value),
-      kind: kind.value,
-    })
-    creating.value = false
-    name.value = ''
-    kind.value = 'website'
-    await navigateTo(`/sites/${site.id}`)
-  } catch (caught) {
-    error.value = caught instanceof ApiError ? caught.message : 'Could not create the website.'
-  } finally {
-    busy.value = false
-  }
-}
 </script>
 
 <template>
   <div>
     <UiPageHeader
       title="Websites"
-      description="Each website has its own pages, theme and domain. One workspace can own several sites. Commerce (products and orders) lives in its own section."
+      description="Your websites live here. Make a new one, or open one to edit."
     >
       <template #actions>
-        <UiButton v-if="can('site:write')" size="sm" variant="primary" @click="creating = true">
-          New website
+        <UiButton v-if="can('site:write')" size="sm" to="/commerce/builder">Make a webshop</UiButton>
+        <UiButton v-if="can('site:write')" size="sm" variant="primary" to="/website/new?mode=ai" arrow>
+          Make website with AI
         </UiButton>
       </template>
     </UiPageHeader>
@@ -115,10 +73,10 @@ async function createSite() {
 
     <UiEmptyState
       v-if="!pending && !sites?.length"
-      title="No websites yet"
-      description="Create one to start adding pages."
+      title="No website yet"
+      description="Write a short text about your business. AI makes the website."
     >
-      <UiButton variant="primary" @click="creating = true">New website</UiButton>
+      <UiButton variant="primary" to="/website/new?mode=ai" arrow>Make website with AI</UiButton>
     </UiEmptyState>
 
     <UiEmptyState
@@ -155,24 +113,5 @@ async function createSite() {
         </NuxtLink>
       </li>
     </ul>
-
-    <UiDialog v-model:open="creating" title="New website" description="You can change everything later.">
-      <form class="flex flex-col gap-4" @submit.prevent="createSite">
-        <UiField v-slot="{ id, describedBy }" label="Website name" :help="name ? `Address: /${slugFor(name)}` : ''" required>
-          <UiInput :id="id" v-model="name" :described-by="describedBy" placeholder="Acme Plumbing" />
-        </UiField>
-        <UiField v-slot="{ id }" label="Kind" required>
-          <UiSelect :id="id" v-model="kind" :options="KIND_OPTIONS" />
-        </UiField>
-        <p v-if="error" class="rounded-lg bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger" role="alert">
-          {{ error }}
-        </p>
-      </form>
-
-      <template #footer>
-        <UiButton @click="creating = false">Cancel</UiButton>
-        <UiButton variant="primary" :loading="busy" :disabled="!name.trim()" @click="createSite">Create</UiButton>
-      </template>
-    </UiDialog>
   </div>
 </template>

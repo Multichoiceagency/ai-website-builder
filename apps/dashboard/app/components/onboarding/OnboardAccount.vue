@@ -27,7 +27,7 @@ const emit = defineEmits<{
     </template>
     <template v-else>
       <p class="text-sm text-soft">Create an account to continue.</p>
-      <UiButton class="mt-5" variant="primary" to="/login?redirect=/onboarding" arrow>
+      <UiButton class="mt-5" variant="primary" to="/login?redirect=/website/new%3Fmode%3Dai" arrow>
         Sign in or register
       </UiButton>
     </template>

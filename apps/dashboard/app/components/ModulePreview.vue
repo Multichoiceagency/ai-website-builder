@@ -57,7 +57,7 @@ withDefaults(
           <p class="mb-3 text-[0.8125rem] leading-relaxed text-soft">
             The website builder, the page editor and publishing are live today.
           </p>
-          <UiButton size="sm" variant="primary" to="/onboarding" arrow>Build a website</UiButton>
+          <UiButton size="sm" variant="primary" to="/website/new?mode=ai" arrow>Make website with AI</UiButton>
         </UiCard>
       </div>
     </div>

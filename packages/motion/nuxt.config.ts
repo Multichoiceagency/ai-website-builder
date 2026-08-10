@@ -12,4 +12,12 @@ const { resolve } = createResolver(import.meta.url)
 export default defineNuxtConfig({
   css: [resolve('./assets/css/motion.css')],
   plugins: [resolve('./plugins/lenis-gsap.client.ts')],
+  runtimeConfig: {
+    public: {
+      motion: {
+        /** Opt-in per app — storefront sets true; dashboard leaves false. */
+        enableLenis: false,
+      },
+    },
+  },
 })

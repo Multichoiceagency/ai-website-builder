@@ -7,7 +7,16 @@ interface Stats {
   plans: { plan: string; tenants: number }[]
 }
 
+interface Revenue {
+  currency: string
+  mrr: number
+  arr: number
+  breakdown: { plan: string; tenants: number; priceEur: number; mrrEur: number }[]
+  note: string
+}
+
 const { data: stats } = await useAsyncData('admin:stats', () => api.get<Stats>('/stats'))
+const { data: revenue } = await useAsyncData('admin:revenue', () => api.get<Revenue>('/revenue'))
 const { data: activity } = await useAsyncData('admin:activity', () =>
   api.get<{ id: string; tenantName: string; name: string; createdAt: string }[]>('/activity', { limit: 12 }),
 )
@@ -18,6 +27,14 @@ function relative(iso: string): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
   return `${Math.floor(seconds / 86400)}d ago`
+}
+
+function eur(value: number): string {
+  return new Intl.NumberFormat('nl-NL', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0,
+  }).format(value)
 }
 </script>
 
@@ -30,6 +47,11 @@ function relative(iso: string): string {
       <UiStat label="Users" :value="stats.users" :hint="`${stats.activeSessions} signed in now`" />
       <UiStat label="Websites" :value="stats.sites" />
       <UiStat label="Published pages" :value="stats.publishedPages" :hint="`of ${stats.pages} total`" />
+    </div>
+
+    <div v-if="revenue" class="mt-3 grid gap-3 sm:grid-cols-2">
+      <UiStat label="Est. MRR" :value="eur(revenue.mrr)" :hint="revenue.note" />
+      <UiStat label="Est. ARR" :value="eur(revenue.arr)" hint="MRR × 12 from plan list prices" />
     </div>
 
     <div class="mt-7 grid gap-5 lg:grid-cols-[1fr_1.3fr] lg:items-start">
@@ -45,6 +67,16 @@ function relative(iso: string): string {
               />
             </span>
             <span class="w-8 shrink-0 text-right text-[0.8125rem] font-medium tabular-nums text-ink">{{ entry.tenants }}</span>
+          </li>
+        </ul>
+        <ul v-if="revenue?.breakdown?.length" class="mt-4 space-y-1 border-t border-line pt-3">
+          <li
+            v-for="row in revenue.breakdown"
+            :key="row.plan"
+            class="flex justify-between text-[0.75rem] text-soft"
+          >
+            <span class="capitalize">{{ row.plan }} × {{ row.tenants }} @ {{ eur(row.priceEur) }}</span>
+            <span class="tabular-nums text-ink">{{ eur(row.mrrEur) }}</span>
           </li>
         </ul>
       </UiCard>

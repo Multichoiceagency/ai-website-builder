@@ -343,14 +343,14 @@ const TOOLS: AssistantTool[] = [
   },
   {
     id: 'build_website',
-    label: 'Build a website from a business',
-    hint: 'Opens guided design questions, then onboarding',
+    label: 'Make a website with AI',
+    hint: 'Opens the simple website builder',
     risk: 'low',
     icon: Globe,
     available: () => true,
     async run() {
-      startWizard('Build a polished website for my business')
-      return ''
+      await navigateTo('/website/new?mode=ai')
+      return 'Opened Make website. Write what your business does, then tap Make my website.'
     },
   },
 ]
@@ -465,20 +465,21 @@ async function finishWizard(answers: WizardAnswers) {
 
     if (source || goal === 'multipage' || goal === 'shop' || !activeSiteId.value) {
       await navigateTo({
-        path: '/onboarding',
+        path: '/website/new',
         query: {
+          mode: 'ai',
           ...(source ? { website: source } : {}),
           goal,
           tone: typeof answers.tone === 'string' ? answers.tone : undefined,
           audience: typeof answers.audience === 'string' ? answers.audience : undefined,
         },
       })
-      say('assistant', 'Opened onboarding with your choices. Confirm the business details and generate.')
+      say('assistant', 'Opened Make website. Check your text, then tap Make my website.')
     } else if (activeSiteId.value) {
       await navigateTo('/website/templates')
       say(
         'assistant',
-        'Theme is set. Open Templates or Motionsites and insert a live section — or say “build a website” to run full onboarding.',
+        'Theme is set. Open Templates to add a section — or say “make a website” for the AI builder.',
       )
     }
   } catch (error) {
@@ -499,7 +500,7 @@ function skipWizard() {
     message.wizard ? { ...message, wizard: false } : message,
   )
   say('assistant', 'Skipped the questionnaire. Tell me what to do, or pick an action below.')
-  void navigateTo('/onboarding')
+  void navigateTo('/website/new?mode=ai')
 }
 
 async function execute(tool: AssistantTool) {
