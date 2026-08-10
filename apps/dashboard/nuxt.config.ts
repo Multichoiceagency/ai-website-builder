@@ -2,11 +2,15 @@
  * The admin dashboard.
  *
  * Rendered as an SPA: every page is behind authentication, so there is nothing
- * to index and no first-paint SEO cost to pay. It also keeps the session
- * cookie a pure browser concern instead of something the Nuxt server has to
- * forward on every request.
+ * to index and no first-paint SEO cost to pay.
+ *
+ * Browser calls hit same-origin `/api/v1/*`, which Nitro proxies to core-api.
+ * That keeps the session cookie first-party (required when the API host is a
+ * different site, e.g. separate sslip.io / custom domains).
  */
 import { platformPwaConfig } from '../../packages/ui/utils/pwa'
+
+const coreApiOrigin = (process.env.CORE_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
@@ -20,9 +24,14 @@ export default defineNuxtConfig({
     public: {
       /** Distinguishes admin chrome from the public renderer for block behaviour. */
       surface: 'dashboard',
-      coreApiUrl: process.env.CORE_API_URL ?? 'http://localhost:4000',
+      /** Empty = same origin; see `routeRules` proxy below. */
+      coreApiUrl: '',
       storefrontUrl: process.env.STOREFRONT_URL ?? 'http://localhost:3001',
     },
+  },
+
+  routeRules: {
+    '/api/v1/**': { proxy: `${coreApiOrigin}/api/v1/**` },
   },
 
   app: {
