@@ -94,6 +94,9 @@ export async function loadSession(): Promise<SessionContext | null> {
     tenantId.value = context.activeTenantId
     return context
   } catch {
+    // Register/login may have set the session while this probe was in flight.
+    // Never clobber a session that already has a user.
+    if (session.value?.user) return session.value
     session.value = null
     tenantId.value = null
     return null
