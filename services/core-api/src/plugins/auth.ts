@@ -65,7 +65,9 @@ export default fp(authPlugin, { name: 'auth' })
 export function setSessionCookie(reply: { setCookie: (n: string, v: string, o: object) => unknown }, token: string) {
   reply.setCookie(env.SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    sameSite: 'lax',
+    // Cross-site dashboard↔API hosts (separate sslip.io / custom FQDNs) need
+    // None+Secure; same-origin proxy also works with Lax. None is safe on HTTPS.
+    sameSite: isProduction ? 'none' : 'lax',
     secure: isProduction,
     path: '/',
     maxAge: env.SESSION_TTL_SECONDS,
@@ -73,7 +75,11 @@ export function setSessionCookie(reply: { setCookie: (n: string, v: string, o: o
 }
 
 export function clearSessionCookie(reply: { clearCookie: (n: string, o: object) => unknown }) {
-  reply.clearCookie(env.SESSION_COOKIE_NAME, { path: '/' })
+  reply.clearCookie(env.SESSION_COOKIE_NAME, {
+    path: '/',
+    sameSite: isProduction ? 'none' : 'lax',
+    secure: isProduction,
+  })
 }
 
 export function requireUser(request: FastifyRequest): AuthContext {
