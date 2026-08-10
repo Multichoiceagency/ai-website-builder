@@ -80,19 +80,21 @@ export async function buildApp(): Promise<FastifyInstance> {
   })
   await app.register(authPlugin)
 
+  // Liveness only — do not block Coolify/compose health on DB or ffmpeg.
+  // A failing SELECT previously marked the container unhealthy and blocked dashboard.
   app.get('/health', async (_request, reply) => {
-    const [row] = await sql<{ ok: number }[]>`SELECT 1 AS ok`
-    const { ffmpegAvailable } = await import('./lib/media/frames.js')
-    const ffmpeg = await ffmpegAvailable()
-    if (!ffmpeg) {
-      app.log.warn('ffmpeg/ffprobe not found — video scroll-frame extraction will fail until installed')
+    let database: 'up' | 'down' = 'down'
+    try {
+      const [row] = await sql<{ ok: number }[]>`SELECT 1 AS ok`
+      database = row?.ok === 1 ? 'up' : 'down'
+    } catch (error) {
+      app.log.warn({ err: error }, 'health database probe failed')
     }
     return reply.send(
       ok({
         status: 'ok',
-        database: row?.ok === 1 ? 'up' : 'down',
+        database,
         environment: env.NODE_ENV,
-        ffmpeg: ffmpeg ? 'up' : 'missing',
       }),
     )
   })
