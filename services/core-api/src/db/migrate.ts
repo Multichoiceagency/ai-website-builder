@@ -6,13 +6,35 @@
  * records it in the same transaction as the migration itself — so a failed
  * migration leaves no partial record behind.
  */
-import { readFile, readdir } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import postgres from 'postgres'
 import { env } from '../config/env.js'
 
-const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations')
+/**
+ * SQL files live under `src/db/migrations`. Compiled `dist/db/migrate.js` must
+ * still find them — tsc does not copy `.sql`. Prefer a sibling `migrations/`
+ * (if a packaging step copied them), then fall back to the source tree.
+ */
+async function resolveMigrationsDir(): Promise<string> {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    join(here, 'migrations'),
+    join(here, '../../src/db/migrations'),
+  ]
+  for (const dir of candidates) {
+    try {
+      await access(dir)
+      return dir
+    } catch {
+      // try next
+    }
+  }
+  throw new Error(
+    `No migrations directory found. Tried:\n${candidates.map((c) => `  - ${c}`).join('\n')}`,
+  )
+}
 
 const owner = postgres({
   host: env.POSTGRES_HOST,
@@ -39,19 +61,21 @@ async function appliedMigrations(): Promise<Set<string>> {
 }
 
 async function run(): Promise<void> {
+  const migrationsDir = await resolveMigrationsDir()
   await ensureMigrationsTable()
   const applied = await appliedMigrations()
 
-  const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith('.sql')).sort()
+  const files = (await readdir(migrationsDir)).filter((file) => file.endsWith('.sql')).sort()
   const pending = files.filter((file) => !applied.has(file))
 
   if (pending.length === 0) {
-    console.log(`database up to date (${applied.size} migration(s) applied)`)
+    console.log(`database up to date (${applied.size} migration(s) applied) from ${migrationsDir}`)
     return
   }
 
+  console.log(`migrating from ${migrationsDir} (${pending.length} pending)`)
   for (const file of pending) {
-    const contents = await readFile(join(MIGRATIONS_DIR, file), 'utf8')
+    const contents = await readFile(join(migrationsDir, file), 'utf8')
     process.stdout.write(`applying ${file} ... `)
 
     await owner.begin(async (tx) => {
