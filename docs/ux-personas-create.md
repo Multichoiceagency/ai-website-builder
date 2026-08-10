@@ -87,3 +87,22 @@ Top fixes applied in `/website/new`:
 9. Softened wait copy + “you can change later”
 
 Re-test bar: core personas Sam/Lea/Omar/Rita should **PASS** example path & scratch path in NL.
+
+## Round 2 re-test (2026-08-10) — 10-persona team
+
+**Verdict: PASS — 10/10**
+
+| # | Persona | Result |
+| --- | --- | --- |
+| 1 | Sam | PASS |
+| 2 | Lea | PASS |
+| 3 | Omar | PASS |
+| 4 | Rita | PASS |
+| 5 | Jordan | PASS |
+| 6 | Mei | PASS |
+| 7 | Theo | PASS |
+| 8 | Noor | PASS |
+| 9 | Diego | PASS |
+| 10 | Aisha | PASS |
+
+Residual (non-blocking): softer secondary text contrast; no cancel during build overlay; webshop toggle below textarea on small phones; blank-path errors lack dedicated Retry.
