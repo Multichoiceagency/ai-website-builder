@@ -1,5 +1,3 @@
-# Also available at repo-root /docker-compose.yaml (preferred Coolify path).
-# Coolify: Build Pack = Docker Compose, Base = `/`, Location = `/docker-compose.yaml`
 # Coolify production stack (repo root).
 # In Coolify: Build Pack = Docker Compose, Base Directory = `/`,
 # Docker Compose Location = `/docker-compose.yaml`
