@@ -51,7 +51,7 @@ services:
       - "9000"
       - "9001"
 
-  core-api:
+  core_api:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.core-api
@@ -88,7 +88,7 @@ services:
       STOREFRONT_PUBLIC_HOST: ${STOREFRONT_PUBLIC_HOST:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       NANGO_SECRET_KEY: ${NANGO_SECRET_KEY:-}
-      NANGO_HOST: ${NANGO_HOST:-http://nango-server:3003}
+      NANGO_HOST: ${NANGO_HOST:-http://nango_server:3003}
       NANGO_WEBHOOK_SECRET: ${NANGO_WEBHOOK_SECRET:-}
       NANGO_GOOGLE_INTEGRATION_ID: ${NANGO_GOOGLE_INTEGRATION_ID:-google}
       OPENWA_BASE_URL: ${OPENWA_BASE_URL:-}
@@ -126,7 +126,7 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.dashboard
     restart: unless-stopped
     depends_on:
-      - core-api
+      - core_api
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -145,7 +145,7 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.storefront
     restart: unless-stopped
     depends_on:
-      - core-api
+      - core_api
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -155,7 +155,7 @@ services:
     expose:
       - "3001"
 
-  nango-db:
+  nango_db:
     image: postgres:16.0-alpine
     restart: unless-stopped
     environment:
@@ -170,12 +170,12 @@ services:
       timeout: 5s
       retries: 10
 
-  nango-server:
+  nango_server:
     image: nangohq/nango-server:hosted
     platform: linux/amd64
     restart: unless-stopped
     depends_on:
-      nango-db:
+      nango_db:
         condition: service_healthy
     expose:
       - "3003"
@@ -183,10 +183,10 @@ services:
     environment:
       NANGO_DB_USER: nango
       NANGO_DB_PASSWORD: ${NANGO_DB_PASSWORD}
-      NANGO_DB_HOST: nango-db
+      NANGO_DB_HOST: nango_db
       NANGO_DB_NAME: nango
       NANGO_DB_SSL: 'false'
-      RECORDS_DATABASE_URL: postgresql://nango:${NANGO_DB_PASSWORD}@nango-db:5432/nango
+      RECORDS_DATABASE_URL: postgresql://nango:${NANGO_DB_PASSWORD}@nango_db:5432/nango
       SERVER_PORT: 3003
       NANGO_SERVER_URL: ${NANGO_SERVER_URL:?set NANGO_SERVER_URL}
       NANGO_PUBLIC_SERVER_URL: ${NANGO_PUBLIC_SERVER_URL:?set NANGO_PUBLIC_SERVER_URL}
