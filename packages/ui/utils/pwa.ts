@@ -11,8 +11,10 @@ export function platformPwaConfig(opts: {
   /** Dashboard sits behind auth — browsers fetch manifest without cookies unless set. */
   useCredentials?: boolean
   /**
-   * Document used when a navigation misses the cache (Workbox).
-   * SPA dashboard → `/`. SSR storefront → `false` (use NetworkFirst pages instead).
+   * Document used when a navigation misses the cache (Workbox `createHandlerBoundToURL`).
+   * Only set this when that URL is actually precached (static `index.html`).
+   * SPA / Nitro apps should pass `false` and rely on NetworkFirst navigations instead —
+   * otherwise Workbox throws `non-precached-url` for `/`.
    */
   navigateFallback?: string | false
   startUrl?: string
@@ -30,7 +32,7 @@ export function platformPwaConfig(opts: {
   ]
 
   const navigateFallback =
-    opts.navigateFallback === false ? undefined : (opts.navigateFallback ?? '/')
+    opts.navigateFallback === false ? undefined : opts.navigateFallback
 
   return {
     registerType: 'autoUpdate' as const,
@@ -88,14 +90,10 @@ export function platformPwaConfig(opts: {
           },
         },
         {
+          // Never cache API — auth/session 401s must not stick after login.
           urlPattern: ({ url }: { url: URL }) =>
             url.pathname.startsWith('/api/') || url.port === '4000',
-          handler: 'NetworkFirst' as const,
-          options: {
-            cacheName: 'platform-api',
-            networkTimeoutSeconds: 8,
-            expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 6 },
-          },
+          handler: 'NetworkOnly' as const,
         },
       ],
       maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
@@ -105,9 +103,8 @@ export function platformPwaConfig(opts: {
       periodicSyncForUpdates: 60 * 60,
     },
     devOptions: {
-      enabled: true,
+      enabled: false,
       suppressWarnings: true,
-      navigateFallbackAllowlist: [/^\/$/],
       type: 'module' as const,
     },
   }

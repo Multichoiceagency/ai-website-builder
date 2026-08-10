@@ -58,7 +58,8 @@ export default defineNuxtConfig({
     themeColor: '#111827',
     backgroundColor: '#f3f1ec',
     useCredentials: true,
-    navigateFallback: '/',
+    // SPA shell is not a precached static `/` — NetworkFirst handles navigations.
+    navigateFallback: false,
   }),
 
   typescript: { strict: true },
