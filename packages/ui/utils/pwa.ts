@@ -32,10 +32,13 @@ export function platformPwaConfig(opts: {
   ]
 
   const navigateFallback =
-    opts.navigateFallback === false ? undefined : opts.navigateFallback
+    opts.navigateFallback === false ? null : (opts.navigateFallback ?? null)
 
   return {
     registerType: 'autoUpdate' as const,
+    // One-shot: uninstall broken SWs that still call createHandlerBoundToURL("/").
+    // Re-enable installable PWA later with a precached shell URL.
+    selfDestroying: opts.navigateFallback === false,
     manifest: {
       name: opts.name,
       short_name: opts.shortName,
@@ -55,11 +58,11 @@ export function platformPwaConfig(opts: {
     workbox: {
       globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
       globIgnores: ['**/motionsites/**', '**/node_modules/**'],
+      // Explicit null — @vite-pwa/nuxt otherwise defaults CSR navigateFallback to `/`
+      // which throws `non-precached-url` when `/` is not in the precache.
+      navigateFallback,
       ...(navigateFallback
-        ? {
-            navigateFallback,
-            navigateFallbackDenylist: [/^\/api\//, /^\/motionsites\//],
-          }
+        ? { navigateFallbackDenylist: [/^\/api\//, /^\/motionsites\//] }
         : {}),
       runtimeCaching: [
         {

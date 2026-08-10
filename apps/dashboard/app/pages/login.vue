@@ -58,7 +58,18 @@ async function submit() {
     session.value = context
     tenantId.value = context?.activeTenantId ?? null
 
-    await navigateTo(mode.value === 'register' ? '/onboarding' : ((route.query.redirect as string) || '/'))
+    // Full navigation so the session cookie is applied and middleware can
+    // loadSession() cleanly — client-only navigateTo kept losing the race
+    // with a stale service worker / in-memory session wipe.
+    const next =
+      mode.value === 'register'
+        ? '/onboarding'
+        : typeof route.query.redirect === 'string' &&
+            route.query.redirect.startsWith('/') &&
+            !route.query.redirect.startsWith('//')
+          ? route.query.redirect
+          : '/'
+    await navigateTo(next, { external: true })
   } catch (caught) {
     error.value = caught instanceof ApiError ? caught.message : 'Something went wrong.'
   } finally {
