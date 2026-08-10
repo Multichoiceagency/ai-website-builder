@@ -69,10 +69,11 @@ const envSchema = z.object({
   // which the capabilities endpoint reports rather than crashing the service.
   GOOGLE_CLIENT_ID: optionalNonEmpty,
   GOOGLE_CLIENT_SECRET: optionalNonEmpty,
-  GOOGLE_OAUTH_REDIRECT_URI: z
-    .string()
-    .url()
-    .default('http://localhost:4000/api/v1/integrations/google/callback'),
+  // Coolify often injects optional keys as "" — treat blank as unset so default applies.
+  GOOGLE_OAUTH_REDIRECT_URI: z.preprocess(
+    emptyToUndefined,
+    z.string().url().default('http://localhost:4000/api/v1/integrations/google/callback'),
+  ),
   /** Sign-In / Sign-Up with Google (dashboard auth). Separate from integrations. */
   GOOGLE_AUTH_REDIRECT_URI: optionalUrl,
 
