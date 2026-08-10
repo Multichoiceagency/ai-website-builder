@@ -194,59 +194,13 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CSP_REPORT_ONLY: 'true'
 
-  openwa:
-    build:
-      context: https://github.com/rmyndharis/OpenWA.git#main
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    stop_grace_period: 45s
-    expose:
-      - "2785"
-    security_opt:
-      - 'no-new-privileges:true'
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - FOWNER
-      - SETGID
-      - SETUID
-    environment:
-      NODE_ENV: production
-      PORT: 2785
-      HOME: /tmp
-      XDG_CONFIG_HOME: /tmp/.config
-      XDG_CACHE_HOME: /tmp/.cache
-      LOG_LEVEL: info
-      AUTO_START_SESSIONS: 'true'
-      DATABASE_TYPE: sqlite
-      DATABASE_SYNCHRONIZE: 'true'
-      SESSION_DATA_PATH: /app/data/sessions
-      STORAGE_TYPE: local
-      STORAGE_LOCAL_PATH: /app/data/media
-      PLUGINS_DIR: /app/data/plugins
-      PUPPETEER_HEADLESS: 'true'
-      PUPPETEER_ARGS: '--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu'
-      API_KEY: ${OPENWA_API_KEY:?set OPENWA_API_KEY}
-      # Set after Coolify assigns the public domain, e.g. https://openwa.example.com
-      # OPENWA public URL is also configured on core-api as OPENWA_BASE_URL.
-    volumes:
-      - openwa-data:/app/data
-    healthcheck:
-      test:
-        [
-          'CMD-SHELL',
-          'node -e "fetch(\"http://127.0.0.1:2785/api/health/ready\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" || node -e "fetch(\"http://127.0.0.1:2785/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 20
-      start_period: 90s
+# OpenWA is optional and builds from an external repo that often fails in
+# Coolify's shared builder. Deploy it separately with:
+#   infrastructure/docker/docker-compose.openwa.coolify.yml
+# Then set OPENWA_BASE_URL + OPENWA_API_KEY on core-api.
 
 volumes:
   postgres-data:
   redis-data:
   minio-data:
   nango-db-data:
-  openwa-data:
