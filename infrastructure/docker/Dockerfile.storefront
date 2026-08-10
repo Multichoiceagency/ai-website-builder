@@ -12,6 +12,7 @@ RUN pnpm install --frozen-lockfile --filter @platform/storefront...
 FROM deps AS build
 COPY apps/storefront apps/storefront
 COPY tsconfig.base.json ./
+RUN pnpm install --frozen-lockfile --filter @platform/storefront...
 ENV NODE_ENV=production
 ENV NUXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @platform/schemas build \

@@ -1,0 +1,19 @@
+# Keep Docker context lean and never overwrite pnpm workspace links.
+# COPY apps/<name> after `pnpm install` would otherwise replace the
+# linked apps/*/node_modules with the host tree (or an empty dir).
+**/node_modules
+**/.output
+**/.nuxt
+**/.cache
+**/dist
+**/.turbo
+**/.git
+**/.DS_Store
+**/*.log
+.env
+.env.*
+!.env.example
+coverage
+**/playwright-report
+**/test-results
+apps/**/public/motionsites/islands

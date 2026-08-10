@@ -20,6 +20,7 @@ COPY packages/templates packages/templates
 COPY services/core-api services/core-api
 # Workspace package tsconfigs extend the monorepo base.
 COPY tsconfig.base.json ./
+RUN pnpm install --frozen-lockfile --filter @platform/core-api...
 RUN pnpm --filter @platform/schemas build \
  && pnpm --filter @platform/blocks build \
  && pnpm --filter @platform/permissions build \

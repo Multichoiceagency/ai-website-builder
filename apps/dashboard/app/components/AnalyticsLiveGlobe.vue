@@ -74,6 +74,14 @@ function latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector
   return new THREE.Vector3(x, y, z)
 }
 
+function applySrgb(texture: THREE.Texture) {
+  // three@0.134 uses encoding; newer three uses colorSpace.
+  const anyThree = THREE as typeof THREE & { SRGBColorSpace?: string; sRGBEncoding?: number }
+  const anyTex = texture as THREE.Texture & { colorSpace?: string; encoding?: number }
+  if (anyThree.SRGBColorSpace) anyTex.colorSpace = anyThree.SRGBColorSpace
+  else if (typeof anyThree.sRGBEncoding === 'number') anyTex.encoding = anyThree.sRGBEncoding
+}
+
 function loadAvatarTexture(src: string): Promise<THREE.Texture> {
   return new Promise((resolve, reject) => {
     const loader = new THREE.TextureLoader()
@@ -81,7 +89,7 @@ function loadAvatarTexture(src: string): Promise<THREE.Texture> {
     loader.load(
       src,
       (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace
+        applySrgb(texture)
         resolve(texture)
       },
       undefined,
@@ -95,7 +103,7 @@ async function loadEarthMaterial(): Promise<THREE.MeshStandardMaterial> {
   loader.setCrossOrigin('anonymous')
   try {
     const [earth, bump] = await Promise.all([loader.loadAsync(EARTH), loader.loadAsync(BUMP)])
-    earth.colorSpace = THREE.SRGBColorSpace
+    applySrgb(earth)
     earth.anisotropy = 16
     bump.anisotropy = 8
     return new THREE.MeshStandardMaterial({

@@ -12,6 +12,8 @@ RUN pnpm install --frozen-lockfile --filter @platform/dashboard...
 FROM deps AS build
 COPY apps/dashboard apps/dashboard
 COPY tsconfig.base.json ./
+# Re-link workspace deps — source COPY must not leave a broken apps/*/node_modules.
+RUN pnpm install --frozen-lockfile --filter @platform/dashboard...
 ENV NODE_ENV=production
 ENV NUXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @platform/schemas build \
