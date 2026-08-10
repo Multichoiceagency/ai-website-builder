@@ -40,9 +40,18 @@ export function useApi() {
     if (tenantId.value) headers['x-tenant-id'] = tenantId.value
 
     try {
+      const body =
+        options.body === undefined
+          ? undefined
+          : JSON.parse(
+              JSON.stringify(options.body, (_key, value) =>
+                value === undefined || value === null || value === '' ? undefined : value,
+              ),
+            )
+
       const response = await $fetch<Envelope<T>>(`${config.public.coreApiUrl}${path}`, {
         method: options.method ?? 'GET',
-        body: options.body as Record<string, unknown> | undefined,
+        body,
         query: options.query,
         headers,
         // The session lives in an httpOnly cookie; it is never readable here.

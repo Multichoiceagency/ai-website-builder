@@ -239,19 +239,29 @@ const authRoutes: FastifyPluginAsync = async (app) => {
 
     const optionalTrimmed = (min: number, max: number) =>
       z.preprocess(
-        (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+        (value) =>
+          value == null || (typeof value === 'string' && value.trim() === '')
+            ? undefined
+            : value,
         z.string().trim().min(min).max(max).optional(),
       )
+
+    // ofetch/JSON often turns omitted form fields into `null` — coerce before Zod.
+    const raw = (request.body && typeof request.body === 'object'
+      ? request.body
+      : {}) as Record<string, unknown>
+    const body = Object.fromEntries(
+      Object.entries(raw).filter(([, value]) => value != null && value !== ''),
+    )
 
     const input = parseOrThrow(
       z.object({
         mode: z.enum(['login', 'register']).default('login'),
         redirectTo: z.string().max(512).optional(),
-        // Empty strings from the form must not 400 — treat as "not provided".
         organizationName: optionalTrimmed(2, 120),
         displayName: optionalTrimmed(1, 120),
       }),
-      request.body ?? {},
+      body,
       'google auth',
     )
 
