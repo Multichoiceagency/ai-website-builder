@@ -296,23 +296,23 @@ export async function assistWithMessage(
 
 function sanitizeAssistResult(result: AssistResult, freeformMode: boolean): AssistResult {
   if (!freeformMode) return result
-  const actions = (result.actions ?? [])
-    .map((action) => {
-      if (action.type === 'insertBlock' && action.blockId !== 'layout-canvas-01') {
-        return { type: 'insertLayoutCanvas' as const }
-      }
-      if (action.type === 'insertBlock' || action.type === 'insertLayoutCanvas') return action
-      if (
-        action.type === 'setContentWidth' ||
-        action.type === 'setPageLayout' ||
-        action.type === 'patchSectionProps' ||
-        action.type === 'replaceLayoutRoot'
-      ) {
-        return action
-      }
-      return null
-    })
-    .filter((action): action is AssistAction => action != null)
+  const actions: AssistAction[] = []
+  for (const action of result.actions ?? []) {
+    if (action.type === 'insertBlock' && action.blockId !== 'layout-canvas-01') {
+      actions.push({ type: 'insertLayoutCanvas' })
+      continue
+    }
+    if (
+      action.type === 'insertBlock' ||
+      action.type === 'insertLayoutCanvas' ||
+      action.type === 'setContentWidth' ||
+      action.type === 'setPageLayout' ||
+      action.type === 'patchSectionProps' ||
+      action.type === 'replaceLayoutRoot'
+    ) {
+      actions.push(action)
+    }
+  }
 
   return {
     ...result,
