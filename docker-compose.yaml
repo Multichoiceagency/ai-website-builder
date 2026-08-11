@@ -158,53 +158,12 @@ services:
     expose:
       - "3001"
 
-  nango_db:
-    image: postgres:16.0-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: nango
-      POSTGRES_PASSWORD: ${NANGO_DB_PASSWORD:?set NANGO_DB_PASSWORD}
-      POSTGRES_DB: nango
-    volumes:
-      - nango-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U nango -d nango']
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  nango_server:
-    image: nangohq/nango-server:hosted
-    platform: linux/amd64
-    restart: unless-stopped
-    depends_on:
-      nango_db:
-        condition: service_healthy
-    expose:
-      - "3003"
-      - "3009"
-    environment:
-      NANGO_DB_USER: nango
-      NANGO_DB_PASSWORD: ${NANGO_DB_PASSWORD}
-      NANGO_DB_HOST: nango_db
-      NANGO_DB_NAME: nango
-      NANGO_DB_SSL: 'false'
-      RECORDS_DATABASE_URL: postgresql://nango:${NANGO_DB_PASSWORD}@nango_db:5432/nango
-      SERVER_PORT: 3003
-      NANGO_SERVER_URL: ${NANGO_SERVER_URL:?set NANGO_SERVER_URL}
-      NANGO_PUBLIC_SERVER_URL: ${NANGO_PUBLIC_SERVER_URL:?set NANGO_PUBLIC_SERVER_URL}
-      NANGO_PUBLIC_CONNECT_URL: ${NANGO_PUBLIC_CONNECT_URL:?set NANGO_PUBLIC_CONNECT_URL}
-      FLAG_AUTH_ENABLED: ${NANGO_FLAG_AUTH_ENABLED:-false}
-      FLAG_SERVE_CONNECT_UI: 'true'
-      NANGO_DASHBOARD_USERNAME: ${NANGO_DASHBOARD_USERNAME:-}
-      NANGO_DASHBOARD_PASSWORD: ${NANGO_DASHBOARD_PASSWORD:-}
-      NANGO_ENCRYPTION_KEY: ${NANGO_ENCRYPTION_KEY:?set NANGO_ENCRYPTION_KEY}
-      NANGO_LOGS_ENABLED: 'false'
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      CSP_REPORT_ONLY: 'true'
+  # Nango is not part of the Coolify stack (like OpenWA): the hosted image is
+  # multi-GB and does not fit the 38GB host. Run it via
+  # infrastructure/docker/docker-compose.nango.yml, or point NANGO_HOST at a
+  # managed instance. core_api boots fine without it.
 
 volumes:
   postgres-data:
   redis-data:
   minio-data:
-  nango-db-data:
