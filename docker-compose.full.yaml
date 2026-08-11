@@ -137,11 +137,32 @@ services:
       PORT: 3000
       NUXT_PUBLIC_CORE_API_URL: ${CORE_API_URL}
       NUXT_PUBLIC_STOREFRONT_URL: ${STOREFRONT_URL}
+      NUXT_PUBLIC_ADMIN_URL: ${ADMIN_URL:-}
       CORE_API_URL: ${CORE_API_URL}
       STOREFRONT_URL: ${STOREFRONT_URL}
       DASHBOARD_URL: ${DASHBOARD_URL:-}
+      ADMIN_URL: ${ADMIN_URL:-}
     expose:
       - "3000"
+
+  admin:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.admin
+    restart: unless-stopped
+    depends_on:
+      - core_api
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3002
+      NUXT_PUBLIC_CORE_API_URL: ${CORE_API_URL}
+      NUXT_PUBLIC_DASHBOARD_URL: ${DASHBOARD_URL:-}
+      CORE_API_URL: ${CORE_API_URL}
+      DASHBOARD_URL: ${DASHBOARD_URL:-}
+      ADMIN_URL: ${ADMIN_URL:-}
+    expose:
+      - "3002"
 
   storefront:
     build:
