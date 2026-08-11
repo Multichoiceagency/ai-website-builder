@@ -1,0 +1,211 @@
+# Coolify production stack — FULL variant (includes Nango).
+# For hosts with disk headroom (e.g. the exryinnovationlab server).
+# In Coolify: Build Pack = Docker Compose, Base Directory = `/`,
+# Docker Compose Location = `/docker-compose.full.yaml`
+#
+# Paths are relative to the repo root (Coolify project-directory).
+# Domains need container ports in Coolify (e.g. https://host:3000).
+name: platform
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-platform}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      APP_DB_USER: ${APP_DB_USER:-app_user}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-platform}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?set S3_SECRET_KEY}
+    volumes:
+      - minio-data:/data
+    expose:
+      - "9000"
+      - "9001"
+
+  core_api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.core-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-platform}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_USER: ${APP_DB_USER:-app_user}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      REDIS_URL: redis://redis:6379
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-eu-central-1}
+      S3_BUCKET: ${S3_BUCKET:-platform-media}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-${S3_ACCESS_KEY}}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-${S3_SECRET_KEY}}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL}
+      CORE_API_HOST: 0.0.0.0
+      CORE_API_PORT: 4000
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      CORE_API_URL: ${CORE_API_URL}
+      DASHBOARD_URL: ${DASHBOARD_URL:-}
+      STOREFRONT_URL: ${STOREFRONT_URL:-}
+      PLATFORM_EDGE_HOSTNAME: ${PLATFORM_EDGE_HOSTNAME:-}
+      STOREFRONT_PUBLIC_HOST: ${STOREFRONT_PUBLIC_HOST:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      NANGO_SECRET_KEY: ${NANGO_SECRET_KEY:-}
+      NANGO_HOST: ${NANGO_HOST:-http://nango_server:3003}
+      NANGO_WEBHOOK_SECRET: ${NANGO_WEBHOOK_SECRET:-}
+      NANGO_GOOGLE_INTEGRATION_ID: ${NANGO_GOOGLE_INTEGRATION_ID:-google}
+      OPENWA_BASE_URL: ${OPENWA_BASE_URL:-}
+      OPENWA_API_KEY: ${OPENWA_API_KEY:-}
+      OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
+      GOOGLE_AUTH_REDIRECT_URI: ${GOOGLE_AUTH_REDIRECT_URI:-}
+    # Migrate best-effort — never block API boot (Coolify Traefik needs a live target).
+    command:
+      [
+        "sh",
+        "-c",
+        "node dist/db/migrate.js || echo 'WARN: migrate failed — starting API anyway'; exec node dist/server.js",
+      ]
+    expose:
+      - "4000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 180s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.dashboard
+    restart: unless-stopped
+    depends_on:
+      - core_api
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      NUXT_PUBLIC_CORE_API_URL: ${CORE_API_URL}
+      NUXT_PUBLIC_STOREFRONT_URL: ${STOREFRONT_URL}
+      CORE_API_URL: ${CORE_API_URL}
+      STOREFRONT_URL: ${STOREFRONT_URL}
+      DASHBOARD_URL: ${DASHBOARD_URL:-}
+    expose:
+      - "3000"
+
+  storefront:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.storefront
+    restart: unless-stopped
+    depends_on:
+      - core_api
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      NUXT_PUBLIC_CORE_API_URL: ${CORE_API_URL}
+      CORE_API_URL: ${CORE_API_URL}
+    expose:
+      - "3001"
+
+  nango_db:
+    image: postgres:16.0-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nango
+      POSTGRES_PASSWORD: ${NANGO_DB_PASSWORD:?set NANGO_DB_PASSWORD}
+      POSTGRES_DB: nango
+    volumes:
+      - nango-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nango -d nango']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nango_server:
+    image: nangohq/nango-server:hosted
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      nango_db:
+        condition: service_healthy
+    expose:
+      - "3003"
+      - "3009"
+    environment:
+      NANGO_DB_USER: nango
+      NANGO_DB_PASSWORD: ${NANGO_DB_PASSWORD}
+      NANGO_DB_HOST: nango_db
+      NANGO_DB_NAME: nango
+      NANGO_DB_SSL: 'false'
+      RECORDS_DATABASE_URL: postgresql://nango:${NANGO_DB_PASSWORD}@nango_db:5432/nango
+      SERVER_PORT: 3003
+      NANGO_SERVER_URL: ${NANGO_SERVER_URL:?set NANGO_SERVER_URL}
+      NANGO_PUBLIC_SERVER_URL: ${NANGO_PUBLIC_SERVER_URL:?set NANGO_PUBLIC_SERVER_URL}
+      NANGO_PUBLIC_CONNECT_URL: ${NANGO_PUBLIC_CONNECT_URL:?set NANGO_PUBLIC_CONNECT_URL}
+      FLAG_AUTH_ENABLED: ${NANGO_FLAG_AUTH_ENABLED:-false}
+      FLAG_SERVE_CONNECT_UI: 'true'
+      NANGO_DASHBOARD_USERNAME: ${NANGO_DASHBOARD_USERNAME:-}
+      NANGO_DASHBOARD_PASSWORD: ${NANGO_DASHBOARD_PASSWORD:-}
+      NANGO_ENCRYPTION_KEY: ${NANGO_ENCRYPTION_KEY:?set NANGO_ENCRYPTION_KEY}
+      NANGO_LOGS_ENABLED: 'false'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CSP_REPORT_ONLY: 'true'
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  nango-db-data:
