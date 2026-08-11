@@ -65,7 +65,10 @@ const message = ref('')
 const errorMessage = ref('')
 const picking = ref(false)
 
-const leftTab = ref<'pages' | 'layers'>('layers')
+/** Frappe-Builder style left rail: blocks / layers / pages / assets. */
+type LeftTab = 'blocks' | 'layers' | 'pages' | 'assets'
+const LEFT_TABS: LeftTab[] = ['blocks', 'layers', 'pages', 'assets']
+const leftTab = ref<LeftTab>('blocks')
 const rightTab = ref<'agent' | 'style'>('style')
 /** Open by default so Layers + Properties are available as soon as the editor loads. */
 const leftOpen = ref(true)
@@ -92,12 +95,16 @@ onMounted(() => {
       right?: number
       leftOpen?: boolean
       rightOpen?: boolean
+      leftTab?: string
       interactiveAssistantWidth?: number
     }
     if (parsed.left) leftWidth.value = parsed.left
     if (parsed.right) rightWidth.value = parsed.right
     if (typeof parsed.leftOpen === 'boolean') leftOpen.value = parsed.leftOpen
     if (typeof parsed.rightOpen === 'boolean') rightOpen.value = parsed.rightOpen
+    if (parsed.leftTab && LEFT_TABS.includes(parsed.leftTab as LeftTab)) {
+      leftTab.value = parsed.leftTab as LeftTab
+    }
     if (parsed.interactiveAssistantWidth) interactiveAssistantWidth.value = parsed.interactiveAssistantWidth
   } catch {
     // A corrupt value just means the defaults stand.
@@ -105,8 +112,8 @@ onMounted(() => {
 })
 
 watch(
-  [leftWidth, rightWidth, leftOpen, rightOpen, interactiveAssistantWidth],
-  ([left, right, leftIsOpen, rightIsOpen, assistantWidth]) => {
+  [leftWidth, rightWidth, leftOpen, rightOpen, leftTab, interactiveAssistantWidth],
+  ([left, right, leftIsOpen, rightIsOpen, activeLeftTab, assistantWidth]) => {
     localStorage.setItem(
       'editor:panels',
       JSON.stringify({
@@ -114,6 +121,7 @@ watch(
         right,
         leftOpen: leftIsOpen,
         rightOpen: rightIsOpen,
+        leftTab: activeLeftTab,
         interactiveAssistantWidth: assistantWidth,
       }),
     )
@@ -878,30 +886,6 @@ function applyAiProposal(props: Record<string, unknown>) {
   message.value = 'AI change applied and saved to the draft.'
 }
 
-// --- layers list drag and drop (canvas drag lives in EditorCanvas) -----------
-const draggingIndex = ref<number | null>(null)
-const dropIndex = ref<number | null>(null)
-
-function onDragStart(index: number, event: DragEvent) {
-  draggingIndex.value = index
-  event.dataTransfer!.effectAllowed = 'move'
-  event.dataTransfer!.setData('text/plain', String(index))
-}
-function onDragOver(index: number, event: DragEvent) {
-  event.preventDefault()
-  event.dataTransfer!.dropEffect = 'move'
-  dropIndex.value = index
-}
-function onDrop(index: number) {
-  if (draggingIndex.value !== null) reorder(draggingIndex.value, index)
-  draggingIndex.value = null
-  dropIndex.value = null
-}
-function onDragEnd() {
-  draggingIndex.value = null
-  dropIndex.value = null
-}
-
 // --- persistence ------------------------------------------------------------
 
 async function save(): Promise<boolean> {
@@ -981,6 +965,23 @@ const DEVICES = [
 function togglePropertiesPanel() {
   rightOpen.value = !rightOpen.value
   if (rightOpen.value) rightTab.value = 'style'
+}
+
+/** Rail behaviour: a click opens the panel; a second click on the active tab collapses it. */
+function onRailSelect(tab: LeftTab) {
+  if (leftTab.value === tab && leftOpen.value) {
+    leftOpen.value = false
+    return
+  }
+  leftTab.value = tab
+  leftOpen.value = true
+}
+
+/** A section was picked in a left panel: select it and surface its properties. */
+function selectFromPanel(id: string) {
+  selectedId.value = id
+  rightTab.value = 'style'
+  rightOpen.value = true
 }
 </script>
 
@@ -1307,116 +1308,55 @@ function togglePropertiesPanel() {
         </aside>
       </template>
 
-      <!-- Classic: layers / canvas / properties ----------------------------- -->
+      <!-- Classic: rail + panel / canvas / properties ----------------------- -->
       <template v-else>
-      <!-- Left: pages / layers ------------------------------------------- -->
+      <!-- Left: icon rail (always visible) + the active panel --------------- -->
+      <EditorLeftRail :active="leftTab" :open="leftOpen" @select="onRailSelect" />
+
       <aside
         v-if="leftOpen"
         class="editor-chrome flex min-h-0 shrink-0 flex-col bg-paper"
         :style="{ width: `${leftWidth}px` }"
       >
-        <div class="flex shrink-0 gap-0.5 border-b border-line px-2 py-2" role="tablist">
-          <button
-            v-for="tab in (['pages', 'layers'] as const)"
-            :key="tab"
-            role="tab"
-            :aria-selected="leftTab === tab"
-            class="type-button-12 rounded-md px-2.5 py-1.5 capitalize transition-colors"
-            :class="leftTab === tab ? 'bg-sunken text-ink' : 'text-soft hover:text-ink'"
-            @click="leftTab = tab"
-          >{{ tab }}</button>
-        </div>
+        <EditorBlocksPanel
+          v-if="leftTab === 'blocks'"
+          :can-write="can('page:write')"
+          :max-performance-class="data.site.theme.maxPerformanceClass"
+          @insert="addBlock"
+          @open-library="picking = true"
+        />
 
-        <!-- Layers -->
-        <div v-if="leftTab === 'layers'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div class="flex shrink-0 items-center justify-between px-3 py-2">
-            <span class="type-button-10 uppercase tracking-[0.08em] text-faint">Sections</span>
-            <!-- TODO(Wave 0.5+): when selected section is layout-canvas-01, show Structure
-                 subtree (walkLayoutNodes / isLayoutCanvasBlock) with nest/rename/duplicate. -->
-            <UiButton v-if="can('page:write')" size="sm" variant="ghost" @click="picking = true">+ Add</UiButton>
-          </div>
+        <!-- TODO(Wave 0.5+): when selected section is layout-canvas-01, show Structure
+             subtree (walkLayoutNodes / isLayoutCanvasBlock) with nest/rename/duplicate. -->
+        <EditorLayersPanel
+          v-else-if="leftTab === 'layers'"
+          :sections="sections"
+          :selected-id="selectedId"
+          :generating-ids="generatingIds"
+          :can-write="can('page:write')"
+          @select="selectFromPanel"
+          @reorder="reorder"
+          @move="move"
+          @duplicate="duplicate"
+          @remove="remove"
+          @add="picking = true"
+        />
 
-          <ul v-if="sections.length" class="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
-            <li
-              v-for="(section, index) in sections"
-              :key="section.id"
-              draggable="true"
-              class="rounded-md transition-[opacity,box-shadow]"
-              :class="[
-                draggingIndex === index ? 'opacity-40' : '',
-                dropIndex === index && draggingIndex !== index ? 'shadow-[inset_0_2px_0_0_var(--brand)]' : '',
-              ]"
-              @dragstart="onDragStart(index, $event)"
-              @dragover="onDragOver(index, $event)"
-              @drop="onDrop(index)"
-              @dragend="onDragEnd"
-            >
-              <div
-                class="group flex items-center gap-1 rounded-md px-1.5 py-1.5 transition-colors"
-                :class="section.id === selectedId ? 'bg-brand-soft' : 'hover:bg-sunken'"
-              >
-                <!-- The grip gives way to a pulse while the section's copy is
-                     being written: the row still reads as a section, with its
-                     state where the affordance was. -->
-                <span
-                  v-if="generatingIds.includes(section.id)"
-                  class="grid h-4 w-4 shrink-0 place-items-center px-0.5"
-                  :title="section.block === 'motion-section-01' ? 'Generating Motionsites…' : 'Writing copy…'"
-                >
-                  <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" aria-hidden="true" />
-                  <span class="sr-only">{{
-                    section.block === 'motion-section-01' ? 'Generating Motionsites' : 'Writing copy'
-                  }}</span>
-                </span>
-                <span v-else class="type-button-12 cursor-grab select-none px-0.5 text-faint active:cursor-grabbing" aria-hidden="true">⠿</span>
+        <EditorPagesPanel
+          v-else-if="leftTab === 'pages'"
+          :siblings="data.siblings"
+          :current-id="data.page.id"
+        />
 
-                <button
-                  type="button"
-                  class="type-button-12 min-w-0 flex-1 truncate rounded px-0.5 py-0.5 text-left"
-                  :class="section.id === selectedId ? 'text-brand' : 'text-ink'"
-                  @click="selectedId = section.id; rightTab = 'style'; rightOpen = true"
-                >{{ labelFor(section) }}</button>
-
-                <span class="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
-                  <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink disabled:opacity-25" :disabled="index === 0" aria-label="Move up" @click="move(index, -1)">↑</button>
-                  <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink disabled:opacity-25" :disabled="index === sections.length - 1" aria-label="Move down" @click="move(index, 1)">↓</button>
-                  <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink" aria-label="Duplicate" title="Duplicate (⌘D)" @click="duplicate(index)">⧉</button>
-                  <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-danger" aria-label="Remove" @click="remove(index)">×</button>
-                </span>
-              </div>
-            </li>
-          </ul>
-
-          <div v-else class="px-4 py-8 text-center">
-            <p class="text-[0.75rem] text-faint">No sections yet.</p>
-            <UiButton
-              v-if="can('page:write')"
-              type="button"
-              size="sm"
-              class="mt-3"
-              @click="picking = true"
-            >
-              Add a section
-            </UiButton>
-          </div>
-        </div>
-
-        <!-- Pages -->
-        <div v-else class="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
-          <NuxtLink
-            v-for="sibling in data.siblings"
-            :key="sibling.id"
-            :to="`/pages/${sibling.id}`"
-            class="flex items-center gap-2 rounded-md px-2 py-1.5 no-underline transition-colors"
-            :class="sibling.id === data.page.id ? 'bg-brand-soft text-brand' : 'text-ink hover:bg-sunken'"
-          >
-            <span class="min-w-0 flex-1">
-              <span class="type-button-12 block truncate">{{ sibling.title }}</span>
-              <span class="type-button-10 block truncate text-faint">{{ sibling.path }}</span>
-            </span>
-            <span v-if="sibling.hasUnpublishedChanges" class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-label="Unpublished changes" />
-          </NuxtLink>
-        </div>
+        <AssetsPanel
+          v-else
+          :selection="selected ? [selected] : []"
+          :can-write="can('page:write')"
+          :theme="data.site.theme"
+          :max-performance-class="data.site.theme.maxPerformanceClass"
+          @insert="insertSections"
+          @changed="message = $event"
+        />
       </aside>
 
       <EditorResizer
