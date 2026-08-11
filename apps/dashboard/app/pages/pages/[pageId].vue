@@ -616,6 +616,11 @@ function addBlock(blockId: string) {
   selectedId.value = section.id
   rightTab.value = 'style'
   styleTab.value = 'content'
+  if (isLayoutCanvasBlock(blockId)) {
+    leftTab.value = 'layers'
+    leftOpen.value = true
+    rightOpen.value = true
+  }
 }
 
 function undo() {
