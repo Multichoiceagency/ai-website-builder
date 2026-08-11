@@ -273,7 +273,7 @@ const headerDescription = computed(() => {
     case 'empty':
       return emptyBlockList.value.length
         ? 'Blank / freeform layout sections for building by hand.'
-        : 'Empty layout canvas will appear here when layout-canvas-01 is in the registry.'
+        : 'No empty layout blocks match the current filters.'
     default:
       return `${platformBlocks.value.length} installed blocks across ${COLLECTIONS.length} collections — live previews in your site theme.`
   }
@@ -845,7 +845,7 @@ const showBlockGrid = computed(
           <UiEmptyState
             v-if="catalog === 'empty' && !emptyBlockList.length"
             title="Empty/Manual layout"
-            description="layout-canvas-01 is not in the registry yet. When it ships, it will appear here for freeform / manual layouts."
+            description="No empty layout blocks match the current filters. Clear filters or check that layout-canvas-01 is installed."
           />
           <UiEmptyState
             v-else-if="!visibleBlocks.length"

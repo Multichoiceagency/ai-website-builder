@@ -9,6 +9,9 @@ import {
 } from '@platform/templates'
 import {
   applyTemplateMotionTypes,
+  isLayoutCanvasBlock,
+  type LayoutNode,
+  type LayoutNodeType,
   type Page,
   type PageSummary,
   type Section,
@@ -196,6 +199,79 @@ const selectedIndex = computed(() => sections.value.findIndex((section) => secti
 const selectedBlock = computed(() =>
   selected.value ? (metadata.find((block) => block.id === selected.value!.block) ?? null) : null,
 )
+
+/** Freeform layout-canvas selection + immutable tree ops. */
+const layoutCanvas = useLayoutCanvasSelection()
+const layoutRoot = computed(() => layoutCanvas.rootOf(selected.value))
+const layoutSelectedNode = computed(() => layoutCanvas.selectedNode(selected.value))
+const selectedLayoutNodeId = computed(() => layoutCanvas.selectedNodeId.value)
+const isSelectedLayoutCanvas = computed(
+  () => Boolean(selected.value && isLayoutCanvasBlock(selected.value.block)),
+)
+
+watch(
+  selected,
+  (section) => {
+    layoutCanvas.syncWithSection(section)
+    if (section && isLayoutCanvasBlock(section.block) && layoutCanvas.selectedNodeId.value === null) {
+      const root = layoutCanvas.rootOf(section)
+      if (root) layoutCanvas.selectedNodeId.value = root.id
+    }
+  },
+  { immediate: true },
+)
+
+function applyLayoutResult(result: { root: LayoutNode; selectedNodeId?: string }) {
+  if (!selected.value) return
+  updateSelectedProps({ ...selected.value.props, root: result.root })
+  if (result.selectedNodeId !== undefined) {
+    layoutCanvas.selectedNodeId.value = result.selectedNodeId
+  }
+}
+
+function onSelectLayoutNode(nodeId: string) {
+  layoutCanvas.selectedNodeId.value = nodeId
+  rightTab.value = 'style'
+  rightOpen.value = true
+}
+
+function onLayoutAddChild(parentId: string, type: LayoutNodeType) {
+  const root = layoutRoot.value
+  if (!root) return
+  applyLayoutResult(layoutCanvas.addChild(root, parentId, type))
+}
+
+function onLayoutDuplicateNode(id: string) {
+  const root = layoutRoot.value
+  if (!root) return
+  applyLayoutResult(layoutCanvas.duplicateNode(root, id))
+}
+
+function onLayoutRemoveNode(id: string) {
+  const root = layoutRoot.value
+  if (!root) return
+  applyLayoutResult(layoutCanvas.removeNode(root, id))
+}
+
+function onLayoutMoveNode(id: string, delta: -1 | 1) {
+  const root = layoutRoot.value
+  if (!root) return
+  applyLayoutResult(delta < 0 ? layoutCanvas.moveNodeUp(root, id) : layoutCanvas.moveNodeDown(root, id))
+}
+
+function onLayoutNodePatch(patch: Partial<LayoutNode>) {
+  const root = layoutRoot.value
+  const id = layoutCanvas.selectedNodeId.value
+  if (!root || !id) return
+  applyLayoutResult(layoutCanvas.patchNode(root, id, patch))
+}
+
+function onLayoutNodeStyles(styles: Record<string, unknown>) {
+  const root = layoutRoot.value
+  const id = layoutCanvas.selectedNodeId.value
+  if (!root || !id) return
+  applyLayoutResult(layoutCanvas.patchStyles(root, id, styles))
+}
 
 function labelFor(section: Section): string {
   return getBlock(section.block)?.name ?? section.block
@@ -594,20 +670,36 @@ function onKeydown(event: KeyboardEvent) {
   }
 
   const index = sections.value.findIndex((section) => section.id === selectedId.value)
+  const nodeId = layoutCanvas.selectedNodeId.value
+  const layoutActive = isSelectedLayoutCanvas.value && nodeId
 
   if (modifier && event.key.toLowerCase() === 'd' && index !== -1) {
     event.preventDefault()
+    if (layoutActive && nodeId) {
+      onLayoutDuplicateNode(nodeId)
+      return
+    }
     duplicate(index)
     return
   }
 
   if ((event.key === 'Backspace' || event.key === 'Delete') && index !== -1) {
     event.preventDefault()
+    if (layoutActive && nodeId) {
+      onLayoutRemoveNode(nodeId)
+      return
+    }
     remove(index)
     return
   }
 
-  if (event.key === 'Escape') selectedId.value = null
+  if (event.key === 'Escape') {
+    if (layoutCanvas.selectedNodeId.value) {
+      layoutCanvas.clearNodeSelection()
+      return
+    }
+    selectedId.value = null
+  }
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown))
@@ -1228,12 +1320,14 @@ function selectFromPanel(id: string) {
             :sections="sections"
             :theme="data.site.theme"
             :selected-id="selectedId"
+            :selected-node-id="selectedLayoutNodeId"
             :device="device"
             :zoom="zoom"
             :can-write="can('page:write')"
             :generating-ids="generatingIds"
             :brand-logo="brandLogo"
             @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
+            @select-node="onSelectLayoutNode"
             @reorder="reorder"
             @move-up="move($event, -1)"
             @move-down="move($event, 1)"
@@ -1269,7 +1363,19 @@ function selectFromPanel(id: string) {
             >Close</button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto p-4">
-            <template v-if="selected && selectedBlock">
+            <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
+              <div class="mb-4 border-b border-line pb-3">
+                <h2 class="type-button text-ink">{{ selectedBlock?.name ?? 'Empty section' }}</h2>
+                <p class="type-caption-12 mt-1 leading-relaxed text-soft">Edit the selected layout node.</p>
+              </div>
+              <LayoutNodeInspector
+                :node="layoutSelectedNode"
+                :disabled="!can('page:write')"
+                @update="onLayoutNodePatch"
+                @update-styles="onLayoutNodeStyles"
+              />
+            </template>
+            <template v-else-if="selected && selectedBlock">
               <div class="mb-4 border-b border-line pb-3">
                 <h2 class="type-button text-ink">{{ selectedBlock.name }}</h2>
                 <p class="type-caption-12 mt-1 leading-relaxed text-soft">{{ selectedBlock.description }}</p>
@@ -1326,20 +1432,26 @@ function selectFromPanel(id: string) {
           @open-library="picking = true"
         />
 
-        <!-- TODO(Wave 0.5+): when selected section is layout-canvas-01, show Structure
-             subtree (walkLayoutNodes / isLayoutCanvasBlock) with nest/rename/duplicate. -->
+        <!-- Structure mounts under Layers when a layout-canvas section is selected. -->
         <EditorLayersPanel
           v-else-if="leftTab === 'layers'"
           :sections="sections"
           :selected-id="selectedId"
           :generating-ids="generatingIds"
           :can-write="can('page:write')"
+          :structure-root="layoutRoot"
+          :selected-node-id="selectedLayoutNodeId"
           @select="selectFromPanel"
           @reorder="reorder"
           @move="move"
           @duplicate="duplicate"
           @remove="remove"
           @add="picking = true"
+          @select-node="onSelectLayoutNode"
+          @add-child="onLayoutAddChild"
+          @duplicate-node="onLayoutDuplicateNode"
+          @remove-node="onLayoutRemoveNode"
+          @move-node="onLayoutMoveNode"
         />
 
         <EditorPagesPanel
@@ -1400,12 +1512,14 @@ function selectFromPanel(id: string) {
           :sections="sections"
           :theme="data.site.theme"
           :selected-id="selectedId"
+          :selected-node-id="selectedLayoutNodeId"
           :device="device"
           :zoom="zoom"
           :can-write="can('page:write')"
           :generating-ids="generatingIds"
           :brand-logo="brandLogo"
           @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
+          @select-node="onSelectLayoutNode"
           @reorder="reorder"
           @move-up="move($event, -1)"
           @move-down="move($event, 1)"
@@ -1445,7 +1559,19 @@ function selectFromPanel(id: string) {
         </div>
 
         <div v-if="rightTab === 'style'" class="min-h-0 flex-1 overflow-y-auto p-4">
-          <template v-if="selected && selectedBlock">
+          <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
+            <div class="mb-4 border-b border-line pb-3">
+              <h2 class="type-button text-ink">{{ selectedBlock?.name ?? 'Empty section' }}</h2>
+              <p class="type-caption-12 mt-1 leading-relaxed text-soft">Edit the selected layout node.</p>
+            </div>
+            <LayoutNodeInspector
+              :node="layoutSelectedNode"
+              :disabled="!can('page:write')"
+              @update="onLayoutNodePatch"
+              @update-styles="onLayoutNodeStyles"
+            />
+          </template>
+          <template v-else-if="selected && selectedBlock">
             <div class="mb-4 border-b border-line pb-3">
               <div class="flex items-start justify-between gap-2">
                 <h2 class="type-button text-ink">{{ selectedBlock.name }}</h2>

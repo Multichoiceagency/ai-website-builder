@@ -3,7 +3,7 @@
  * Recursive painter for layout-canvas nodes.
  * Maps typed node styles → CSS flex/grid/gap/padding/align (no framework source).
  */
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import type {
   LayoutButtonStyles,
   LayoutContainerStyles,
@@ -12,9 +12,25 @@ import type {
   LayoutTextStyles,
 } from '@platform/schemas'
 
-const props = defineProps<{ node: LayoutNode }>()
+const props = withDefaults(
+  defineProps<{
+    node: LayoutNode
+    /** Editor-only empty hit target; prefer inject `layoutCanvasEditing`. */
+    showEmptyChrome?: boolean
+  }>(),
+  { showEmptyChrome: false },
+)
 
 defineOptions({ name: 'BlockLayoutCanvasNode' })
+
+/** Provided by EditorCanvas so storefront/preview stay chrome-free. */
+const layoutCanvasEditing = inject<boolean>('layoutCanvasEditing', false)
+
+const emptyChrome = computed(() => props.showEmptyChrome || layoutCanvasEditing === true)
+
+const isEmptyContainer = computed(
+  () => props.node.type === 'container' && !(props.node.children?.length),
+)
 
 type AnyStyles =
   | LayoutContainerStyles
@@ -73,6 +89,10 @@ const containerStyle = computed(() => {
     if (styles?.gap) out.gap = styles.gap
     if (styles?.rowGap) out['row-gap'] = styles.rowGap
     if (styles?.columnGap) out['column-gap'] = styles.columnGap
+  }
+  // Empty containers without editor chrome still need a modest hit/layout box.
+  if (isEmptyContainer.value && !emptyChrome.value && !out['min-height']) {
+    out['min-height'] = '3rem'
   }
   return out
 })
@@ -142,6 +162,18 @@ const buttonStyle = computed(() => {
       :key="child.id"
       :node="child"
     />
+    <div
+      v-if="emptyChrome && isEmptyContainer"
+      class="layout-canvas-node__empty flex min-h-[3rem] items-center justify-center border border-dashed px-3 py-2 text-center text-[0.75rem] leading-snug"
+      style="
+        border-color: color-mix(in oklab, var(--site-text) 22%, transparent);
+        color: var(--site-text-muted);
+        opacity: 0.65;
+      "
+      aria-hidden="true"
+    >
+      Empty — select and add in Structure
+    </div>
   </div>
 
   <component

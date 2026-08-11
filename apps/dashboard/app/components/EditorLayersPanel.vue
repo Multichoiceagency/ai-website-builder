@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { getBlock } from '@platform/blocks'
-import type { Section } from '@platform/schemas'
+import type { LayoutNode, LayoutNodeType, Section } from '@platform/schemas'
 
 /**
  * The docked Layers panel: one row per section, in page order.
  *
- * Rows drag to reorder, and every mutation is emitted rather than applied —
- * the page owns the document and its undo history; this panel only names the
- * sections and forwards intent.
+ * When the selected section is a layout-canvas, Structure appears under the
+ * list so nestable nodes share the same rail. Mutations are emitted only —
+ * the page owns the document and undo history.
  */
 const props = defineProps<{
   sections: Section[]
@@ -16,6 +16,9 @@ const props = defineProps<{
   /** Sections whose copy / island is being generated — shown as a pulse. */
   generatingIds: string[]
   canWrite: boolean
+  /** Layout-canvas root when the selected section is freeform. */
+  structureRoot?: LayoutNode | null
+  selectedNodeId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +29,11 @@ const emit = defineEmits<{
   remove: [index: number]
   /** Open the Insert panel. */
   add: []
+  'select-node': [id: string]
+  'add-child': [parentId: string, type: LayoutNodeType]
+  'duplicate-node': [id: string]
+  'remove-node': [id: string]
+  'move-node': [id: string, delta: -1 | 1]
 }>()
 
 function labelFor(section: Section): string {
@@ -63,7 +71,7 @@ function onDragEnd() {
       <UiButton v-if="canWrite" size="sm" variant="ghost" @click="emit('add')">+ Add</UiButton>
     </div>
 
-    <ul v-if="sections.length" class="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
+    <ul v-if="sections.length" class="min-h-0 shrink-0 overflow-y-auto px-1.5 pb-2" :class="structureRoot ? 'max-h-[40%]' : 'flex-1'">
       <li
         v-for="(section, index) in sections"
         :key="section.id"
@@ -82,9 +90,6 @@ function onDragEnd() {
           class="group flex items-center gap-1 rounded-md px-1.5 py-1.5 transition-colors"
           :class="section.id === selectedId ? 'bg-brand-soft' : 'hover:bg-sunken'"
         >
-          <!-- The grip gives way to a pulse while the section's copy is being
-               written: the row still reads as a section, with its state where
-               the affordance was. -->
           <span
             v-if="generatingIds.includes(section.id)"
             class="grid h-4 w-4 shrink-0 place-items-center px-0.5"
@@ -123,6 +128,22 @@ function onDragEnd() {
       <UiButton v-if="canWrite" type="button" size="sm" class="mt-3" @click="emit('add')">
         Add a section
       </UiButton>
+    </div>
+
+    <div
+      v-if="structureRoot"
+      class="flex min-h-0 flex-1 flex-col border-t border-line"
+    >
+      <EditorLayoutStructure
+        :root="structureRoot"
+        :selected-node-id="selectedNodeId ?? null"
+        :can-write="canWrite"
+        @select-node="emit('select-node', $event)"
+        @add-child="(parentId, type) => emit('add-child', parentId, type)"
+        @duplicate="emit('duplicate-node', $event)"
+        @remove="emit('remove-node', $event)"
+        @move="(id, delta) => emit('move-node', id, delta)"
+      />
     </div>
   </div>
 </template>

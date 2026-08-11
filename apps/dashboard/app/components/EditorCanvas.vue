@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, provide, ref } from 'vue'
-import { resolveContentWidthCss, resolveContentWidthPx, type Section, type Theme } from '@platform/schemas'
+import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from 'vue'
+import {
+  isLayoutCanvasBlock,
+  resolveContentWidthCss,
+  resolveContentWidthPx,
+  type Section,
+  type Theme,
+} from '@platform/schemas'
 import {
   hasLibraryDrag,
   parseLibraryDrag,
@@ -29,12 +35,16 @@ import {
  */
 /** Keep viewport-fixed blocks (liquid-glass header) inside the canvas frame. */
 provide('platformBlockPreview', true)
+/** Layout-canvas empty chrome + editor hit targets (not on storefront). */
+provide('layoutCanvasEditing', true)
 
 const props = withDefaults(
   defineProps<{
     sections: Section[]
     theme: Theme
     selectedId: string | null
+    /** Selected layout-canvas node id (Structure / canvas click). */
+    selectedNodeId?: string | null
     device: 'desktop' | 'tablet' | 'mobile'
     zoom: number
     /** Which half of the theme to paint. Falls back to light when there is no dark set. */
@@ -51,7 +61,14 @@ const props = withDefaults(
     /** Site SEO / business brand logo — header-simple falls back to this. */
     brandLogo?: string
   }>(),
-  { mode: 'light', canWrite: true, aiBusy: false, generatingIds: () => [], brandLogo: '' },
+  {
+    mode: 'light',
+    canWrite: true,
+    aiBusy: false,
+    generatingIds: () => [],
+    brandLogo: '',
+    selectedNodeId: null,
+  },
 )
 
 provide(
@@ -63,6 +80,8 @@ const generating = computed(() => new Set(props.generatingIds))
 
 const emit = defineEmits<{
   select: [id: string]
+  /** Layout-canvas node under the click (closest [data-node-id]). */
+  'select-node': [nodeId: string]
   reorder: [from: number, to: number]
   moveUp: [index: number]
   moveDown: [index: number]
@@ -400,13 +419,52 @@ function onDragKeydown(event: KeyboardEvent) {
   cancelDrag()
 }
 
-function onSelect(id: string) {
+/**
+ * Section select still owns the overlay click. For layout-canvas sections,
+ * after the section is selected (or was already), hit-test through the
+ * transparent overlay to the nearest [data-node-id] and emit select-node.
+ */
+function onSelect(id: string, event: MouseEvent) {
   if (suppressClick) {
     suppressClick = false
     return
   }
   emit('select', id)
+
+  const section = props.sections.find((s) => s.id === id)
+  if (!section || !isLayoutCanvasBlock(section.block)) return
+
+  const overlay = event.currentTarget
+  if (!(overlay instanceof HTMLElement)) return
+
+  const prev = overlay.style.pointerEvents
+  overlay.style.pointerEvents = 'none'
+  const under = document.elementFromPoint(event.clientX, event.clientY)
+  overlay.style.pointerEvents = prev
+
+  const nodeEl = under instanceof Element ? under.closest('[data-node-id]') : null
+  const nodeId = nodeEl?.getAttribute('data-node-id')
+  if (nodeId) emit('select-node', nodeId)
 }
+
+/** Outline the selected layout node under the transparent section overlay. */
+watch(
+  () => [props.selectedId, props.selectedNodeId, props.sections] as const,
+  async () => {
+    await nextTick()
+    root.value?.querySelectorAll('.layout-node-selected').forEach((el) => {
+      el.classList.remove('layout-node-selected')
+    })
+    const nodeId = props.selectedNodeId
+    if (!nodeId || !props.selectedId) return
+    const section = props.sections.find((s) => s.id === props.selectedId)
+    if (!section || !isLayoutCanvasBlock(section.block)) return
+    const host = elements.get(section.id)
+    const el = host?.querySelector(`[data-node-id="${CSS.escape(nodeId)}"]`)
+    el?.classList.add('layout-node-selected')
+  },
+  { flush: 'post' },
+)
 
 onBeforeUnmount(cancelDrag)
 </script>
@@ -516,7 +574,7 @@ onBeforeUnmount(cancelDrag)
               :aria-label="`Select ${section.block}`"
               :aria-pressed="selectedId === section.id"
               @pointerdown="beginPointerDrag(index, $event)"
-              @click="onSelect(section.id)"
+              @click="onSelect(section.id, $event)"
             />
 
             <SectionToolbar
@@ -691,6 +749,21 @@ onBeforeUnmount(cancelDrag)
   .motion-gen-orb,
   .motion-gen-scan {
     animation: none;
+  }
+}
+
+/* Layout-canvas node selection (class set by watcher on [data-node-id]). */
+:deep(.layout-node-selected) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  position: relative;
+  z-index: 20;
+  transition: opacity 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :deep(.layout-node-selected) {
+    transition: none;
   }
 }
 </style>
