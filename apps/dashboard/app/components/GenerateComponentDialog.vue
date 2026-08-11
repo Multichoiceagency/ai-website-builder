@@ -93,7 +93,7 @@ async function onFileChange(event: Event) {
     const uploaded = await uploadMedia([file], { folder: 'references' })
     const asset = uploaded[0] as MediaAsset | undefined
     if (!asset?.url) {
-      error.value = 'Upload failed — try a PNG or JPEG under 8 MB.'
+      error.value = 'Upload failed — try a PNG or JPEG under 25 MB.'
       return
     }
     const config = useRuntimeConfig()

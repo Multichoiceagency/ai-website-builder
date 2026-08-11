@@ -12,10 +12,10 @@ import { sanitiseSvg } from './svg.js'
  * `content-type` header — and this module trusts exactly one of them.
  */
 
-/** 8 MiB for stills / GIF. Override with MEDIA_MAX_BYTES. */
+/** 25 MiB for stills / GIF. Override with MEDIA_MAX_BYTES (Coolify env). */
 export const MEDIA_MAX_BYTES = Math.max(
   1024,
-  Number(process.env.MEDIA_MAX_BYTES ?? 8 * 1024 * 1024) || 8 * 1024 * 1024,
+  Number(process.env.MEDIA_MAX_BYTES ?? 25 * 1024 * 1024) || 25 * 1024 * 1024,
 )
 
 /** 64 MiB for MP4 / WebM. Override with MEDIA_VIDEO_MAX_BYTES. */
@@ -181,8 +181,8 @@ export function prepareUpload(input: {
  * SVG is the reason this function exists. Even after sanitisation it is served
  * as a download with scripting denied and sniffing disabled, because two
  * independent defences are the only honest answer to "is our sanitiser
- * complete?" — an `<img src>` still renders it, and an `<img>`-embedded SVG
- * cannot execute anything anyway, so nothing legitimate is lost.
+ * complete?" — browsers still paint SVG via image elements, and an SVG loaded
+ * that way cannot execute scripts, so nothing legitimate is lost.
  */
 export function responseHeadersFor(
   mime: MediaMime,

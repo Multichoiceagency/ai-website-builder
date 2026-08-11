@@ -113,7 +113,7 @@ async function onLogoFileSelected(event: Event) {
     const palette = await extractPaletteFromLogoFile(file).catch(() => [] as string[])
     const [asset] = await uploadMedia([file], { folder: 'brand' })
     if (!asset) {
-      logoUploadError.value = 'Could not upload that logo. Try a PNG, SVG or JPEG under 8 MB.'
+      logoUploadError.value = 'Could not upload that logo. Try a PNG, SVG or JPEG under 25 MB.'
       return
     }
     dashboardLogoUrl.value = asset.url
