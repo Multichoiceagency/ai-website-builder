@@ -2,8 +2,14 @@
 const api = useAdminApi()
 
 interface Stats {
-  tenants: number; users: number; sites: number; pages: number; publishedPages: number
-  activeSessions: number; eventsLast24h: number; signupsLast7d: number
+  tenants: number
+  users: number
+  sites: number
+  pages: number
+  publishedPages: number
+  activeSessions: number
+  eventsLast24h: number
+  signupsLast7d: number
   plans: { plan: string; tenants: number }[]
 }
 
@@ -40,23 +46,42 @@ function eur(value: number): string {
 
 <template>
   <div v-if="stats">
-    <UiPageHeader title="Platform overview" description="Every workspace on this installation." />
+    <UiPageHeader
+      title="Platform overview"
+      description="Staff console — registrations, revenue estimates, and workspace health."
+    />
+
+    <div class="mb-5 grid gap-3 sm:grid-cols-2">
+      <UiCard class="border-brand/30 bg-brand-soft/40">
+        <p class="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-soft">Estimated MRR</p>
+        <p class="mt-1 text-[1.75rem] font-semibold tabular-nums text-ink">{{ eur(revenue?.mrr ?? 0) }}</p>
+        <p class="mt-1 text-[0.75rem] text-faint">{{ revenue?.note || 'Plan list prices × clients' }}</p>
+      </UiCard>
+      <UiCard class="border-brand/30 bg-brand-soft/40">
+        <p class="text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-soft">Estimated ARR</p>
+        <p class="mt-1 text-[1.75rem] font-semibold tabular-nums text-ink">{{ eur(revenue?.arr ?? 0) }}</p>
+        <p class="mt-1 text-[0.75rem] text-faint">
+          <NuxtLink to="/analytics" class="text-brand no-underline hover:underline">Open analytics →</NuxtLink>
+        </p>
+      </UiCard>
+    </div>
 
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <UiStat label="Clients" :value="stats.tenants" :hint="`${stats.signupsLast7d} new users in 7 days`" />
-      <UiStat label="Users" :value="stats.users" :hint="`${stats.activeSessions} signed in now`" />
+      <UiStat label="Registered users" :value="stats.users" :hint="`${stats.activeSessions} signed in now`" />
       <UiStat label="Websites" :value="stats.sites" />
       <UiStat label="Published pages" :value="stats.publishedPages" :hint="`of ${stats.pages} total`" />
     </div>
 
-    <div v-if="revenue" class="mt-3 grid gap-3 sm:grid-cols-2">
-      <UiStat label="Est. MRR" :value="eur(revenue.mrr)" :hint="revenue.note" />
-      <UiStat label="Est. ARR" :value="eur(revenue.arr)" hint="MRR × 12 from plan list prices" />
+    <div class="mt-4 flex flex-wrap gap-2">
+      <UiButton to="/users" size="sm">Manage registered users</UiButton>
+      <UiButton to="/analytics" size="sm" variant="secondary">Revenue & analytics</UiButton>
+      <UiButton to="/tenants" size="sm" variant="secondary">All clients</UiButton>
     </div>
 
     <div class="mt-7 grid gap-5 lg:grid-cols-[1fr_1.3fr] lg:items-start">
       <UiCard>
-        <h2 class="mb-4 text-heading font-semibold text-ink">Plans</h2>
+        <h2 class="mb-4 text-heading font-semibold text-ink">Plans & MRR mix</h2>
         <ul class="flex flex-col gap-2.5">
           <li v-for="entry in stats.plans" :key="entry.plan" class="flex items-center gap-3">
             <span class="w-20 shrink-0 text-[0.8125rem] capitalize text-soft">{{ entry.plan }}</span>

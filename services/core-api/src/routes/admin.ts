@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
+import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { updateWhiteLabelInputSchema, uuidSchema } from '@platform/schemas'
 import { withoutTenant } from '../db/client.js'
@@ -6,7 +6,8 @@ import {
   findWhiteLabelSettings,
   saveWhiteLabelSettings,
 } from '../db/repositories/agency.js'
-import { ForbiddenError, NotFoundError } from '../lib/errors.js'
+import { recordAdminAccess, requirePlatformAdmin } from '../lib/admin-guard.js'
+import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js'
 import { mergeWhiteLabelSettings } from '../lib/agency/white-label.js'
 import { aiGateway } from '../lib/generation/index.js'
 import { ok } from '../lib/response.js'
@@ -25,37 +26,6 @@ import { requireUser } from '../plugins/auth.js'
  * secret. Aggregates, names and timestamps only, because that is all support
  * and billing actually need.
  */
-
-async function requirePlatformAdmin(request: FastifyRequest): Promise<{ userId: string; email: string }> {
-  const auth = requireUser(request)
-
-  const isAdmin = await withoutTenant(async (tx) => {
-    const [row] = await tx<{ user_id: string }[]>`
-      SELECT user_id FROM platform_admins WHERE user_id = ${auth.user.id} LIMIT 1
-    `
-    return Boolean(row)
-  })
-
-  // Same response as any unknown route would give: staff tooling should not be
-  // discoverable by probing it.
-  if (!isAdmin) throw new ForbiddenError('Not found.')
-
-  return { userId: auth.user.id, email: auth.user.email }
-}
-
-async function recordAccess(
-  userId: string,
-  action: string,
-  tenantId: string | null,
-  metadata: Record<string, unknown> = {},
-): Promise<void> {
-  await withoutTenant(
-    (tx) => tx`
-      INSERT INTO admin_access_log (user_id, action, tenant_id, metadata)
-      VALUES (${userId}, ${action}, ${tenantId}, ${JSON.stringify(metadata)}::jsonb)
-    `,
-  )
-}
 
 const adminRoutes: FastifyPluginAsync = async (app) => {
   /** Whether the signed-in user is staff. Used by the console to route. */
@@ -104,7 +74,7 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
       }
     })
 
-    await recordAccess(admin.userId, 'view_platform_stats', null)
+    await recordAdminAccess(admin.userId, 'view_platform_stats', null)
     return reply.send(ok(data))
   })
 
@@ -140,7 +110,7 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
       ? rows.filter((row) => `${row.name} ${row.slug} ${row.organization_name}`.toLowerCase().includes(term))
       : rows
 
-    await recordAccess(admin.userId, 'list_tenants', null, { search: term ?? null, results: filtered.length })
+    await recordAdminAccess(admin.userId, 'list_tenants', null, { search: term ?? null, results: filtered.length })
 
     return reply.send(
       ok(
@@ -242,7 +212,7 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
 
     if (!data) throw new NotFoundError('Workspace')
 
-    await recordAccess(admin.userId, 'view_tenant', tenantId, { name: data.tenant.name })
+    await recordAdminAccess(admin.userId, 'view_tenant', tenantId, { name: data.tenant.name })
     return reply.send(ok(data))
   })
 
@@ -263,7 +233,7 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
       return saveWhiteLabelSettings(tx, tenantId, mergeWhiteLabelSettings(current, patch))
     })
 
-    await recordAccess(admin.userId, 'update_tenant_branding', tenantId, {
+    await recordAdminAccess(admin.userId, 'update_tenant_branding', tenantId, {
       keys: Object.keys(patch),
     })
     return reply.send(ok(settings))
@@ -284,7 +254,7 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
       >`SELECT * FROM platform_recent_activity(${limit})`,
     )
 
-    await recordAccess(admin.userId, 'view_activity', null)
+    await recordAdminAccess(admin.userId, 'view_activity', null)
 
     return reply.send(
       ok(
@@ -399,6 +369,8 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
             created_at: Date
             tenant_count: string
             tenants: string
+            is_platform_admin: boolean
+            last_seen_at: Date | null
           }[]
         >`SELECT * FROM platform_users_overview()`,
     )
@@ -408,7 +380,7 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
       ? rows.filter((row) => `${row.email} ${row.name} ${row.tenants}`.toLowerCase().includes(term))
       : rows
 
-    await recordAccess(admin.userId, 'list_users', null, { results: filtered.length })
+    await recordAdminAccess(admin.userId, 'list_users', null, { results: filtered.length })
 
     return reply.send(
       ok(
@@ -419,9 +391,53 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
           createdAt: row.created_at.toISOString(),
           tenantCount: Number(row.tenant_count),
           tenants: row.tenants,
+          isPlatformAdmin: Boolean(row.is_platform_admin),
+          lastSeenAt: row.last_seen_at?.toISOString() ?? null,
         })),
       ),
     )
+  })
+
+  /** Grant or revoke platform staff access for a registered user. */
+  app.post('/users/:userId/staff', async (request, reply) => {
+    const admin = await requirePlatformAdmin(request)
+    const { userId } = parseOrThrow(z.object({ userId: uuidSchema }), request.params, 'user id')
+    const { staff } = parseOrThrow(z.object({ staff: z.boolean() }), request.body, 'staff')
+
+    if (!staff && userId === admin.userId) {
+      throw new BadRequestError('You cannot remove your own staff access.')
+    }
+
+    const result = await withoutTenant(async (tx) => {
+      const [user] = await tx<{ id: string; email: string }[]>`
+        SELECT id, email FROM users WHERE id = ${userId} LIMIT 1
+      `
+      if (!user) throw new NotFoundError('User')
+
+      if (staff) {
+        await tx`
+          INSERT INTO platform_admins (user_id, note)
+          VALUES (${userId}, ${`granted by ${admin.email}`})
+          ON CONFLICT DO NOTHING
+        `
+      } else {
+        const [staffRow] = await tx<{ count: string }[]>`
+          SELECT count(*)::text AS count FROM platform_admins
+        `
+        if (Number(staffRow?.count ?? 0) <= 1) {
+          throw new BadRequestError('Cannot remove the last platform admin.')
+        }
+        await tx`DELETE FROM platform_admins WHERE user_id = ${userId}`
+      }
+
+      return { id: user.id, email: user.email, isPlatformAdmin: staff }
+    })
+
+    await recordAdminAccess(admin.userId, staff ? 'grant_staff' : 'revoke_staff', null, {
+      targetUserId: result.id,
+      targetEmail: result.email,
+    })
+    return reply.send(ok(result))
   })
 
   /**
@@ -473,7 +489,7 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
       }
     })
 
-    await recordAccess(admin.userId, 'impersonate_user', result.tenantId, {
+    await recordAdminAccess(admin.userId, 'impersonate_user', result.tenantId, {
       targetUserId: result.user.id,
       targetEmail: result.user.email,
     })
@@ -508,51 +524,11 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
     })
     if (!updated) throw new NotFoundError('Workspace')
 
-    await recordAccess(admin.userId, 'update_tenant_plan', tenantId, {
+    await recordAdminAccess(admin.userId, 'update_tenant_plan', tenantId, {
       plan,
       name: updated.name,
     })
     return reply.send(ok({ id: updated.id, plan: updated.plan, name: updated.name }))
-  })
-
-  /** MRR / ARR from plan seat counts × fixed list prices (EUR / month). */
-  app.get('/revenue', async (request, reply) => {
-    const admin = await requirePlatformAdmin(request)
-
-    const PLAN_MRR_EUR: Record<string, number> = {
-      launch: 29,
-      grow: 79,
-      scale: 149,
-      advanced: 299,
-      enterprise: 999,
-    }
-
-    const plans = await withoutTenant(
-      (tx) => tx<{ plan: string; tenant_count: string }[]>`SELECT * FROM platform_plan_distribution()`,
-    )
-
-    const breakdown = plans.map((row) => {
-      const count = Number(row.tenant_count)
-      const price = PLAN_MRR_EUR[row.plan] ?? 0
-      return {
-        plan: row.plan,
-        tenants: count,
-        priceEur: price,
-        mrrEur: count * price,
-      }
-    })
-    const mrr = breakdown.reduce((sum, row) => sum + row.mrrEur, 0)
-
-    await recordAccess(admin.userId, 'view_revenue', null)
-    return reply.send(
-      ok({
-        currency: 'EUR',
-        mrr,
-        arr: mrr * 12,
-        breakdown,
-        note: 'Estimated from plan list prices × tenant counts — not live Stripe invoices.',
-      }),
-    )
   })
 
   app.get('/feedback', async (request, reply) => {
@@ -578,7 +554,7 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
         LIMIT 200
       `,
     )
-    await recordAccess(admin.userId, 'list_feedback', null)
+    await recordAdminAccess(admin.userId, 'list_feedback', null)
     return reply.send(
       ok(
         rows.map((row) => ({
@@ -638,7 +614,7 @@ const adminRoutes: FastifyPluginAsync = async (app) => {
         RETURNING id, title, status, created_at
       `,
     )
-    await recordAccess(admin.userId, 'create_marketing_campaign', null, { id: row!.id })
+    await recordAdminAccess(admin.userId, 'create_marketing_campaign', null, { id: row!.id })
     return reply.status(201).send(
       ok({
         id: row!.id,

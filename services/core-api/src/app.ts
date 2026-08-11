@@ -19,6 +19,7 @@ import experimentsRoutes from './routes/experiments.js'
 import agencyRoutes from './routes/agency.js'
 import integrationsRoutes from './routes/integrations.js'
 import assetsRoutes from './routes/assets.js'
+import adminMetricsRoutes from './routes/admin-metrics.js'
 import authRoutes from './routes/auth.js'
 import blocksRoutes from './routes/blocks.js'
 import onboardingRoutes from './routes/onboarding.js'
@@ -119,8 +120,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(onboardingRoutes, { prefix: '/api/v1/onboarding' })
 
   // Internal staff console. Guarded by platform_admins membership, not by any
-  // tenant role — see routes/admin.ts.
+  // tenant role — see routes/admin.ts + admin-metrics.ts.
   await app.register(adminRoutes, { prefix: '/api/v1/admin' })
+  await app.register(adminMetricsRoutes, { prefix: '/api/v1/admin' })
 
   await app.register(trackingRoutes, { prefix: '/api/v1/tracking' })
 
