@@ -191,3 +191,206 @@ export function walkLayoutNodes(
     for (const child of node.children ?? []) walkLayoutNodes(child, visit, nextPath)
   }
 }
+
+// --- node operations (free-form editor + AI generation share these) ----------
+//
+// Every operation is IMMUTABLE: it returns a new tree and never mutates the
+// input. The editor snapshots the previous tree for undo before calling these,
+// and the AI generator builds trees with the same primitives, so a human edit
+// and a generated document go through one code path (ADR-0003).
+
+let nodeIdCounter = 0
+
+/**
+ * A collision-resistant node id. Not cryptographic — ids only need to be unique
+ * within one document. A monotonic counter keeps duplicate-in-a-loop unique
+ * even when two calls land in the same millisecond, and the random suffix keeps
+ * ids unique across documents merged together (paste, AI insert).
+ */
+export function newLayoutNodeId(): string {
+  nodeIdCounter = (nodeIdCounter + 1) % 1_000_000
+  const random = Math.floor(Math.random() * 36 ** 4)
+    .toString(36)
+    .padStart(4, '0')
+  return `node_${nodeIdCounter.toString(36)}${random}`
+}
+
+/** A fresh node of the given type with editor-friendly defaults. */
+export function createLayoutNode(type: LayoutNodeType): LayoutNode {
+  const id = newLayoutNodeId()
+  switch (type) {
+    case 'container':
+      return {
+        id,
+        type: 'container',
+        styles: { display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' },
+        children: [],
+      }
+    case 'text':
+      return { id, type: 'text', tag: 'p', content: 'Text' }
+    case 'image':
+      return { id, type: 'image', src: '', alt: '' }
+    case 'button':
+      return { id, type: 'button', label: 'Button', href: '#' }
+  }
+}
+
+/** Find a node by id anywhere in the tree, or null. */
+export function findLayoutNode(root: LayoutNode, id: string): LayoutNode | null {
+  if (root.id === id) return root
+  if (root.type === 'container') {
+    for (const child of root.children ?? []) {
+      const found = findLayoutNode(child, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+/** Find a node's parent container and its index in that container, or null (root has no parent). */
+export function findLayoutNodeParent(
+  root: LayoutNode,
+  id: string,
+): { parent: LayoutContainerNode; index: number } | null {
+  if (root.type !== 'container') return null
+  const children = root.children ?? []
+  for (let index = 0; index < children.length; index += 1) {
+    if (children[index]!.id === id) return { parent: root, index }
+    const nested = findLayoutNodeParent(children[index]!, id)
+    if (nested) return nested
+  }
+  return null
+}
+
+/** True when `ancestorId` is `id` or contains `id` — the guard against moving a node into itself. */
+export function isLayoutNodeDescendant(root: LayoutNode, ancestorId: string, id: string): boolean {
+  const ancestor = findLayoutNode(root, ancestorId)
+  if (!ancestor) return false
+  return findLayoutNode(ancestor, id) !== null
+}
+
+/**
+ * Rebuild the tree, replacing the node with matching id by `fn(node)`'s result.
+ * Returns a new tree; untouched branches keep their object identity so Vue only
+ * re-renders what changed.
+ */
+function rebuildLayoutTree(node: LayoutNode, id: string, fn: (node: LayoutNode) => LayoutNode): LayoutNode {
+  if (node.id === id) return fn(node)
+  if (node.type === 'container' && node.children?.length) {
+    let changed = false
+    const children = node.children.map((child) => {
+      const next = rebuildLayoutTree(child, id, fn)
+      if (next !== child) changed = true
+      return next
+    })
+    return changed ? { ...node, children } : node
+  }
+  return node
+}
+
+/** Shallow-merge a patch onto a node, preserving its discriminant `type` and `id`. */
+export function updateLayoutNode(root: LayoutNode, id: string, patch: Partial<LayoutNode>): LayoutNode {
+  return rebuildLayoutTree(root, id, (node) => {
+    const { type: _type, id: _id, ...safe } = patch
+    return { ...node, ...safe } as LayoutNode
+  })
+}
+
+/** Merge style keys onto a node; keys set to undefined/'' are removed so documents stay small. */
+export function updateLayoutNodeStyles(
+  root: LayoutNode,
+  id: string,
+  styles: Record<string, unknown>,
+): LayoutNode {
+  return rebuildLayoutTree(root, id, (node) => {
+    const next: Record<string, unknown> = { ...(node.styles ?? {}) }
+    for (const [key, value] of Object.entries(styles)) {
+      if (value === undefined || value === '' || value === null) delete next[key]
+      else next[key] = value
+    }
+    return { ...node, styles: next } as LayoutNode
+  })
+}
+
+/** Insert `node` into the container `parentId` at `index` (default: append). No-op if parent is missing or a leaf. */
+export function insertLayoutNode(
+  root: LayoutNode,
+  parentId: string,
+  node: LayoutNode,
+  index?: number,
+): LayoutNode {
+  return rebuildLayoutTree(root, parentId, (parent) => {
+    if (parent.type !== 'container') return parent
+    const children = [...(parent.children ?? [])]
+    const at = index === undefined ? children.length : Math.max(0, Math.min(index, children.length))
+    children.splice(at, 0, node)
+    return { ...parent, children }
+  })
+}
+
+/** Remove a node by id. The root is never removable. */
+export function removeLayoutNode(root: LayoutNode, id: string): LayoutNode {
+  if (root.id === id) return root
+  function prune(node: LayoutNode): LayoutNode {
+    if (node.type !== 'container' || !node.children?.length) return node
+    let changed = false
+    const children: LayoutNode[] = []
+    for (const child of node.children) {
+      if (child.id === id) {
+        changed = true
+        continue
+      }
+      const next = prune(child)
+      if (next !== child) changed = true
+      children.push(next)
+    }
+    return changed ? { ...node, children } : node
+  }
+  return prune(root)
+}
+
+/**
+ * Move a node under a new parent at an index. Refuses to move the root, to move
+ * a node into itself or a descendant (which would orphan the subtree), or into
+ * a missing/leaf parent — returning the tree unchanged in those cases.
+ */
+export function moveLayoutNode(
+  root: LayoutNode,
+  id: string,
+  newParentId: string,
+  index: number,
+): LayoutNode {
+  if (id === root.id || id === newParentId) return root
+  if (isLayoutNodeDescendant(root, id, newParentId)) return root
+  const moving = findLayoutNode(root, id)
+  const target = findLayoutNode(root, newParentId)
+  if (!moving || !target || target.type !== 'container') return root
+
+  const detached = removeLayoutNode(root, id)
+  return insertLayoutNode(detached, newParentId, moving, index)
+}
+
+/** Deep-clone a subtree with every node id reissued, so a paste never collides. */
+function reissueIds(node: LayoutNode): LayoutNode {
+  const fresh = { ...node, id: newLayoutNodeId() }
+  if (fresh.type === 'container' && node.type === 'container') {
+    fresh.children = (node.children ?? []).map(reissueIds)
+  }
+  return fresh
+}
+
+/**
+ * Duplicate a node right after itself, with fresh ids for the whole subtree.
+ * Returns the new tree and the id of the top-level copy (to select it). The
+ * root cannot be duplicated.
+ */
+export function duplicateLayoutNode(
+  root: LayoutNode,
+  id: string,
+): { root: LayoutNode; newId: string | null } {
+  const location = findLayoutNodeParent(root, id)
+  if (!location) return { root, newId: null }
+  const original = location.parent.children![location.index]!
+  const copy = reissueIds(original)
+  return { root: insertLayoutNode(root, location.parent.id, copy, location.index + 1), newId: copy.id }
+}
