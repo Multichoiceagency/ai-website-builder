@@ -2,6 +2,12 @@
 -- 0028 — Staff console: richer user roster + analytics helpers
 -- ===========================================================================
 
+-- Postgres cannot change OUT columns via CREATE OR REPLACE — drop first.
+DROP FUNCTION IF EXISTS platform_users_overview();
+DROP FUNCTION IF EXISTS platform_daily_signups(int);
+DROP FUNCTION IF EXISTS platform_daily_tenants(int);
+DROP FUNCTION IF EXISTS platform_daily_events(int);
+
 CREATE OR REPLACE FUNCTION platform_users_overview()
 RETURNS TABLE (
   user_id            uuid,
