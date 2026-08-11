@@ -443,6 +443,12 @@ function insertBlockIds(
       : built,
     atIndex,
   )
+  if (payload.blockIds.some((id) => isLayoutCanvasBlock(id))) {
+    leftTab.value = 'layers'
+    leftOpen.value = true
+    rightTab.value = 'style'
+    rightOpen.value = true
+  }
 }
 
 /**

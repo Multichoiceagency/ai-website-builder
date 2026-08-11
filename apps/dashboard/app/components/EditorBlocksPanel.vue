@@ -6,6 +6,7 @@ import {
   type PerformanceClass,
   type RegistryBlockMetadata,
 } from '@platform/schemas'
+import { EMPTY_LAYOUT_BLOCK_IDS } from '../utils/catalog-split'
 import { LIBRARY_DRAG_MIME } from '../utils/library-drag'
 
 /**
@@ -38,16 +39,27 @@ const category = ref('')
 
 const CLASS_ORDER: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 }
 const all = listBlockMetadata()
+const EMPTY_PIN_SET = new Set<string>(EMPTY_LAYOUT_BLOCK_IDS)
 
 const withinBudget = computed(() =>
   all.filter(
-    (block) => CLASS_ORDER[block.performanceClass]! <= CLASS_ORDER[props.maxPerformanceClass]!,
+    (block) =>
+      EMPTY_PIN_SET.has(block.id) ||
+      CLASS_ORDER[block.performanceClass]! <= CLASS_ORDER[props.maxPerformanceClass]!,
+  ),
+)
+
+/** Freeform Empty section — always first when present. */
+const pinnedEmpty = computed(() =>
+  EMPTY_LAYOUT_BLOCK_IDS.map((id) => withinBudget.value.find((block) => block.id === id)).filter(
+    (block): block is RegistryBlockMetadata => Boolean(block),
   ),
 )
 
 const results = computed(() => {
   const term = search.value.trim().toLowerCase()
   return withinBudget.value.filter((block) => {
+    if (EMPTY_PIN_SET.has(block.id) && !term && !category.value) return false
     if (category.value && block.category !== category.value) return false
     if (!term) return true
     return `${block.name} ${block.description} ${block.tags.join(' ')}`
@@ -120,6 +132,36 @@ function onDragStart(block: RegistryBlockMetadata, event: DragEvent) {
     </div>
 
     <div class="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <section
+        v-if="pinnedEmpty.length && !category && !search.trim()"
+        class="mb-4 last:mb-0"
+      >
+        <h3 class="type-button-10 mb-1 px-1 uppercase tracking-[0.08em] text-faint">
+          Freeform
+        </h3>
+        <ul class="space-y-1">
+          <li v-for="block in pinnedEmpty" :key="block.id">
+            <button
+              type="button"
+              :draggable="canWrite"
+              class="group flex w-full items-center gap-2 rounded-md border border-brand/25 bg-brand-soft/30 px-2 py-1.5 text-left transition-colors hover:border-brand hover:bg-brand-soft disabled:cursor-default"
+              :class="canWrite ? 'cursor-grab active:cursor-grabbing' : ''"
+              :disabled="!canWrite"
+              :title="block.description"
+              @click="canWrite && emit('insert', block.id)"
+              @dragstart="onDragStart(block, $event)"
+            >
+              <span
+                class="type-button-12 select-none text-faint opacity-0 transition-opacity group-hover:opacity-100"
+                aria-hidden="true"
+              >⠿</span>
+              <span class="type-button-12 min-w-0 flex-1 truncate text-ink">{{ block.name }}</span>
+              <UiBadge tone="brand">Freeform</UiBadge>
+            </button>
+          </li>
+        </ul>
+      </section>
+
       <section v-for="group in groups" :key="group.id" class="mb-4 last:mb-0">
         <h3 class="type-button-10 mb-1 px-1 uppercase tracking-[0.08em] text-faint">
           {{ group.label }}
@@ -147,7 +189,10 @@ function onDragStart(block: RegistryBlockMetadata, event: DragEvent) {
         </ul>
       </section>
 
-      <p v-if="!results.length" class="px-2 py-6 text-center text-[0.75rem] text-faint">
+      <p
+        v-if="!results.length && !(pinnedEmpty.length && !category && !search.trim())"
+        class="px-2 py-6 text-center text-[0.75rem] text-faint"
+      >
         Nothing matches. Try another word or category.
       </p>
     </div>

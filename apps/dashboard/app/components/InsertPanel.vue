@@ -295,11 +295,14 @@ const blockCategory = ref<SectionRailValue>('')
 
 /**
  * Featured Motion tools (scrub) vs ceiling bypass pins.
- * `layout-canvas-01` (Empty section) is pinned so it stays insertable regardless of ceiling.
+ * `layout-canvas-01` (Empty section) is pinned so it stays insertable regardless of ceiling,
+ * and featured at the top of Sections so freeform is findable without search.
  */
 const FEATURED_MOTION_TOOL_IDS = MOTION_TOOL_BLOCK_IDS
+const FEATURED_EMPTY_LAYOUT_IDS = EMPTY_LAYOUT_BLOCK_IDS
 const PINNED_BLOCK_IDS = new Set<string>([...MOTION_TOOL_BLOCK_IDS, ...EMPTY_LAYOUT_BLOCK_IDS])
 const FEATURED_MOTION_ID_SET = new Set<string>(MOTION_TOOL_BLOCK_IDS)
+const FEATURED_EMPTY_ID_SET = new Set<string>(EMPTY_LAYOUT_BLOCK_IDS)
 
 function blockSearchHaystack(block: RegistryBlockMetadata) {
   return `${block.id} ${block.name} ${block.description} ${block.capabilities.join(' ')} ${block.tags.join(' ')} ${block.category}`
@@ -308,6 +311,13 @@ function blockSearchHaystack(block: RegistryBlockMetadata) {
 /** Featured motion tools pinned at the top of the platform / Motionsites lists. */
 const featuredMotionTools = computed(() =>
   FEATURED_MOTION_TOOL_IDS.map((id) => byId.get(id)).filter(
+    (block): block is RegistryBlockMetadata => Boolean(block),
+  ),
+)
+
+/** Freeform Empty section — always findable from Add. */
+const featuredEmptyLayouts = computed(() =>
+  FEATURED_EMPTY_LAYOUT_IDS.map((id) => byId.get(id)).filter(
     (block): block is RegistryBlockMetadata => Boolean(block),
   ),
 )
@@ -366,15 +376,19 @@ const blockResults = computed<RegistryBlockMetadata[]>(() => {
   const results = !blockCategory.value
     ? searchedBlocks.value
     : searchedBlocks.value.filter((block) => block.category === blockCategory.value)
-  // All + no search: featured strip above already shows Motion tools — avoid duplicates.
+  // All + no search: featured strips already show Empty + Motion tools — avoid duplicates.
   if (!blockCategory.value && !blockSearch.value.trim()) {
-    return results.filter((block) => !FEATURED_MOTION_ID_SET.has(block.id))
+    return results.filter(
+      (block) => !FEATURED_MOTION_ID_SET.has(block.id) && !FEATURED_EMPTY_ID_SET.has(block.id),
+    )
   }
   if (blockCategory.value) return results
   const featured = featuredMotionTools.value.filter((block) =>
     results.some((entry) => entry.id === block.id),
   )
-  const rest = results.filter((block) => !FEATURED_MOTION_ID_SET.has(block.id))
+  const rest = results.filter(
+    (block) => !FEATURED_MOTION_ID_SET.has(block.id) && !FEATURED_EMPTY_ID_SET.has(block.id),
+  )
   return [...featured, ...rest]
 })
 
@@ -1506,6 +1520,27 @@ function hasPreviewMedia(image?: string, video?: string) {
 
               <div :class="fullscreen ? 'px-5 py-5' : 'px-4 py-4'">
                 <div
+                  v-if="!blockCategory && !blockSearch.trim() && featuredEmptyLayouts.length"
+                  class="mb-4 rounded-xl border border-line bg-sunken/60 p-3"
+                >
+                  <p class="type-button-10 uppercase tracking-[0.08em] text-ink">Empty / Manual layout</p>
+                  <p class="mt-1 type-caption-12 text-soft">
+                    Start from a blank nestable canvas — containers, text, images, buttons.
+                  </p>
+                  <ul class="mt-3 flex flex-col gap-2">
+                    <li v-for="block in featuredEmptyLayouts" :key="`empty-${block.id}`">
+                      <button
+                        type="button"
+                        class="flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-line bg-raised px-3 py-2 text-left transition-colors duration-150 hover:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                        @click="onBlockCardClick(block.id)"
+                      >
+                        <span class="type-button-12 text-ink">{{ block.name }}</span>
+                        <UiBadge tone="brand">Freeform</UiBadge>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+                <div
                   v-if="!blockCategory && !blockSearch.trim() && featuredMotionTools.length"
                   class="mb-4 rounded-xl border border-brand/30 bg-brand-soft/40 p-3"
                 >
@@ -1550,7 +1585,8 @@ function hasPreviewMedia(image?: string, video?: string) {
                     <div class="flex items-start justify-between gap-2 border-b border-line px-3 py-2.5">
                       <p class="min-w-0 type-button text-ink">{{ variationTitle(block) }}</p>
                       <div class="flex shrink-0 gap-1">
-                        <UiBadge v-if="FEATURED_MOTION_ID_SET.has(block.id)" tone="brand">Motion</UiBadge>
+                        <UiBadge v-if="FEATURED_EMPTY_ID_SET.has(block.id)" tone="brand">Freeform</UiBadge>
+                        <UiBadge v-else-if="FEATURED_MOTION_ID_SET.has(block.id)" tone="brand">Motion</UiBadge>
                         <UiBadge :tone="toneFor(block.performanceClass)">{{ block.performanceClass }}</UiBadge>
                       </div>
                     </div>
