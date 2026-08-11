@@ -1459,7 +1459,7 @@ function selectFromPanel(id: string) {
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
       <!-- Design: layers + artboard + properties (no registry) -->
-      <template v-else-if="designMode">
+      <template v-if="designMode">
         <aside
           class="editor-chrome flex min-h-0 w-[260px] shrink-0 flex-col border-r border-line bg-paper"
         >
