@@ -82,6 +82,9 @@ const zoom = ref(70)
 /** Classic layers/properties editor vs Lovable-style assistant + live preview. */
 const { mode: builderMode, setMode: setBuilderMode } = useEditorBuilderMode()
 const interactive = computed(() => builderMode.value === 'interactive')
+const aiFreeform = computed(() => builderMode.value === 'ai')
+/** Assistant-led layouts (interactive or AI Freeform). */
+const assistantLed = computed(() => interactive.value || aiFreeform.value)
 
 /** Panel widths + open state persist per browser. */
 const leftWidth = ref(256)
@@ -132,7 +135,7 @@ watch(
 )
 
 watch(builderMode, (next) => {
-  if (next === 'interactive') {
+  if (next === 'interactive' || next === 'ai') {
     // Assistant stays primary; properties open when a section is selected.
     leftOpen.value = true
     rightOpen.value = Boolean(selectedId.value)
@@ -143,6 +146,14 @@ watch(builderMode, (next) => {
     rightTab.value = 'style'
   }
 }, { immediate: true })
+
+watch(
+  () => route.query.mode,
+  (value) => {
+    if (value === 'ai') setBuilderMode('ai')
+  },
+  { immediate: true },
+)
 
 const metadata = listBlockMetadata()
 
@@ -432,7 +443,16 @@ function insertBlockIds(
   },
   atIndex?: number,
 ) {
-  const built = payload.blockIds.map((blockId) => createSection(blockId))
+  const blockIds = aiFreeform.value
+    ? payload.blockIds.filter((id) => isLayoutCanvasBlock(id))
+    : payload.blockIds
+  if (!blockIds.length) {
+    if (aiFreeform.value) {
+      errorMessage.value = 'AI Freeform only inserts Empty section (layout canvas).'
+    }
+    return
+  }
+  const built = blockIds.map((blockId) => createSection(blockId))
   const types = payload.motionTypes
   insertSections(
     types?.length
@@ -443,12 +463,17 @@ function insertBlockIds(
       : built,
     atIndex,
   )
-  if (payload.blockIds.some((id) => isLayoutCanvasBlock(id))) {
+  if (blockIds.some((id) => isLayoutCanvasBlock(id))) {
     leftTab.value = 'layers'
     leftOpen.value = true
     rightTab.value = 'style'
     rightOpen.value = true
   }
+}
+
+function insertEmptyLayoutCanvas() {
+  insertBlockIds({ blockIds: ['layout-canvas-01'], source: 'block' })
+  message.value = 'Added Empty section.'
 }
 
 /**
@@ -465,6 +490,10 @@ async function onInsertCatalogue(hit: {
   }
   errorMessage.value = ''
   try {
+    if (aiFreeform.value && (hit.kind !== 'block' || !isLayoutCanvasBlock(hit.id))) {
+      insertEmptyLayoutCanvas()
+      return
+    }
     if (hit.kind === 'block') {
       insertBlockIds({ blockIds: [hit.id], source: 'block' })
       message.value = `Inserted ${hit.name}.`
@@ -1140,27 +1169,38 @@ function selectFromPanel(id: string) {
         <button
           type="button"
           class="type-button-12 rounded-md px-2.5 py-1.5 transition-colors"
-          :class="!interactive ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
-          :aria-pressed="!interactive"
+          :class="builderMode === 'classic' ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
+          :aria-pressed="builderMode === 'classic'"
           title="Classic editor — layers, canvas, properties"
           @click="setBuilderMode('classic')"
         >Editor</button>
         <button
           type="button"
           class="type-button-12 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 transition-colors"
-          :class="interactive ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
-          :aria-pressed="interactive"
+          :class="builderMode === 'interactive' ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
+          :aria-pressed="builderMode === 'interactive'"
           title="Interactive builder — AI assistant + live preview"
           @click="setBuilderMode('interactive')"
         >
           <Sparkles class="h-3.5 w-3.5" :stroke-width="ICON_STROKE" aria-hidden="true" />
           Interactive
         </button>
+        <button
+          type="button"
+          class="type-button-12 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 transition-colors"
+          :class="builderMode === 'ai' ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
+          :aria-pressed="builderMode === 'ai'"
+          title="AI Freeform — assistant + layout canvas only (no component marketplace)"
+          @click="setBuilderMode('ai')"
+        >
+          <Sparkles class="h-3.5 w-3.5" :stroke-width="ICON_STROKE" aria-hidden="true" />
+          AI Freeform
+        </button>
       </div>
 
       <div class="flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
         <button
-          v-if="!interactive"
+          v-if="!assistantLed"
           type="button"
           class="grid h-7 w-8 place-items-center rounded-md transition-colors"
           :class="leftOpen ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
@@ -1274,15 +1314,17 @@ function selectFromPanel(id: string) {
     </header>
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
-      <!-- Interactive: assistant + canvas + properties (when a section is selected) -->
-      <template v-if="interactive">
+      <!-- Assistant-led: Interactive or AI Freeform -->
+      <template v-if="assistantLed">
         <aside
           class="editor-chrome flex min-h-0 shrink-0 flex-col border-r border-line bg-paper"
           :style="{ width: `${interactiveAssistantWidth}px` }"
         >
           <AssistantPanel
+            :freeform-mode="aiFreeform"
             @insert-catalogue="onInsertCatalogue"
             @theme-updated="applyThemeLocal"
+            @insert-layout-canvas="insertEmptyLayoutCanvas"
           />
         </aside>
 
@@ -1294,8 +1336,31 @@ function selectFromPanel(id: string) {
           label="Resize the assistant panel"
         />
 
+        <!-- AI Freeform: Structure rail when a layout-canvas is selected -->
+        <aside
+          v-if="aiFreeform && isSelectedLayoutCanvas && layoutRoot"
+          class="editor-chrome flex min-h-0 w-[240px] shrink-0 flex-col border-r border-line bg-paper"
+        >
+          <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+            <span class="type-button-12 text-ink">Structure</span>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto p-2">
+            <EditorLayoutStructure
+              :root="layoutRoot"
+              :selected-node-id="selectedLayoutNodeId"
+              :can-write="can('page:write')"
+              @select-node="onSelectLayoutNode"
+              @add-child="onLayoutAddChild"
+              @duplicate="onLayoutDuplicateNode"
+              @remove="onLayoutRemoveNode"
+              @move="onLayoutMoveNode"
+            />
+          </div>
+        </aside>
+
         <div data-editor-scroll class="relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas">
           <InsertPanel
+            v-if="!aiFreeform"
             v-model:open="picking"
             :max-performance-class="data.site.theme.maxPerformanceClass"
             :theme="data.site.theme"
@@ -1317,14 +1382,21 @@ function selectFromPanel(id: string) {
             {{ errorMessage || message }}
           </p>
 
-          <div class="pointer-events-none absolute left-3 top-3 z-10">
+          <div class="pointer-events-none absolute left-3 top-3 z-10 flex gap-2">
             <UiButton
-              v-if="can('page:write')"
+              v-if="can('page:write') && !aiFreeform"
               class="pointer-events-auto"
               size="sm"
               variant="ghost"
               @click="picking = true"
             >+ Add</UiButton>
+            <UiButton
+              v-if="can('page:write') && aiFreeform"
+              class="pointer-events-auto"
+              size="sm"
+              variant="ghost"
+              @click="insertEmptyLayoutCanvas"
+            >+ Empty section</UiButton>
           </div>
 
           <EditorCanvas
@@ -1346,7 +1418,7 @@ function selectFromPanel(id: string) {
             @remove="remove"
             @ask-ai="askAi"
             @library-drop="onLibraryDrop"
-            @open-insert="picking = true"
+            @open-insert="aiFreeform ? insertEmptyLayoutCanvas() : (picking = true)"
           />
         </div>
 
@@ -1382,11 +1454,12 @@ function selectFromPanel(id: string) {
               <LayoutNodeInspector
                 :node="layoutSelectedNode"
                 :disabled="!can('page:write')"
+                :site-id="data.site.id"
                 @update="onLayoutNodePatch"
                 @update-styles="onLayoutNodeStyles"
               />
             </template>
-            <template v-else-if="selected && selectedBlock">
+            <template v-else-if="selected && selectedBlock && !aiFreeform">
               <div class="mb-4 border-b border-line pb-3">
                 <h2 class="type-button text-ink">{{ selectedBlock.name }}</h2>
                 <p class="type-caption-12 mt-1 leading-relaxed text-soft">{{ selectedBlock.description }}</p>
@@ -1578,6 +1651,7 @@ function selectFromPanel(id: string) {
             <LayoutNodeInspector
               :node="layoutSelectedNode"
               :disabled="!can('page:write')"
+              :site-id="data.site.id"
               @update="onLayoutNodePatch"
               @update-styles="onLayoutNodeStyles"
             />
@@ -1651,6 +1725,7 @@ function selectFromPanel(id: string) {
           <AssistantPanel
             @insert-catalogue="onInsertCatalogue"
             @theme-updated="applyThemeLocal"
+            @insert-layout-canvas="insertEmptyLayoutCanvas"
           />
         </div>
       </aside>

@@ -31,6 +31,8 @@ const assistBodySchema = z.object({
    * model can cite real ids. Default on for the interactive builder.
    */
   includeCatalogue: z.boolean().default(true),
+  /** AI Freeform mode — no Motionsites / registry catalogue. */
+  freeformMode: z.boolean().default(false),
 })
 
 const codegenBodySchema = z.object({
@@ -84,7 +86,8 @@ const aiRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const result = await assistWithMessage(input.message, {
-        includeCatalogue: input.includeCatalogue,
+        includeCatalogue: input.freeformMode ? false : input.includeCatalogue,
+        freeformMode: input.freeformMode,
         tenantId: context.tenantId,
       })
       if (!result) {

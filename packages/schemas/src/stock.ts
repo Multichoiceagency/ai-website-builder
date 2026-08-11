@@ -9,7 +9,7 @@ import { mediaFolderSchema } from './content.js'
  * never leave the adapter that maps them into these types.
  */
 
-export const stockProviderIdSchema = z.enum(['mixkit'])
+export const stockProviderIdSchema = z.enum(['mixkit', 'pexels'])
 export type StockProviderId = z.infer<typeof stockProviderIdSchema>
 
 export const stockMediaKindSchema = z.enum(['video', 'image'])
@@ -45,6 +45,8 @@ export const stockSearchQuerySchema = z.object({
   q: z.string().max(120).default(''),
   kind: stockMediaKindSchema.default('video'),
   provider: stockProviderIdSchema.default('mixkit'),
+  /** Vendor tag / category slug (e.g. nature, fitness). Empty = general browse. */
+  category: z.string().max(60).default(''),
   page: z.coerce.number().int().min(1).max(50).default(1),
   limit: z.coerce.number().int().min(1).max(48).default(24),
 })
@@ -74,3 +76,57 @@ export const stockImportInputSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
 })
 export type StockImportInput = z.infer<typeof stockImportInputSchema>
+
+/** Shared Mixkit video category chips (tag slugs on mixkit.co). */
+export const MIXKIT_VIDEO_CATEGORIES = [
+  'nature',
+  'business',
+  'technology',
+  'lifestyle',
+  'food',
+  'people',
+  'city',
+  'sports',
+  'fitness',
+  'medical',
+  'education',
+  'abstract',
+  'animals',
+  'travel',
+  'beach',
+  'office',
+] as const
+
+/** Mixkit free-stock-art category tags. */
+export const MIXKIT_ART_CATEGORIES = [
+  'nature',
+  'business',
+  'people',
+  'city',
+  'abstract',
+  'animals',
+  'food',
+  'technology',
+  'travel',
+  'pattern',
+] as const
+
+/** Pexels photo category search terms. */
+export const PEXELS_PHOTO_CATEGORIES = [
+  'fitness',
+  'business',
+  'food',
+  'nature',
+  'people',
+  'office',
+  'travel',
+  'technology',
+  'health',
+  'fashion',
+  'architecture',
+  'sports',
+  'animals',
+  'beach',
+  'city',
+  'education',
+] as const

@@ -53,6 +53,17 @@ const assistActionSchema = z.discriminatedUnion('type', [
     blockId: z.string().min(1).max(120),
   }),
   z.object({
+    type: z.literal('insertLayoutCanvas'),
+    /** Optional hint — UI always inserts layout-canvas-01. */
+    title: z.string().max(120).optional(),
+  }),
+  z.object({
+    type: z.literal('replaceLayoutRoot'),
+    sectionId: z.string().min(1).max(120),
+    /** Full layout-canvas props.root tree (validated client-side). */
+    root: z.record(z.unknown()),
+  }),
+  z.object({
     type: z.literal('patchSectionProps'),
     sectionId: z.string().min(1).max(120),
     props: z.record(z.unknown()).refine((value) => Object.keys(value).length > 0, {
@@ -141,13 +152,36 @@ Rules:
 - For interactive 3D / scroll-scrub video, prefer block id \`scroll-video-scrub-01\`.
   Tell them to upload a video in Media first (frames extract automatically).`
 
-function assistSystemPrompt(): string {
+export const ASSIST_FREEFORM_SYSTEM = `You are the AI Freeform assistant for a website builder.
+You help the customer design pages as freeform layout trees only.
+
+Hard rules:
+- Build ONLY freeform layout trees (block id layout-canvas-01).
+- NEVER cite Motionsites, registry heroes, scroll-video-scrub, or other component block ids.
+- NEVER recommend the Insert marketplace or component catalogue.
+- Prefer JSON: {"answer":"...","actions":[...]}.
+  Allowed actions:
+  - {"type":"insertLayoutCanvas"} — add an Empty section (layout canvas) to the page
+  - {"type":"insertBlock","blockId":"layout-canvas-01"} — same as insertLayoutCanvas
+  - {"type":"setContentWidth","width":1600} or "full"|"1280"|"1440"|"1600"
+  - {"type":"setPageLayout","maxWidth":1600}
+  - {"type":"patchSectionProps","sectionId":"sec_…","props":{…}} — only for layout-canvas sections
+- Be concise. Guide them to edit Structure / Properties for nodes (text, image, button, container).
+- If they ask to build a whole multi-page site, tell them to use Make website with AI Freeform
+  (/website/new?mode=ai).`
+
+function assistSystemPrompt(freeformMode: boolean): string {
+  if (freeformMode) {
+    return getPrompt('assist.freeform.system')?.text ?? ASSIST_FREEFORM_SYSTEM
+  }
   return getPrompt('assist.system')?.text ?? ASSIST_SYSTEM_FALLBACK
 }
 
 export interface AssistOptions {
   /** When false, skip catalogue digest (tests / tiny prompts). Default true. */
   includeCatalogue?: boolean
+  /** AI Freeform editor — no Motionsites / registry catalogue. */
+  freeformMode?: boolean
   /** Tenant for RAG (platform chunks always included). */
   tenantId?: string | null
 }
@@ -169,7 +203,8 @@ export async function assistWithMessage(
   message: string,
   options: AssistOptions = {},
 ): Promise<AssistResult | null> {
-  const includeCatalogue = options.includeCatalogue !== false
+  const freeformMode = options.freeformMode === true
+  const includeCatalogue = freeformMode ? false : options.includeCatalogue !== false
   const { digest, hits } = includeCatalogue
     ? buildAssistCatalogueContext(message)
     : { digest: '', hits: [] as CatalogueHit[] }
@@ -186,56 +221,58 @@ export async function assistWithMessage(
     knowledgeBlock = ''
   }
 
-  const brief = await analyzeMotionsitesBrief(message, { fetchRemoteMedia: true })
-  if (brief.kind === 'exact_island' && brief.islandId) {
-    return {
-      answer: `That reads as an exact Motionsites React brief for the “${brief.islandId}” island. Open the page editor, select a section (or use Add → Templates / Generate with AI), paste the brief, and Apply — the platform inserts the curated island plus the shared header. It will not rewrite Vue props for this prompt.`,
-      model: brief.model,
-      catalogueHits: hits.filter((hit) => hit.id === brief.islandId).length
-        ? hits.filter((hit) => hit.id === brief.islandId)
-        : hits.slice(0, 6),
+  if (!freeformMode) {
+    const brief = await analyzeMotionsitesBrief(message, { fetchRemoteMedia: true })
+    if (brief.kind === 'exact_island' && brief.islandId) {
+      return {
+        answer: `That reads as an exact Motionsites React brief for the “${brief.islandId}” island. Open the page editor, select a section (or use Add → Templates / Generate with AI), paste the brief, and Apply — the platform inserts the curated island plus the shared header. It will not rewrite Vue props for this prompt.`,
+        model: brief.model,
+        catalogueHits: hits.filter((hit) => hit.id === brief.islandId).length
+          ? hits.filter((hit) => hit.id === brief.islandId)
+          : hits.slice(0, 6),
+      }
     }
-  }
-  if (brief.kind === 'exact_island') {
-    return {
-      answer:
-        'That looks like a Motionsites React+Tailwind build brief, but no ready island matches yet. Call POST /api/v1/ai/motionsites-codegen with the brief to generate a single-file React component (DEPENDENCIES header + default export), then register it as an island. Ask AI will not invent React into page JSON (ADR-0003).',
-      model: brief.model,
-      catalogueHits: hits.slice(0, 6),
+    if (brief.kind === 'exact_island') {
+      return {
+        answer:
+          'That looks like a Motionsites React+Tailwind build brief, but no ready island matches yet. Call POST /api/v1/ai/motionsites-codegen with the brief to generate a single-file React component (DEPENDENCIES header + default export), then register it as an island. Ask AI will not invent React into page JSON (ADR-0003).',
+        model: brief.model,
+        catalogueHits: hits.slice(0, 6),
+      }
     }
-  }
 
-  const wantsScrollFrames =
-    /\b(scroll[- ]?(scrub|video|3d)|frame\s*pack|interactive\s*3d|product\s*fly[- ]?through|scrub\s*(through|video)|apple[- ]style\s*scroll)\b/i.test(
-      message,
-    )
-  if (wantsScrollFrames) {
-    const scrubHit = hits.find((hit) => hit.id === 'scroll-video-scrub-01')
-    return {
-      answer:
-        'For interactive 3D / scroll-driven video stories, use block `scroll-video-scrub-01`. Upload (or import) a video in Media — frames extract automatically — then insert that block and pick the video when Frames ready shows. Overlay headlines are editable in Content.',
-      model: 'rule:scroll-video-scrub',
-      catalogueHits: scrubHit
-        ? [scrubHit, ...hits.filter((hit) => hit.id !== scrubHit.id).slice(0, 5)]
-        : [
-            {
-              kind: 'block' as const,
-              id: 'scroll-video-scrub-01',
-              name: 'Scroll — video frame scrub',
-              category: 'gallery',
-              collection: 'motion',
-              score: 99,
-            },
-            ...hits.slice(0, 5),
-          ],
-      actions: [{ type: 'insertBlock', blockId: 'scroll-video-scrub-01' }],
+    const wantsScrollFrames =
+      /\b(scroll[- ]?(scrub|video|3d)|frame\s*pack|interactive\s*3d|product\s*fly[- ]?through|scrub\s*(through|video)|apple[- ]style\s*scroll)\b/i.test(
+        message,
+      )
+    if (wantsScrollFrames) {
+      const scrubHit = hits.find((hit) => hit.id === 'scroll-video-scrub-01')
+      return {
+        answer:
+          'For interactive 3D / scroll-driven video stories, use block `scroll-video-scrub-01`. Upload (or import) a video in Media — frames extract automatically — then insert that block and pick the video when Frames ready shows. Overlay headlines are editable in Content.',
+        model: 'rule:scroll-video-scrub',
+        catalogueHits: scrubHit
+          ? [scrubHit, ...hits.filter((hit) => hit.id !== scrubHit.id).slice(0, 5)]
+          : [
+              {
+                kind: 'block' as const,
+                id: 'scroll-video-scrub-01',
+                name: 'Scroll — video frame scrub',
+                category: 'gallery',
+                collection: 'motion',
+                score: 99,
+              },
+              ...hits.slice(0, 5),
+            ],
+        actions: [{ type: 'insertBlock', blockId: 'scroll-video-scrub-01' }],
+      }
     }
   }
 
   const llm = aiGateway.available().find((provider) => provider.id !== 'deterministic-composer')
   if (!llm) return null
 
-  const parts = [assistSystemPrompt()]
+  const parts = [assistSystemPrompt(freeformMode)]
   if (knowledgeBlock) parts.push(knowledgeBlock)
   if (digest) {
     parts.push(`Catalogue context (cite ids from this list only):\n${digest}`)
@@ -247,14 +284,41 @@ export async function assistWithMessage(
     : message.slice(0, 1_000)
 
   if (llm.id === 'google') {
-    return assistViaGemini(userText, system, hits)
+    return sanitizeAssistResult(await assistViaGemini(userText, system, hits), freeformMode)
   }
 
   if (llm.id === 'anthropic') {
-    return assistViaAnthropic(userText, system, hits)
+    return sanitizeAssistResult(await assistViaAnthropic(userText, system, hits), freeformMode)
   }
 
   return null
+}
+
+function sanitizeAssistResult(result: AssistResult, freeformMode: boolean): AssistResult {
+  if (!freeformMode) return result
+  const actions = (result.actions ?? [])
+    .map((action) => {
+      if (action.type === 'insertBlock' && action.blockId !== 'layout-canvas-01') {
+        return { type: 'insertLayoutCanvas' as const }
+      }
+      if (action.type === 'insertBlock' || action.type === 'insertLayoutCanvas') return action
+      if (
+        action.type === 'setContentWidth' ||
+        action.type === 'setPageLayout' ||
+        action.type === 'patchSectionProps' ||
+        action.type === 'replaceLayoutRoot'
+      ) {
+        return action
+      }
+      return null
+    })
+    .filter((action): action is AssistAction => action != null)
+
+  return {
+    ...result,
+    catalogueHits: [],
+    actions,
+  }
 }
 
 async function assistViaGemini(

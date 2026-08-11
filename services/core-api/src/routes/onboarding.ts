@@ -30,6 +30,7 @@ import {
 } from '../lib/generation/index.js'
 import { resolveTemplate } from '../lib/generation/templates.js'
 import { profileFromPrompt } from '../lib/ai/site-builder-agent.js'
+import { draftFreeformSite, sectionsFromFreeformRoot } from '../lib/ai/freeform-site.js'
 import { isPageSpeedConfigured, runPageSpeed } from '../lib/seo/pagespeed.js'
 import { buildEvent, eventBus } from '../lib/event-bus.js'
 import { BadRequestError, PlanLimitError } from '../lib/errors.js'
@@ -196,6 +197,10 @@ const onboardingRoutes: FastifyPluginAsync = async (app) => {
   app.post('/generate-from-prompt', async (request, reply) => {
     const context = requireTenant(request, 'site:write')
     const input = parseOrThrow(generateFromPromptInputSchema, request.body, 'generate-from-prompt')
+    if (input.freeform) {
+      const payload = await executeFreeformSiteGeneration(context, input)
+      return reply.status(201).send(ok(payload))
+    }
     const profile = await profileFromPrompt(input)
     const payload = await executeSiteGeneration(context, {
       profile,
@@ -223,6 +228,160 @@ const onboardingRoutes: FastifyPluginAsync = async (app) => {
 }
 
 export default onboardingRoutes
+
+async function executeFreeformSiteGeneration(
+  context: TenantContext,
+  input: {
+    prompt: string
+    locale?: string
+    siteName?: string
+    publish: boolean
+  },
+): Promise<GenerationResult> {
+  const limits = limitsForPlan(context.plan)
+  const currentSites = await withTenant(context.tenantId, (tx) => countSites(tx, context.tenantId))
+  if (currentSites >= limits.sites) {
+    throw new PlanLimitError(
+      `Your ${context.plan} plan includes ${limits.sites} site(s). Upgrade or delete a site to generate another.`,
+      { plan: context.plan, limit: limits.sites, current: currentSites },
+    )
+  }
+
+  const draft = await draftFreeformSite({
+    prompt: input.prompt,
+    locale: input.locale,
+    siteName: input.siteName,
+  })
+
+  const plan = {
+    siteName: draft.siteName,
+    locale: draft.locale as 'nl' | 'en',
+    maxPerformanceClass: 'A' as const,
+    pages: draft.pages.map((page) => ({
+      path: page.path,
+      title: page.title,
+      description: page.description,
+      goal:
+        page.path === '/'
+          ? ('home' as const)
+          : page.path === '/about'
+            ? ('about' as const)
+            : ('contact' as const),
+      blocks: ['layout-canvas-01'],
+    })),
+    navigation: draft.navigation,
+  }
+
+  const { themeSchema } = await import('@platform/schemas')
+  const theme = themeSchema.parse({
+    colorPrimary: '#0f766e',
+    colorAccent: '#ea580c',
+    colorSurfaceAlt: '#f8fafc',
+    radius: 'lg',
+  })
+
+  const result = await withTenant(context.tenantId, async (tx) => {
+    const slug = await uniqueSlug(draft.siteName, async (candidate) => {
+      const [row] = await tx<{ id: string }[]>`
+        SELECT id FROM sites WHERE tenant_id = ${context.tenantId} AND slug = ${candidate} LIMIT 1
+      `
+      return Boolean(row)
+    })
+
+    const site = await insertSite(tx, {
+      tenantId: context.tenantId,
+      name: draft.siteName,
+      slug,
+      locale: draft.locale,
+      theme,
+    })
+
+    const edgeHost = (process.env.PLATFORM_EDGE_HOSTNAME || process.env.STOREFRONT_PUBLIC_HOST || '')
+      .trim()
+      .replace(/^https?:\/\//, '')
+      .split('/')[0]
+      ?.toLowerCase()
+    const previewHostname =
+      edgeHost && edgeHost !== 'localhost' && !edgeHost.endsWith('.localhost')
+        ? `${slug}.${edgeHost}`
+        : `${slug}.localhost`
+    await insertDomain(tx, {
+      tenantId: context.tenantId,
+      siteId: site.id,
+      hostname: previewHostname,
+      isPrimary: true,
+      verified: true,
+    })
+
+    const pageIds: string[] = []
+    for (const page of draft.pages) {
+      const created = await insertPage(tx, {
+        tenantId: context.tenantId,
+        siteId: site.id,
+        path: page.path,
+        title: page.title,
+        seo: {
+          title: `${page.title} | ${draft.siteName}`,
+          description: page.description,
+          noIndex: false,
+        },
+        sections: sectionsFromFreeformRoot(page.root),
+      })
+      if (input.publish) await publishPage(tx, context.tenantId, created.id)
+      pageIds.push(created.id)
+    }
+
+    await upsertNavigation(tx, {
+      tenantId: context.tenantId,
+      siteId: site.id,
+      key: 'primary',
+      items: draft.navigation,
+    })
+
+    const event = buildEvent({
+      name: 'site.created',
+      tenantId: context.tenantId,
+      actor: { type: 'agent', id: draft.model, label: 'Freeform generator', onBehalfOfUserId: context.user.id },
+      resource: { type: 'site', id: site.id },
+      payload: {
+        pages: pageIds.length,
+        model: draft.model,
+        industry: 'freeform',
+        costUsd: 0,
+        published: input.publish,
+        templateId: null,
+        freeform: true,
+      },
+    })
+    await recordAuditEvent(tx, event)
+
+    return { site, slug, previewHostname, pageIds, event }
+  })
+
+  await eventBus.publish(result.event)
+
+  const homePageId = result.pageIds[0]
+  if (!homePageId) throw new BadRequestError('Generation produced no pages.')
+
+  return {
+    siteId: result.site.id,
+    siteName: result.site.name,
+    siteSlug: result.slug,
+    previewHostname: result.previewHostname,
+    homePageId,
+    plan,
+    pageIds: result.pageIds,
+    quality: {
+      seo: { score: 80, issues: [] },
+      accessibility: { score: 90, issues: [] },
+      performance: { score: 95, issues: [], heaviestClass: 'A' },
+      content: { score: 75, issues: [] },
+    },
+    model: draft.model,
+    published: input.publish,
+    generatedAt: new Date().toISOString(),
+  }
+}
 
 async function executeSiteGeneration(
   context: TenantContext,

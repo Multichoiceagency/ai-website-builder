@@ -263,7 +263,7 @@ function clearFilters() {
           {{ density === 'compact' ? 'Larger' : 'Smaller' }}
         </UiButton>
 
-        <UiButton v-if="can('media:write')" size="sm" @click="stockOpen = true">Mixkit stock</UiButton>
+        <UiButton v-if="can('media:write')" size="sm" @click="stockOpen = true">Stock library</UiButton>
         <UiButton v-if="can('media:write')" size="sm" variant="primary" @click="dropZone?.browse()">Upload</UiButton>
       </template>
     </UiPageHeader>
@@ -408,8 +408,8 @@ function clearFilters() {
       </template>
     </UiDialog>
 
-    <UiDialog v-model:open="stockOpen" title="Mixkit stock" wide>
-      <MediaStockPanel folder="stock" @imported="afterStockImport" />
+    <UiDialog v-model:open="stockOpen" title="Stock library" wide>
+      <MediaStockPanel folder="stock" initial-panel="photos" @imported="afterStockImport" />
       <template #footer>
         <UiButton @click="stockOpen = false">Close</UiButton>
       </template>

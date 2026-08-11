@@ -1,21 +1,32 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import type { MediaAsset, StockMediaItem, StockMediaKind, StockSearchResult } from '@platform/schemas'
+import { computed, ref, watch } from 'vue'
+import {
+  MIXKIT_ART_CATEGORIES,
+  MIXKIT_VIDEO_CATEGORIES,
+  PEXELS_PHOTO_CATEGORIES,
+  type MediaAsset,
+  type StockMediaItem,
+  type StockMediaKind,
+  type StockProviderId,
+  type StockSearchResult,
+} from '@platform/schemas'
 
 /**
- * Live Mixkit stock search — talks only to core-api `/api/v1/stock/*`.
- *
- * Choosing an item imports it into the tenant media library, then emits the
- * resulting `MediaAsset` so pickers can select it like an upload.
+ * Live stock search — Mixkit video/illustrations + Pexels photos.
+ * Talks only to core-api `/api/v1/stock/*` (ADR-0006).
  */
 const props = withDefaults(
   defineProps<{
-    /** Folder imports land in. Defaults to `stock` on the server when empty. */
     folder?: string
-    /** Prefer video or art when the panel opens. */
-    initialKind?: StockMediaKind
+    /**
+     * Opening intent:
+     * - `photos` → Pexels (default for image fields)
+     * - `video` → Mixkit video
+     * - `illustrations` → Mixkit art
+     */
+    initialPanel?: 'photos' | 'video' | 'illustrations'
   }>(),
-  { folder: '', initialKind: 'video' },
+  { folder: '', initialPanel: 'photos' },
 )
 
 const emit = defineEmits<{ imported: [asset: MediaAsset] }>()
@@ -23,13 +34,37 @@ const emit = defineEmits<{ imported: [asset: MediaAsset] }>()
 const api = useApi()
 const can = useCan()
 
-const kind = ref<StockMediaKind>(props.initialKind)
+type Panel = 'photos' | 'video' | 'illustrations'
+
+const panel = ref<Panel>(props.initialPanel)
 const search = ref('')
+const category = ref('')
 const page = ref(1)
 const result = ref<StockSearchResult | null>(null)
 const loading = ref(false)
 const importingId = ref('')
 const error = ref('')
+const hoverId = ref('')
+const reducedMotion = ref(false)
+
+if (import.meta.client) {
+  reducedMotion.value = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+const provider = computed<StockProviderId>(() => (panel.value === 'photos' ? 'pexels' : 'mixkit'))
+const kind = computed<StockMediaKind>(() => (panel.value === 'video' ? 'video' : 'image'))
+
+const categories = computed(() => {
+  if (panel.value === 'photos') return [...PEXELS_PHOTO_CATEGORIES]
+  if (panel.value === 'video') return [...MIXKIT_VIDEO_CATEGORIES]
+  return [...MIXKIT_ART_CATEGORIES]
+})
+
+const panelOptions = [
+  { value: 'photos' as const, label: 'Photos' },
+  { value: 'video' as const, label: 'Video' },
+  { value: 'illustrations' as const, label: 'Illustrations' },
+]
 
 async function load() {
   loading.value = true
@@ -38,12 +73,13 @@ async function load() {
     result.value = await api.get<StockSearchResult>('/api/v1/stock/search', {
       q: search.value.trim() || undefined,
       kind: kind.value,
-      provider: 'mixkit',
+      provider: provider.value,
+      category: category.value || undefined,
       page: page.value,
       limit: 24,
     })
   } catch (caught) {
-    error.value = caught instanceof ApiError ? caught.message : 'Could not search Mixkit.'
+    error.value = caught instanceof ApiError ? caught.message : 'Could not search stock.'
     result.value = null
   } finally {
     loading.value = false
@@ -58,7 +94,7 @@ watch(search, () => {
     void load()
   }, 300)
 })
-watch(kind, () => {
+watch([panel, category], () => {
   page.value = 1
   void load()
 })
@@ -83,7 +119,7 @@ async function importItem(item: StockMediaItem) {
       pageUrl: item.pageUrl,
       folder: props.folder || 'stock',
       alt: item.title,
-      tags: ['mixkit', item.kind],
+      tags: [item.provider, item.kind, ...(category.value ? [category.value] : [])],
     })
     emit('imported', response.asset)
   } catch (caught) {
@@ -104,69 +140,150 @@ function prevPage() {
   page.value -= 1
   void load()
 }
+
+function onHoverEnter(item: StockMediaItem, event: MouseEvent) {
+  if (item.kind !== 'video' || !item.previewUrl || reducedMotion.value) return
+  hoverId.value = item.externalId
+  const host = event.currentTarget as HTMLElement | null
+  const video = host?.querySelector('video')
+  if (video instanceof HTMLVideoElement) {
+    void video.play().catch(() => undefined)
+  }
+}
+
+function onHoverLeave(item: StockMediaItem, event: MouseEvent) {
+  if (hoverId.value === item.externalId) hoverId.value = ''
+  const host = event.currentTarget as HTMLElement | null
+  const video = host?.querySelector('video')
+  if (video instanceof HTMLVideoElement) {
+    video.pause()
+    video.currentTime = 0
+  }
+}
+
+function badgeLabel(item: StockMediaItem): string {
+  if (item.provider === 'pexels') return 'Photo'
+  if (item.kind === 'video') return 'Video'
+  return 'Illustration'
+}
 </script>
 
 <template>
   <div class="flex flex-col gap-4">
     <div class="flex flex-wrap items-center gap-2">
-      <UiInput v-model="search" placeholder="Search Mixkit (ocean, office, nature…)" class="min-w-48 flex-1" />
+      <UiInput
+        v-model="search"
+        placeholder="Search (ocean, office, fitness…)"
+        class="min-w-48 flex-1"
+      />
       <div class="flex rounded-lg border border-line bg-raised p-0.5" role="group" aria-label="Stock type">
         <button
-          v-for="option in ([
-            { value: 'video', label: 'Video' },
-            { value: 'image', label: 'Art' },
-          ] as const)"
+          v-for="option in panelOptions"
           :key="option.value"
           type="button"
-          class="rounded-md px-2.5 py-1.5 text-[0.8125rem] font-medium transition-colors"
-          :class="kind === option.value ? 'bg-sunken text-ink' : 'text-soft hover:text-ink'"
-          :aria-pressed="kind === option.value"
-          @click="kind = option.value"
+          class="cursor-pointer rounded-md px-2.5 py-1.5 text-[0.8125rem] font-medium transition-colors duration-150"
+          :class="panel === option.value ? 'bg-sunken text-ink' : 'text-soft hover:text-ink'"
+          :aria-pressed="panel === option.value"
+          @click="panel = option.value"
         >
           {{ option.label }}
         </button>
       </div>
     </div>
 
+    <div class="flex flex-wrap gap-1.5" role="list" aria-label="Categories">
+      <button
+        type="button"
+        class="cursor-pointer rounded-full px-2.5 py-1 text-[0.75rem] font-medium transition-colors duration-150"
+        :class="!category ? 'bg-brand-soft text-brand' : 'bg-sunken text-soft hover:text-ink'"
+        :aria-pressed="!category"
+        @click="category = ''"
+      >
+        All
+      </button>
+      <button
+        v-for="entry in categories"
+        :key="entry"
+        type="button"
+        class="cursor-pointer rounded-full px-2.5 py-1 text-[0.75rem] font-medium capitalize transition-colors duration-150"
+        :class="category === entry ? 'bg-brand-soft text-brand' : 'bg-sunken text-soft hover:text-ink'"
+        :aria-pressed="category === entry"
+        @click="category = entry"
+      >
+        {{ entry }}
+      </button>
+    </div>
+
     <p class="text-[0.75rem] text-faint">
-      Free stock from
-      <a href="https://mixkit.co" target="_blank" rel="noopener noreferrer" class="underline hover:text-soft">
-        Mixkit
-      </a>
-      — imported into your library (not hotlinked). Mixkit Free License applies.
+      <template v-if="panel === 'photos'">
+        Photos from
+        <a href="https://www.pexels.com" target="_blank" rel="noopener noreferrer" class="underline hover:text-soft">
+          Pexels
+        </a>
+        — imported into your library (not hotlinked).
+      </template>
+      <template v-else>
+        Free stock from
+        <a href="https://mixkit.co" target="_blank" rel="noopener noreferrer" class="underline hover:text-soft">
+          Mixkit
+        </a>
+        — imported into your library. Mixkit Free License applies.
+      </template>
     </p>
 
     <p v-if="error" class="rounded-lg bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger" role="alert">
       {{ error }}
     </p>
 
-    <p v-if="loading" class="py-10 text-center text-[0.8125rem] text-soft">Searching Mixkit…</p>
+    <p v-if="loading" class="py-10 text-center text-[0.8125rem] text-soft">Searching…</p>
 
     <UiEmptyState
       v-else-if="!result?.items.length"
       title="No stock matches"
-      description="Try a broader term, or switch between Video and Art."
+      description="Try another category or a broader search term."
     />
 
     <ul v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       <li v-for="item in result.items" :key="`${item.provider}-${item.externalId}`">
         <button
           type="button"
-          class="group w-full overflow-hidden rounded-card border border-line bg-raised text-left shadow-card transition-colors hover:border-line-strong disabled:opacity-60"
+          class="group w-full cursor-pointer overflow-hidden rounded-card border border-line bg-raised text-left shadow-card transition-colors duration-150 hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-default disabled:opacity-60"
           :disabled="Boolean(importingId) || !can('media:write')"
           :aria-label="`Import ${item.title}`"
           @click="importItem(item)"
+          @mouseenter="onHoverEnter(item, $event)"
+          @mouseleave="onHoverLeave(item, $event)"
         >
           <span class="relative block aspect-[4/3] bg-sunken">
             <img
+              v-if="item.kind !== 'video' || !item.previewUrl || reducedMotion"
               :src="item.thumbnailUrl"
               :alt="item.title"
               class="h-full w-full object-cover"
               loading="lazy"
               referrerpolicy="no-referrer"
             />
-            <UiBadge v-if="item.kind === 'video'" tone="neutral" class="absolute right-2 top-2">Video</UiBadge>
-            <UiBadge v-else tone="neutral" class="absolute right-2 top-2">Art</UiBadge>
+            <template v-else>
+              <img
+                :src="item.thumbnailUrl"
+                :alt="item.title"
+                class="h-full w-full object-cover"
+                :class="hoverId === item.externalId ? 'opacity-0' : 'opacity-100'"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+              />
+              <video
+                class="absolute inset-0 h-full w-full object-cover"
+                :class="hoverId === item.externalId ? 'opacity-100' : 'opacity-0'"
+                :src="item.previewUrl"
+                muted
+                loop
+                playsinline
+                preload="none"
+                :poster="item.thumbnailUrl"
+              />
+            </template>
+            <UiBadge tone="neutral" class="absolute right-2 top-2">{{ badgeLabel(item) }}</UiBadge>
             <span
               v-if="importingId === item.externalId"
               class="absolute inset-0 grid place-items-center bg-raised/80 text-[0.8125rem] font-medium text-ink"

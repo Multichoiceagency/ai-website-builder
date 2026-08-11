@@ -24,6 +24,7 @@ import { requireTenant } from '../plugins/auth.js'
  */
 
 const IMPORT_ROUTE = { bodyLimit: 1024 * 1024 } as const
+/** Align with video upload ceiling so Mixkit 720p clips import cleanly. */
 const MAX_IMPORT_BYTES = 64 * 1024 * 1024
 
 function filenameForImport(input: {
@@ -35,20 +36,20 @@ function filenameForImport(input: {
   const fromUrl = input.downloadUrl.split('?')[0]?.split('/').pop() ?? ''
   if (fromUrl && /\.(mp4|webm|png|jpe?g|webp)$/i.test(fromUrl)) return fromUrl
 
-  const base = (input.title ?? `mixkit-${input.externalId}`)
+  const base = (input.title ?? `stock-${input.externalId}`)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80)
 
-  return `${base || `mixkit-${input.externalId}`}.${input.kind === 'video' ? 'mp4' : 'png'}`
+  return `${base || `stock-${input.externalId}`}.${input.kind === 'video' ? 'mp4' : 'jpg'}`
 }
 
 async function fetchAllowlistedBytes(url: string): Promise<{ bytes: Buffer; contentType: string }> {
   const response = await fetch(url, {
     headers: { 'User-Agent': 'PlatformStockProxy/1.0 (+stock-import)' },
     redirect: 'follow',
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(60_000),
   })
 
   if (!response.ok) {
@@ -57,17 +58,34 @@ async function fetchAllowlistedBytes(url: string): Promise<{ bytes: Buffer; cont
 
   const lengthHeader = response.headers.get('content-length')
   if (lengthHeader && Number(lengthHeader) > MAX_IMPORT_BYTES) {
-    throw new BadRequestError('Stock file is larger than the media library allows.')
+    throw new BadRequestError(
+      `Stock file is larger than ${Math.floor(MAX_IMPORT_BYTES / 1024 / 1024)} MB.`,
+    )
   }
 
   const arrayBuffer = await response.arrayBuffer()
   if (arrayBuffer.byteLength > MAX_IMPORT_BYTES) {
-    throw new BadRequestError('Stock file is larger than the media library allows.')
+    throw new BadRequestError(
+      `Stock file is larger than ${Math.floor(MAX_IMPORT_BYTES / 1024 / 1024)} MB.`,
+    )
+  }
+
+  const headerType = response.headers.get('content-type')?.split(';')[0]?.trim() ?? ''
+  let contentType = headerType
+  // Mixkit/Pexels sometimes send octet-stream — hint from URL so prepareUpload sniffs correctly.
+  if (!contentType || contentType === 'application/octet-stream' || contentType === 'binary/octet-stream') {
+    const path = url.split('?')[0]!.toLowerCase()
+    if (path.endsWith('.mp4')) contentType = 'video/mp4'
+    else if (path.endsWith('.webm')) contentType = 'video/webm'
+    else if (path.endsWith('.png')) contentType = 'image/png'
+    else if (path.endsWith('.jpg') || path.endsWith('.jpeg')) contentType = 'image/jpeg'
+    else if (path.endsWith('.webp')) contentType = 'image/webp'
+    else contentType = 'application/octet-stream'
   }
 
   return {
     bytes: Buffer.from(arrayBuffer),
-    contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+    contentType,
   }
 }
 

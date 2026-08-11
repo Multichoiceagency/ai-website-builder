@@ -43,7 +43,7 @@ const emit = defineEmits<{ select: [asset: MediaAsset] }>()
 const api = useApi()
 const can = useCan()
 
-type PickerTab = 'library' | 'mixkit'
+type PickerTab = 'library' | 'stock'
 const tab = ref<PickerTab>('library')
 
 const search = ref('')
@@ -53,6 +53,10 @@ const library = ref<MediaLibrary | null>(null)
 const loading = ref(false)
 const error = ref('')
 const dropZone = ref<{ browse: () => void } | null>(null)
+
+const stockInitialPanel = computed(() =>
+  props.videoOnly || props.scrollReadyOnly ? ('video' as const) : ('photos' as const),
+)
 
 /** The asset the field currently points at, so the picker opens on it. */
 const currentId = computed(() => url.value.split('/').pop() ?? '')
@@ -150,11 +154,11 @@ watch(
           type="button"
           role="tab"
           class="border-b-2 px-3 py-2 text-[0.8125rem] font-medium transition-colors"
-          :class="tab === 'mixkit' ? 'border-brand text-ink' : 'border-transparent text-soft hover:text-ink'"
-          :aria-selected="tab === 'mixkit'"
-          @click="tab = 'mixkit'"
+          :class="tab === 'stock' ? 'border-brand text-ink' : 'border-transparent text-soft hover:text-ink'"
+          :aria-selected="tab === 'stock'"
+          @click="tab = 'stock'"
         >
-          Mixkit stock
+          Stock photos
         </button>
       </div>
 
@@ -199,12 +203,12 @@ watch(
               <template #empty>
                 <UiEmptyState
                   title="Nothing here yet"
-                  description="Drop an image, GIF or video, paste a screenshot, or upload one — it will be selected straight away. Or switch to Mixkit stock."
+                  description="Drop an image, GIF or video, paste a screenshot, or upload one — it will be selected straight away. Or browse stock photos."
                 >
                   <template #icon>
                     <PhotoIcon class="h-10 w-10" aria-hidden="true" />
                   </template>
-                  <UiButton size="sm" @click="tab = 'mixkit'">Browse Mixkit</UiButton>
+                  <UiButton size="sm" @click="tab = 'stock'">Browse stock</UiButton>
                 </UiEmptyState>
               </template>
             </MediaBrowser>
@@ -218,7 +222,11 @@ watch(
       </template>
 
       <div v-else class="max-h-[30rem] overflow-y-auto pr-1">
-        <MediaStockPanel :folder="folder || 'stock'" @imported="afterStockImport" />
+        <MediaStockPanel
+          :folder="folder || 'stock'"
+          :initial-panel="stockInitialPanel"
+          @imported="afterStockImport"
+        />
       </div>
     </div>
 

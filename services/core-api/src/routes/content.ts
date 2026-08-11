@@ -8,6 +8,7 @@ import {
   createBlogCategoryInputSchema,
   createBlogPostInputSchema,
   isVideoMime,
+  mediaImportFromUrlInputSchema,
   mediaListQuerySchema,
   mediaUploadQuerySchema,
   publicPageSchema,
@@ -57,6 +58,7 @@ import { findSiteById, resolveSiteByHost } from '../db/repositories/sites.js'
 import { buildEvent, eventBus } from '../lib/event-bus.js'
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js'
 import { MEDIA_MAX_BYTES, MEDIA_VIDEO_MAX_BYTES, prepareUpload, responseHeadersFor } from '../lib/media/upload.js'
+import { fetchAllowlistedImage } from '../lib/media/remote-import.js'
 import { removeFrameObjects, scheduleVideoFrameExtract, processVideoFrames } from '../lib/media/frames.js'
 import { mediaFrameStorageKey } from '../lib/media/url.js'
 import { storage } from '../lib/storage/index.js'
@@ -146,6 +148,44 @@ const contentRoutes: FastifyPluginAsync = async (app) => {
     if (isVideoMime(asset.mime)) {
       scheduleVideoFrameExtract(context.tenantId, asset.id)
     }
+
+    return reply.status(201).send(ok({ asset, sanitised: prepared.sanitised }))
+  })
+
+  /**
+   * Fetch an allowlisted HTTPS image URL into the tenant library (freeform paste).
+   * Subject to MEDIA_MAX_BYTES; not an open proxy (SSRF allowlist).
+   */
+  app.post('/media/from-url', async (request, reply) => {
+    const context = requireTenant(request, 'media:write')
+    const input = parseOrThrow(mediaImportFromUrlInputSchema, request.body ?? {}, 'import-from-url')
+
+    const remote = await fetchAllowlistedImage(input.url)
+    const prepared = prepareUpload({
+      body: remote.bytes,
+      claimedContentType: remote.contentType,
+      filename: remote.filename,
+      alt: input.alt,
+    })
+
+    await storage().put(prepared.storageKey, prepared.bytes, prepared.mime)
+
+    const asset = await withTenant(context.tenantId, (tx) =>
+      insertMediaAsset(tx, context.tenantId, {
+        folder: input.folder,
+        filename: prepared.filename,
+        storageKey: prepared.storageKey,
+        mime: prepared.mime,
+        sizeBytes: prepared.sizeBytes,
+        width: prepared.width,
+        height: prepared.height,
+        alt: prepared.alt,
+        altSource: prepared.altSource,
+        tags: [...(input.tags ?? []), 'remote-url'].slice(0, 20),
+        checksum: prepared.checksum,
+        createdBy: context.user.email,
+      }),
+    )
 
     return reply.status(201).send(ok({ asset, sanitised: prepared.sanitised }))
   })

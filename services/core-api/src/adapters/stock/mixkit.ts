@@ -44,21 +44,37 @@ function titleFromSlug(slug: string): string {
     .join(' ')
 }
 
-function searchPageUrl(kind: StockMediaKind, query: string, page: number): string {
+/** Exported for unit tests — Mixkit tag / discover URL builder. */
+export function buildMixkitSearchPageUrl(
+  kind: StockMediaKind,
+  query: string,
+  page: number,
+  category = '',
+): string {
   const slug = slugify(query)
-  const base =
-    kind === 'image'
-      ? slug
-        ? `${MIXKIT_ORIGIN}/free-stock-art/discover/${slug}/`
-        : `${MIXKIT_ORIGIN}/free-stock-art/`
-      : slug
-        ? `${MIXKIT_ORIGIN}/free-stock-video/discover/${slug}/`
-        // Tag-style browse paginates more reliably than an empty discover URL.
-        : `${MIXKIT_ORIGIN}/free-stock-video/nature/`
+  const cat = slugify(category)
+
+  let base: string
+  if (kind === 'image') {
+    if (slug) base = `${MIXKIT_ORIGIN}/free-stock-art/discover/${slug}/`
+    else if (cat) base = `${MIXKIT_ORIGIN}/free-stock-art/${cat}/`
+    else base = `${MIXKIT_ORIGIN}/free-stock-art/`
+  } else if (slug) {
+    base = `${MIXKIT_ORIGIN}/free-stock-video/discover/${slug}/`
+  } else if (cat) {
+    base = `${MIXKIT_ORIGIN}/free-stock-video/${cat}/`
+  } else {
+    // Tag-style browse paginates more reliably than an empty discover URL.
+    base = `${MIXKIT_ORIGIN}/free-stock-video/nature/`
+  }
 
   if (page <= 1) return base
   const join = base.includes('?') ? '&' : '?'
   return `${base}${join}page=${page}`
+}
+
+function searchPageUrl(kind: StockMediaKind, query: string, page: number, category = ''): string {
+  return buildMixkitSearchPageUrl(kind, query, page, category)
 }
 
 function videoDownloadUrl(id: string): string {
@@ -281,7 +297,7 @@ export class MixkitStockProvider implements StockMediaProvider {
 
   async search(query: StockSearchQuery): Promise<StockSearchResult> {
     const kind = query.kind
-    const pageUrl = searchPageUrl(kind, query.q, query.page)
+    const pageUrl = searchPageUrl(kind, query.q, query.page, query.category ?? '')
 
     const response = await fetch(pageUrl, {
       headers: {

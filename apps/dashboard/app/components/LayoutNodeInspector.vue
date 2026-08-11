@@ -19,6 +19,7 @@ const props = withDefaults(
   defineProps<{
     node: LayoutNode
     disabled?: boolean
+    siteId?: string
   }>(),
   { disabled: false },
 )
@@ -27,6 +28,38 @@ const emit = defineEmits<{
   update: [patch: Partial<LayoutNode>]
   'update-styles': [styles: Record<string, unknown>]
 }>()
+
+const api = useApi()
+const importBusy = ref(false)
+const importError = ref('')
+const pasteUrl = ref('')
+
+async function importRemoteUrl() {
+  importError.value = ''
+  const url = pasteUrl.value.trim() || (props.node.type === 'image' ? (props.node.src ?? '') : '')
+  if (!url || !/^https:\/\//i.test(url)) {
+    importError.value = 'Paste an https:// image URL first.'
+    return
+  }
+  importBusy.value = true
+  try {
+    const result = await api.post<{ asset: { id: string; url: string } }>(
+      '/api/v1/content/media/from-url',
+      { url, alt: props.node.type === 'image' ? props.node.alt : undefined },
+    )
+    patchContent({ src: result.asset.url })
+    pasteUrl.value = ''
+  } catch (error) {
+    importError.value =
+      error instanceof ApiError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'Could not import that URL.'
+  } finally {
+    importBusy.value = false
+  }
+}
 
 const TAG_OPTIONS = [
   { value: 'p', label: 'Paragraph' },
@@ -203,6 +236,34 @@ const contentSummary = computed(() => {
               placeholder="https://…"
               @update:model-value="patchContent({ src: $event })"
             />
+          </UiField>
+          <UiField v-slot="{ id }" label="Paste URL">
+            <div class="flex flex-col gap-2">
+              <UiInput
+                :id="id"
+                :class="INPUT_CLASS"
+                :disabled="disabled || importBusy"
+                :model-value="pasteUrl"
+                placeholder="https://cdn.sanity.io/…"
+                @update:model-value="pasteUrl = $event"
+              />
+              <div class="flex flex-wrap gap-2">
+                <UiButton
+                  size="sm"
+                  variant="ghost"
+                  :disabled="disabled"
+                  @click="patchContent({ src: pasteUrl.trim() || (node.type === 'image' ? (node.src ?? '') : '') })"
+                >Use URL</UiButton>
+                <UiButton
+                  size="sm"
+                  variant="ghost"
+                  :loading="importBusy"
+                  :disabled="disabled"
+                  @click="importRemoteUrl"
+                >Import to library</UiButton>
+              </div>
+              <p v-if="importError" class="type-caption-12 text-danger">{{ importError }}</p>
+            </div>
           </UiField>
           <UiField
             v-slot="{ id, describedBy }"

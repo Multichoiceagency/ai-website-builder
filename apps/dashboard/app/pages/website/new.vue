@@ -237,6 +237,8 @@ watch(
   { immediate: true },
 )
 
+const freeformAi = computed(() => route.query.mode === 'ai')
+
 watch(
   () => route.query.blank,
   (value) => {
@@ -382,6 +384,7 @@ async function build() {
       style: 'auto',
       publish: false,
       siteName: name,
+      freeform: freeformAi.value,
     })
     activeSiteId.value = created.siteId
     phase.value = t.value.openingWebsite
@@ -390,7 +393,11 @@ async function build() {
     } catch {
       /* ignore */
     }
-    await navigateTo(`/pages/${created.homePageId}`)
+    await navigateTo(
+      freeformAi.value
+        ? `/pages/${created.homePageId}?mode=ai`
+        : `/pages/${created.homePageId}`,
+    )
   } catch (caught) {
     error.value = friendlyError(caught)
     building.value = false

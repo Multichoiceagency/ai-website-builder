@@ -21,12 +21,29 @@ const route = useRoute()
 const activeSiteId = useActiveSiteId()
 const { appendToDefaultPage } = useAppendBlocksToPage()
 
-withDefaults(defineProps<{ closable?: boolean }>(), { closable: false })
+interface CatalogueHit {
+  kind: 'block' | 'template'
+  id: string
+  name: string
+  category: string
+  collection: string
+  score?: number
+}
+
+const props = withDefaults(
+  defineProps<{
+    closable?: boolean
+    /** AI Freeform — no Motionsites / registry catalogue. */
+    freeformMode?: boolean
+  }>(),
+  { closable: false, freeformMode: false },
+)
 const emit = defineEmits<{
   close: []
   'insert-catalogue': [hit: CatalogueHit]
   /** Live canvas should adopt this theme after an assist width/layout action. */
   'theme-updated': [theme: Theme]
+  'insert-layout-canvas': []
 }>()
 
 type AssistActionPayload =
@@ -35,6 +52,8 @@ type AssistActionPayload =
   | { type: 'setHeaderLogo'; url: string }
   | { type: 'setHeaderLogoSize'; size: 'sm' | 'md' | 'lg' | 'xl' }
   | { type: 'insertBlock'; blockId: string }
+  | { type: 'insertLayoutCanvas'; title?: string }
+  | { type: 'replaceLayoutRoot'; sectionId: string; root: Record<string, unknown> }
   | { type: 'patchSectionProps'; sectionId: string; props: Record<string, unknown> }
 
 function friendlyAssistError(error: unknown): string {
@@ -181,8 +200,14 @@ async function applyAssistActions(actions: AssistActionPayload[] | undefined) {
         )
         await api.patch(`/api/v1/pages/${currentPageId.value}`, { sections })
         say('assistant', `Updated props on section \`${action.sectionId}\`.`)
+      } else if (action.type === 'insertLayoutCanvas') {
+        emit('insert-layout-canvas')
+        say('assistant', 'Added an Empty section (layout canvas).')
       } else if (action.type === 'insertBlock' && action.blockId) {
-        if (currentPageId.value) {
+        if (props.freeformMode && action.blockId !== 'layout-canvas-01') {
+          emit('insert-layout-canvas')
+          say('assistant', 'Added an Empty section (layout canvas).')
+        } else if (currentPageId.value) {
           emit('insert-catalogue', {
             kind: 'block',
             id: action.blockId,
@@ -200,15 +225,6 @@ async function applyAssistActions(actions: AssistActionPayload[] | undefined) {
       say('assistant', friendlyAssistError(error))
     }
   }
-}
-
-interface CatalogueHit {
-  kind: 'block' | 'template'
-  id: string
-  name: string
-  category: string
-  collection: string
-  score?: number
 }
 
 type Risk = 'low' | 'medium' | 'high'
@@ -436,7 +452,8 @@ async function finishWizard(answers: WizardAnswers) {
     try {
       const result = await api.post<{ answer: string; model: string }>('/api/v1/ai/assist', {
         message: brief.slice(0, 990),
-        includeCatalogue: true,
+        includeCatalogue: !props.freeformMode,
+        freeformMode: props.freeformMode,
       })
       modelNote = result.answer
     } catch {
@@ -584,7 +601,8 @@ async function submit() {
       actions?: { type: string; width?: string | number; blockId?: string }[]
     }>('/api/v1/ai/assist', {
       message: text,
-      includeCatalogue: true,
+      includeCatalogue: !props.freeformMode,
+      freeformMode: props.freeformMode,
     })
     thinking.value = false
     messages.value = messages.value.slice(0, -1)
@@ -636,7 +654,12 @@ async function submit() {
       <div v-if="!messages.length" class="pt-6 text-center">
         <p class="text-[0.9375rem] font-semibold text-ink">What should we build?</p>
         <p class="mx-auto mt-1.5 max-w-[16rem] text-[0.8125rem] leading-relaxed text-soft">
-          Say “create a landing page” — I’ll think, show a design preview, then ask choices A→Z.
+          <template v-if="freeformMode">
+            Describe the page in plain language — I’ll only use freeform layout trees (Empty section), never Motionsites or registry components.
+          </template>
+          <template v-else>
+            Say “create a landing page” — I’ll think, show a design preview, then ask choices A→Z.
+          </template>
         </p>
         <UiButton
           class="mt-4"

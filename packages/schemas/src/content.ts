@@ -145,6 +145,15 @@ export const mediaUploadQuerySchema = z.object({
 })
 export type MediaUploadQuery = z.infer<typeof mediaUploadQuerySchema>
 
+/** Server-fetch an allowlisted HTTPS image into the tenant media library. */
+export const mediaImportFromUrlInputSchema = z.object({
+  url: z.string().url().max(2_048),
+  alt: z.string().max(500).optional(),
+  folder: mediaFolderSchema.default(''),
+  tags: z.array(z.string().min(1).max(40)).max(20).optional(),
+})
+export type MediaImportFromUrlInput = z.infer<typeof mediaImportFromUrlInputSchema>
+
 export const updateMediaInputSchema = z
   .object({
     filename: z.string().min(1).max(300),

@@ -272,6 +272,11 @@ export const generateFromPromptInputSchema = z.object({
   publish: z.boolean().default(false),
   siteName: z.string().max(200).optional(),
   maxPerformanceClass: z.enum(['A', 'B', 'C', 'D']).default('B'),
+  /**
+   * When true, build only layout-canvas-01 trees (AI Freeform) — never Motionsites
+   * or registry component recipes. Opt in via `/website/new?mode=ai`.
+   */
+  freeform: z.boolean().default(false),
 })
 export type GenerateFromPromptInput = z.infer<typeof generateFromPromptInputSchema>
 
