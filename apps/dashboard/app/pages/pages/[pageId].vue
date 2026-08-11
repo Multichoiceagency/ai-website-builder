@@ -9,7 +9,12 @@ import {
 } from '@platform/templates'
 import {
   applyTemplateMotionTypes,
+  createDesignArtboardRoot,
+  createLayoutNode,
+  insertLayoutNode,
   isLayoutCanvasBlock,
+  setLayoutNodeFrame,
+  type LayoutContainerNode,
   type LayoutNode,
   type LayoutNodeType,
   type Page,
@@ -83,8 +88,11 @@ const zoom = ref(70)
 const { mode: builderMode, setMode: setBuilderMode } = useEditorBuilderMode()
 const interactive = computed(() => builderMode.value === 'interactive')
 const aiFreeform = computed(() => builderMode.value === 'ai')
+const designMode = computed(() => builderMode.value === 'design')
 /** Assistant-led layouts (interactive or AI Freeform). */
 const assistantLed = computed(() => interactive.value || aiFreeform.value)
+/** Freeform-only modes — no registry Insert marketplace. */
+const freeformOnly = computed(() => aiFreeform.value || designMode.value)
 
 /** Panel widths + open state persist per browser. */
 const leftWidth = ref(256)
@@ -136,10 +144,14 @@ watch(
 
 watch(builderMode, (next) => {
   if (next === 'interactive' || next === 'ai') {
-    // Assistant stays primary; properties open when a section is selected.
     leftOpen.value = true
     rightOpen.value = Boolean(selectedId.value)
     rightTab.value = selectedId.value ? 'style' : 'agent'
+  } else if (next === 'design') {
+    leftOpen.value = true
+    leftTab.value = 'layers'
+    rightOpen.value = true
+    rightTab.value = 'style'
   } else {
     leftOpen.value = true
     rightOpen.value = true
@@ -151,6 +163,7 @@ watch(
   () => route.query.mode,
   (value) => {
     if (value === 'ai') setBuilderMode('ai')
+    if (value === 'design') setBuilderMode('design')
   },
   { immediate: true },
 )
@@ -443,12 +456,12 @@ function insertBlockIds(
   },
   atIndex?: number,
 ) {
-  const blockIds = aiFreeform.value
+  const blockIds = freeformOnly.value
     ? payload.blockIds.filter((id) => isLayoutCanvasBlock(id))
     : payload.blockIds
   if (!blockIds.length) {
-    if (aiFreeform.value) {
-      errorMessage.value = 'AI Freeform only inserts Empty section (layout canvas).'
+    if (freeformOnly.value) {
+      errorMessage.value = 'This mode only inserts Empty section (layout canvas).'
     }
     return
   }
@@ -476,6 +489,123 @@ function insertEmptyLayoutCanvas() {
   message.value = 'Added Empty section.'
 }
 
+const designImportOpen = ref(false)
+const designOptimizeBusy = ref(false)
+
+function ensureDesignArtboard(): LayoutNode | null {
+  if (!selected.value || !isLayoutCanvasBlock(selected.value.block)) {
+    const root = createDesignArtboardRoot()
+    const section = createSection('layout-canvas-01', { root })
+    insertSections([section])
+    selectedId.value = section.id
+    return root
+  }
+  const root = layoutRoot.value
+  if (!root) return null
+  // Promote to artboard if still a flow empty section
+  if (!root.styles?.position || root.styles.position !== 'relative' || root.styles.width === '100%') {
+    const artboard = createDesignArtboardRoot()
+    artboard.children = root.type === 'container' ? [...(root.children ?? [])] : []
+    applyLayoutResult({ root: artboard, selectedNodeId: artboard.id })
+    return artboard
+  }
+  return root
+}
+
+function addDesignNode(type: LayoutNodeType) {
+  const root = ensureDesignArtboard()
+  if (!root || root.type !== 'container') return
+  const count = root.children?.length ?? 0
+  const node = createLayoutNode(type)
+  const withChild = insertLayoutNode(root, root.id, node)
+  const withFrame = setLayoutNodeFrame(withChild, node.id, {
+    left: `${40 + (count % 4) * 24}px`,
+    top: `${40 + (count % 4) * 24}px`,
+    width: type === 'text' ? '280px' : type === 'button' ? '140px' : '240px',
+    height: type === 'text' ? '48px' : type === 'button' ? '44px' : type === 'image' ? '160px' : '120px',
+  })
+  applyLayoutResult({ root: withFrame, selectedNodeId: node.id })
+  message.value = `Added ${type}.`
+}
+
+function onDesignCommitFrame(
+  id: string,
+  frame: { left: string; top: string; width: string; height: string },
+) {
+  const root = layoutRoot.value
+  if (!root) return
+  applyLayoutResult(layoutCanvas.setFrame(root, id, frame))
+}
+
+function onDesignImported(root: LayoutContainerNode) {
+  if (!selected.value || !isLayoutCanvasBlock(selected.value.block)) {
+    const section = createSection('layout-canvas-01', { root })
+    insertSections([section])
+    selectedId.value = section.id
+  } else {
+    applyLayoutResult({ root, selectedNodeId: root.id })
+  }
+  message.value = 'Imported into Design artboard.'
+}
+
+async function onDesignPaste(event: ClipboardEvent) {
+  if (!designMode.value || !can('page:write')) return
+  const html = event.clipboardData?.getData('text/html')
+  const text = event.clipboardData?.getData('text/plain')
+  if (!html && !text) return
+  // Don't steal paste from inputs
+  const target = event.target as HTMLElement | null
+  if (target?.closest?.('input, textarea, [contenteditable="true"]')) return
+  event.preventDefault()
+  try {
+    const result = await api.post<{ ok: true; root: LayoutContainerNode }>('/api/v1/ai/design-import', {
+      format: 'html',
+      html: html || `<p>${text}</p>`,
+    })
+    onDesignImported(result.root)
+  } catch (caught) {
+    errorMessage.value =
+      caught instanceof ApiError ? caught.message : 'Paste import failed. Try Import HTML.'
+  }
+}
+
+async function optimizeDesignWithAi() {
+  const root = layoutRoot.value
+  if (!root) {
+    errorMessage.value = 'Select an Empty section / artboard first.'
+    return
+  }
+  designOptimizeBusy.value = true
+  errorMessage.value = ''
+  try {
+    const result = await api.post<{ root: LayoutContainerNode; model: string }>(
+      '/api/v1/ai/design-optimize',
+      {
+        root,
+        instruction: 'Improve spacing, hierarchy, and readability while keeping absolute frames.',
+      },
+    )
+    applyLayoutResult({ root: result.root, selectedNodeId: result.root.id })
+    message.value = `Optimized (${result.model}).`
+  } catch (caught) {
+    errorMessage.value =
+      caught instanceof ApiError ? caught.message : 'Optimize failed.'
+  } finally {
+    designOptimizeBusy.value = false
+  }
+}
+
+onMounted(() => {
+  if (import.meta.client) {
+    window.addEventListener('paste', onDesignPaste)
+  }
+})
+onBeforeUnmount(() => {
+  if (import.meta.client) {
+    window.removeEventListener('paste', onDesignPaste)
+  }
+})
+
 /**
  * One-click insert from assistant catalogue hits (block registry or template recipe).
  */
@@ -492,6 +622,10 @@ async function onInsertCatalogue(hit: {
   try {
     if (aiFreeform.value && (hit.kind !== 'block' || !isLayoutCanvasBlock(hit.id))) {
       insertEmptyLayoutCanvas()
+      return
+    }
+    if (designMode.value && (hit.kind !== 'block' || !isLayoutCanvasBlock(hit.id))) {
+      ensureDesignArtboard()
       return
     }
     if (hit.kind === 'block') {
@@ -1196,6 +1330,16 @@ function selectFromPanel(id: string) {
           <Sparkles class="h-3.5 w-3.5" :stroke-width="ICON_STROKE" aria-hidden="true" />
           AI Freeform
         </button>
+        <button
+          type="button"
+          class="type-button-12 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 transition-colors"
+          :class="builderMode === 'design' ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
+          :aria-pressed="builderMode === 'design'"
+          title="Design — Figma-style artboard (absolute layout canvas)"
+          @click="setBuilderMode('design')"
+        >
+          Design
+        </button>
       </div>
 
       <div class="flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
@@ -1314,8 +1458,141 @@ function selectFromPanel(id: string) {
     </header>
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
+      <!-- Design: layers + artboard + properties (no registry) -->
+      <template v-else-if="designMode">
+        <aside
+          class="editor-chrome flex min-h-0 w-[260px] shrink-0 flex-col border-r border-line bg-paper"
+        >
+          <div class="flex shrink-0 flex-wrap gap-1 border-b border-line px-2 py-2">
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="addDesignNode('container')">Frame</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="addDesignNode('text')">Text</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="addDesignNode('image')">Image</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="addDesignNode('button')">Button</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="designImportOpen = true">Import</UiButton>
+            <UiButton
+              size="sm"
+              variant="ghost"
+              :loading="designOptimizeBusy"
+              :disabled="!can('page:write') || !isSelectedLayoutCanvas"
+              @click="optimizeDesignWithAi"
+            >Optimize AI</UiButton>
+          </div>
+          <div class="min-h-0 flex-1 overflow-hidden">
+            <EditorLayersPanel
+              :sections="sections"
+              :selected-id="selectedId"
+              :generating-ids="generatingIds"
+              :can-write="can('page:write')"
+              :structure-root="layoutRoot"
+              :selected-node-id="selectedLayoutNodeId"
+              @select="selectFromPanel"
+              @reorder="reorder"
+              @move="move"
+              @duplicate="duplicate"
+              @remove="remove"
+              @add="ensureDesignArtboard()"
+              @select-node="onSelectLayoutNode"
+              @add-child="onLayoutAddChild"
+              @duplicate-node="onLayoutDuplicateNode"
+              @remove-node="onLayoutRemoveNode"
+              @move-node="onLayoutMoveNode"
+            />
+          </div>
+        </aside>
+
+        <div data-editor-scroll class="relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas">
+          <p
+            v-if="message || errorMessage"
+            class="type-button-12 absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg px-3 py-1.5 shadow-raised"
+            :class="errorMessage ? 'bg-danger-soft text-danger' : 'bg-positive-soft text-positive'"
+            role="status"
+          >
+            {{ errorMessage || message }}
+          </p>
+
+          <DesignCanvasOverlay
+            v-if="layoutRoot"
+            class="min-h-full p-8"
+            :root="layoutRoot"
+            :selected-node-id="selectedLayoutNodeId"
+            :zoom="zoom"
+            :disabled="!can('page:write')"
+            @select="onSelectLayoutNode"
+            @commit-frame="onDesignCommitFrame"
+          >
+            <EditorCanvas
+              :sections="sections.filter((s) => isLayoutCanvasBlock(s.block))"
+              :theme="data.site.theme"
+              :selected-id="selectedId"
+              :selected-node-id="selectedLayoutNodeId"
+              :device="device"
+              :zoom="zoom"
+              :can-write="can('page:write')"
+              :generating-ids="generatingIds"
+              :brand-logo="brandLogo"
+              @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
+              @select-node="onSelectLayoutNode"
+              @reorder="reorder"
+              @move-up="move($event, -1)"
+              @move-down="move($event, 1)"
+              @duplicate="duplicate"
+              @remove="remove"
+              @ask-ai="askAi"
+              @library-drop="onLibraryDrop"
+              @open-insert="ensureDesignArtboard()"
+            />
+          </DesignCanvasOverlay>
+          <div
+            v-else
+            class="flex min-h-[20rem] flex-col items-center justify-center gap-3 p-8 text-center"
+          >
+            <p class="type-button text-ink">Start a Design artboard</p>
+            <p class="type-caption-12 max-w-sm text-soft">
+              Add a frame or import HTML / paste from Figma. Only basic layout nodes — no component marketplace.
+            </p>
+            <UiButton size="sm" variant="primary" :disabled="!can('page:write')" @click="ensureDesignArtboard()">
+              New artboard
+            </UiButton>
+          </div>
+        </div>
+
+        <aside
+          v-if="rightOpen"
+          class="editor-chrome flex min-h-0 shrink-0 flex-col border-l border-line bg-paper"
+          :style="{ width: `${rightWidth}px` }"
+        >
+          <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+            <span class="type-button-12 text-ink">Properties</span>
+            <button
+              type="button"
+              class="type-button-10 rounded-md px-2 py-1 text-faint hover:bg-sunken hover:text-ink"
+              @click="rightOpen = false"
+            >Close</button>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto p-4">
+            <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
+              <LayoutNodeInspector
+                :node="layoutSelectedNode"
+                :disabled="!can('page:write')"
+                :site-id="data.site.id"
+                @update="onLayoutNodePatch"
+                @update-styles="onLayoutNodeStyles"
+              />
+            </template>
+            <SiteDesignRail
+              v-else
+              :theme="data.site.theme"
+              :disabled="!can('page:write')"
+              @update:theme="patchSiteTheme"
+            />
+          </div>
+        </aside>
+
+        <DesignImportDialog v-model:open="designImportOpen" @imported="onDesignImported" />
+      </template>
+
       <!-- Assistant-led: Interactive or AI Freeform -->
-      <template v-if="assistantLed">
+      <template v-else-if="assistantLed">
         <aside
           class="editor-chrome flex min-h-0 shrink-0 flex-col border-r border-line bg-paper"
           :style="{ width: `${interactiveAssistantWidth}px` }"

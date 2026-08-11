@@ -10,8 +10,10 @@ import {
   duplicateLayoutNode,
   updateLayoutNode,
   updateLayoutNodeStyles,
+  setLayoutNodeFrame,
   DEFAULT_LAYOUT_CANVAS_ROOT,
   type LayoutNode,
+  type LayoutNodeFrame,
   type LayoutNodeType,
   type Section,
   type LayoutCanvasProps,
@@ -127,6 +129,10 @@ export function useLayoutCanvasSelection() {
     return { root: updateLayoutNodeStyles(root, id, styles) }
   }
 
+  function setFrame(root: LayoutNode, id: string, frame: LayoutNodeFrame): LayoutCanvasOpResult {
+    return { root: setLayoutNodeFrame(root, id, frame) }
+  }
+
   return {
     selectedNodeId,
     clearNodeSelection,
@@ -140,5 +146,6 @@ export function useLayoutCanvasSelection() {
     moveNodeDown,
     patchNode,
     patchStyles,
+    setFrame,
   }
 }

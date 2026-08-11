@@ -3,17 +3,23 @@
  * - classic — layers + canvas + properties
  * - interactive — Lovable-style assistant + live preview (may insert registry blocks)
  * - ai — AI Freeform: assistant + canvas; only layout-canvas trees (no component marketplace)
+ * - design — Figma-style artboard: layers + absolute canvas + properties (no registry)
  *
  * Persisted per browser so the next open remembers the choice.
  */
-export type EditorBuilderMode = 'classic' | 'interactive' | 'ai'
+export type EditorBuilderMode = 'classic' | 'interactive' | 'ai' | 'design'
 
 const STORAGE_KEY = 'editor:builder-mode'
 
 function readStoredMode(): EditorBuilderMode {
   if (!import.meta.client) return 'classic'
   const stored = localStorage.getItem(STORAGE_KEY)
-  return stored === 'interactive' || stored === 'classic' || stored === 'ai' ? stored : 'classic'
+  return stored === 'interactive' ||
+    stored === 'classic' ||
+    stored === 'ai' ||
+    stored === 'design'
+    ? stored
+    : 'classic'
 }
 
 export function useEditorBuilderMode() {

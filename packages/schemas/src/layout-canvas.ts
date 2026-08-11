@@ -22,6 +22,7 @@ export const LAYOUT_JUSTIFY = [
   'space-evenly',
 ] as const
 export const LAYOUT_ALIGN = ['stretch', 'flex-start', 'flex-end', 'center', 'baseline'] as const
+export const LAYOUT_POSITION = ['relative', 'absolute'] as const
 
 const cssLength = z.string().max(64)
 const cssColor = z.string().max(120)
@@ -42,6 +43,13 @@ export const layoutBoxStylesSchema = z.object({
   flexGrow: z.number().min(0).max(10).optional(),
   flexShrink: z.number().min(0).max(10).optional(),
   alignSelf: z.enum(LAYOUT_ALIGN).optional(),
+  /** Design-mode absolute placement (Figma-style artboard). */
+  position: z.enum(LAYOUT_POSITION).optional(),
+  left: cssLength.optional(),
+  top: cssLength.optional(),
+  right: cssLength.optional(),
+  bottom: cssLength.optional(),
+  zIndex: z.number().int().min(-999).max(9999).optional(),
 })
 
 /** Flex / grid layout styles — meaningful on containers. */
@@ -166,6 +174,45 @@ export const DEFAULT_LAYOUT_CANVAS_ROOT: LayoutContainerNode = {
     minHeight: '12rem',
   },
   children: [],
+}
+
+/** Design-mode artboard — relative root; children use absolute frames. */
+export const DEFAULT_DESIGN_ARTBOARD_ROOT: LayoutContainerNode = {
+  id: 'root',
+  type: 'container',
+  styles: {
+    position: 'relative',
+    display: 'block',
+    width: '1440px',
+    minHeight: '900px',
+    background: '#ffffff',
+  },
+  children: [],
+}
+
+export function createDesignArtboardRoot(): LayoutContainerNode {
+  return {
+    id: 'root',
+    type: 'container',
+    styles: { ...DEFAULT_DESIGN_ARTBOARD_ROOT.styles },
+    children: [],
+  }
+}
+
+export type LayoutNodeFrame = {
+  left?: string
+  top?: string
+  width?: string
+  height?: string
+  zIndex?: number
+}
+
+/** Parse a CSS length like `120px` / `12` to a number (px). */
+export function parseLayoutPx(value: string | undefined | null): number | null {
+  if (value == null || value === '') return null
+  const match = String(value).trim().match(/^(-?\d+(?:\.\d+)?)(px)?$/i)
+  if (!match) return null
+  return Number(match[1])
 }
 
 export const layoutCanvasPropsSchema = z.object({
@@ -309,6 +356,48 @@ export function updateLayoutNodeStyles(
       else next[key] = value
     }
     return { ...node, styles: next } as LayoutNode
+  })
+}
+
+function framePx(value: number | string | undefined): string | undefined {
+  if (value === undefined || value === '') return undefined
+  if (typeof value === 'number') return `${Math.round(value)}px`
+  return value
+}
+
+/**
+ * Set absolute frame on a node (Design mode). Always sets `position: absolute`
+ * except when updating the root artboard (still relative).
+ */
+export function setLayoutNodeFrame(
+  root: LayoutNode,
+  id: string,
+  frame: LayoutNodeFrame,
+): LayoutNode {
+  return rebuildLayoutTree(root, id, (node) => {
+    const styles: Record<string, unknown> = { ...(node.styles ?? {}) }
+    const isRoot = node.id === root.id
+    if (!isRoot) styles.position = 'absolute'
+    if (frame.left !== undefined) {
+      if (frame.left === '') delete styles.left
+      else styles.left = framePx(frame.left)
+    }
+    if (frame.top !== undefined) {
+      if (frame.top === '') delete styles.top
+      else styles.top = framePx(frame.top)
+    }
+    if (frame.width !== undefined) {
+      if (frame.width === '') delete styles.width
+      else styles.width = framePx(frame.width)
+    }
+    if (frame.height !== undefined) {
+      if (frame.height === '') delete styles.height
+      else styles.height = framePx(frame.height)
+    }
+    if (frame.zIndex !== undefined) {
+      styles.zIndex = frame.zIndex
+    }
+    return { ...node, styles } as LayoutNode
   })
 }
 

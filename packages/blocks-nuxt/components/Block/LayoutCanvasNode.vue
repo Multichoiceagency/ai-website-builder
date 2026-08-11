@@ -53,6 +53,10 @@ function boxCss(styles: AnyStyles): Record<string, string> {
     ['margin', 'margin'],
     ['background', 'background'],
     ['borderRadius', 'border-radius'],
+    ['left', 'left'],
+    ['top', 'top'],
+    ['right', 'right'],
+    ['bottom', 'bottom'],
   ]
   for (const [key, css] of map) {
     const value = styles[key as keyof typeof styles]
@@ -62,6 +66,8 @@ function boxCss(styles: AnyStyles): Record<string, string> {
   if (typeof styles.flexGrow === 'number') out['flex-grow'] = String(styles.flexGrow)
   if (typeof styles.flexShrink === 'number') out['flex-shrink'] = String(styles.flexShrink)
   if (styles.alignSelf) out['align-self'] = styles.alignSelf
+  if (styles.position) out.position = styles.position
+  if (typeof styles.zIndex === 'number') out['z-index'] = String(styles.zIndex)
   return out
 }
 
@@ -69,10 +75,10 @@ const containerStyle = computed(() => {
   if (props.node.type !== 'container') return {}
   const styles = props.node.styles
   const out: Record<string, string> = {
-    display: styles?.display ?? 'flex',
+    display: styles?.display ?? (styles?.position === 'absolute' ? 'block' : 'flex'),
     ...boxCss(styles),
   }
-  const display = styles?.display ?? 'flex'
+  const display = styles?.display ?? (styles?.position === 'absolute' ? 'block' : 'flex')
   if (display === 'flex' || display === 'grid') {
     if (display === 'flex') {
       out['flex-direction'] = styles?.flexDirection ?? 'column'

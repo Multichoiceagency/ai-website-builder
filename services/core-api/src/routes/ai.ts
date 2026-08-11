@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { AI_MODELS, generateComponentInputSchema, planAllowsModel, type AiModelAvailability } from '@platform/schemas'
 import { assistWithMessage } from '../lib/ai/assist.js'
+import { htmlToLayoutRoot } from '../lib/ai/design-import.js'
+import { optimizeDesignRoot } from '../lib/ai/design-optimize.js'
 import { loadAdminRegistry } from '../lib/ai/admin-template-registry.js'
 import { generateAdminTemplate } from '../lib/ai/generate-admin-template.js'
 import { generateComponent } from '../lib/ai/generate-component.js'
@@ -57,6 +59,18 @@ const adminTemplateBodySchema = z.object({
   save: z.boolean().default(true),
 })
 
+const designImportBodySchema = z.object({
+  format: z.enum(['html', 'fig']),
+  html: z.string().max(400_000).optional(),
+  /** Present for .fig uploads — v1 returns guidance only. */
+  filename: z.string().max(300).optional(),
+})
+
+const designOptimizeBodySchema = z.object({
+  root: z.unknown(),
+  instruction: z.string().trim().max(2_000).default('Improve spacing, hierarchy, and readability.'),
+})
+
 const aiRoutes: FastifyPluginAsync = async (app) => {
   app.get('/models', async (request, reply) => {
     const context = requireTenant(request, 'ai:use')
@@ -107,6 +121,64 @@ const aiRoutes: FastifyPluginAsync = async (app) => {
           ? 'The assistant returned an unreadable reply. Please try again.'
           : raw
       throw new AppError(502, 'ai_failed', message)
+    }
+  })
+
+  /**
+   * Design import — HTML (and phased .fig) → layout-canvas root only.
+   */
+  app.post('/design-import', async (request, reply) => {
+    requireTenant(request, 'ai:use')
+    const input = parseOrThrow(designImportBodySchema, request.body ?? {}, 'design-import')
+
+    if (input.format === 'fig') {
+      return reply.send(
+        ok({
+          ok: false as const,
+          code: 'fig_not_supported',
+          message:
+            'Native .fig files are not parsed in this version. Copy from Figma and paste on the Design artboard, or export/import HTML.',
+          hint: 'Preferred: select layers in Figma → Copy → Paste in Design mode, or Import HTML.',
+        }),
+      )
+    }
+
+    if (!input.html?.trim()) {
+      throw new AppError(400, 'invalid_body', 'Provide html for format "html".')
+    }
+
+    try {
+      const root = htmlToLayoutRoot(input.html)
+      return reply.send(ok({ ok: true as const, root }))
+    } catch (error) {
+      throw new AppError(
+        400,
+        'design_import_failed',
+        error instanceof Error ? error.message : 'Could not import that HTML.',
+      )
+    }
+  })
+
+  /**
+   * Design optimize — rewrite layout-canvas root (never registry blocks).
+   */
+  app.post('/design-optimize', async (request, reply) => {
+    requireTenant(request, 'ai:use')
+    const input = parseOrThrow(designOptimizeBodySchema, request.body ?? {}, 'design-optimize')
+
+    try {
+      const result = await optimizeDesignRoot({
+        root: input.root as Parameters<typeof optimizeDesignRoot>[0]['root'],
+        instruction: input.instruction,
+      })
+      return reply.send(ok(result))
+    } catch (error) {
+      if (error instanceof AppError) throw error
+      throw new AppError(
+        422,
+        'design_optimize_failed',
+        error instanceof Error ? error.message : 'Could not optimize that design.',
+      )
     }
   })
 

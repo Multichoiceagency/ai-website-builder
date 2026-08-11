@@ -121,6 +121,7 @@ const INPUT_CLASS =
 
 const openSections = ref({
   content: true,
+  frame: true,
   layout: true,
   spacing: true,
   appearance: true,
@@ -142,6 +143,24 @@ function styleStr(key: string): string {
   const value = styles.value[key]
   if (value === undefined || value === null) return ''
   return String(value)
+}
+
+const isAbsolute = computed(() => styleStr('position') === 'absolute')
+const frameSummary = computed(() => {
+  if (!isAbsolute.value) return styleStr('position') || 'flow'
+  const x = styleStr('left') || '—'
+  const y = styleStr('top') || '—'
+  return `${x} · ${y}`
+})
+
+function setFrameField(key: 'left' | 'top' | 'width' | 'height', raw: string) {
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    emit('update-styles', { [key]: '', position: 'absolute' })
+    return
+  }
+  const withPx = /^\d+(\.\d+)?$/.test(trimmed) ? `${trimmed}px` : trimmed
+  emit('update-styles', { [key]: withPx, position: 'absolute' })
 }
 
 const display = computed(() => styleStr('display'))
@@ -310,6 +329,92 @@ const contentSummary = computed(() => {
         >
           Container — add children in Structure
         </p>
+      </div>
+    </section>
+
+    <!-- Frame (Design absolute placement) -->
+    <section class="rounded-lg border border-line">
+      <button
+        type="button"
+        class="flex w-full cursor-pointer items-center gap-1.5 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/15 focus-visible:ring-inset"
+        :aria-expanded="openSections.frame"
+        @click="toggleSection('frame')"
+      >
+        <ChevronRight
+          class="h-3 w-3 shrink-0 text-faint transition-transform duration-150"
+          :class="openSections.frame ? 'rotate-90' : ''"
+          :stroke-width="2.25"
+          aria-hidden="true"
+        />
+        <h3 class="type-caption text-ink">Frame</h3>
+        <span class="type-button-10 ml-auto text-faint">{{ frameSummary }}</span>
+      </button>
+      <div v-show="openSections.frame" class="flex flex-col gap-3 border-t border-line px-3 py-3">
+        <UiField v-slot="{ id }" label="Position">
+          <UiSelect
+            :id="id"
+            :class="SELECT_CLASS"
+            :options="[
+              { value: '', label: 'Default (flow)' },
+              { value: 'relative', label: 'Relative' },
+              { value: 'absolute', label: 'Absolute' },
+            ]"
+            :model-value="styleStr('position')"
+            @update:model-value="setStyle('position', $event)"
+          />
+        </UiField>
+        <div class="grid grid-cols-2 gap-3">
+          <UiField v-slot="{ id }" label="X">
+            <UiInput
+              :id="id"
+              :class="INPUT_CLASS"
+              :disabled="disabled"
+              :model-value="styleStr('left')"
+              placeholder="0px"
+              @update:model-value="setFrameField('left', $event)"
+            />
+          </UiField>
+          <UiField v-slot="{ id }" label="Y">
+            <UiInput
+              :id="id"
+              :class="INPUT_CLASS"
+              :disabled="disabled"
+              :model-value="styleStr('top')"
+              placeholder="0px"
+              @update:model-value="setFrameField('top', $event)"
+            />
+          </UiField>
+          <UiField v-slot="{ id }" label="W">
+            <UiInput
+              :id="id"
+              :class="INPUT_CLASS"
+              :disabled="disabled"
+              :model-value="styleStr('width')"
+              placeholder="auto"
+              @update:model-value="setFrameField('width', $event)"
+            />
+          </UiField>
+          <UiField v-slot="{ id }" label="H">
+            <UiInput
+              :id="id"
+              :class="INPUT_CLASS"
+              :disabled="disabled"
+              :model-value="styleStr('height')"
+              placeholder="auto"
+              @update:model-value="setFrameField('height', $event)"
+            />
+          </UiField>
+        </div>
+        <UiField v-slot="{ id }" label="Z-index">
+          <UiInput
+            :id="id"
+            :class="INPUT_CLASS"
+            :disabled="disabled"
+            :model-value="styleStr('zIndex')"
+            placeholder="0"
+            @update:model-value="setStyleNumber('zIndex', $event)"
+          />
+        </UiField>
       </div>
     </section>
 
