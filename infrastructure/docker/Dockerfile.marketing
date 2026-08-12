@@ -7,7 +7,10 @@ RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY apps/marketing/package.json apps/marketing/
-RUN pnpm install --frozen-lockfile --filter @platform/marketing...
+# Coolify injects NODE_ENV=production into every stage (build-arg). That would
+# skip TypeScript/Tailwind (devDependencies) and break `next build`. Force a
+# full install for this RUN only (inline env beats injected ENV).
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false --filter @platform/marketing...
 
 FROM deps AS build
 COPY apps/marketing apps/marketing

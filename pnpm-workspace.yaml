@@ -6,6 +6,9 @@ packages:
 allowBuilds:
   # vitest's bundler — needs its postinstall to fetch the platform binary.
   esbuild: true
+  # Next.js (@platform/marketing) optional image pipeline — must be approved or
+  # pnpm 11 exits with ERR_PNPM_IGNORED_BUILDS and Coolify marketing builds fail.
+  sharp: true
   # Transitive of the shadcn-vue CLI (shadcn-vue -> reka-ui -> @floating-ui/vue).
   # Its postinstall only rewrites vue-demi to match the installed Vue major. We
   # never import or execute vue-demi — it arrives under a root devDependency and
