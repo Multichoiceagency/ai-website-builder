@@ -9,17 +9,25 @@ import type { LayoutNode, LayoutNodeType, Section } from '@platform/schemas'
  * When the selected section is a layout-canvas, Structure appears under the
  * list so nestable nodes share the same rail. Mutations are emitted only —
  * the page owns the document and undo history.
+ *
+ * Design variant: artboards only (layout-canvas) + Layers tree — no classic
+ * registry sections mixed into the freeform canvas.
  */
-const props = defineProps<{
-  sections: Section[]
-  selectedId: string | null
-  /** Sections whose copy / island is being generated — shown as a pulse. */
-  generatingIds: string[]
-  canWrite: boolean
-  /** Layout-canvas root when the selected section is freeform. */
-  structureRoot?: LayoutNode | null
-  selectedNodeId?: string | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    sections: Section[]
+    selectedId: string | null
+    /** Sections whose copy / island is being generated — shown as a pulse. */
+    generatingIds: string[]
+    canWrite: boolean
+    /** Layout-canvas root when the selected section is freeform. */
+    structureRoot?: LayoutNode | null
+    selectedNodeId?: string | null
+    /** Design = artboard/layers focus; classic = full page sections. */
+    variant?: 'classic' | 'design'
+  }>(),
+  { variant: 'classic' },
+)
 
 const emit = defineEmits<{
   select: [id: string]
@@ -67,11 +75,19 @@ function onDragEnd() {
 <template>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
     <div class="flex shrink-0 items-center justify-between px-3 py-2">
-      <span class="type-button-10 uppercase tracking-[0.08em] text-faint">Sections</span>
-      <UiButton v-if="canWrite" size="sm" variant="ghost" @click="emit('add')">+ Add</UiButton>
+      <span class="type-button-10 uppercase tracking-[0.08em] text-faint">
+        {{ variant === 'design' ? 'Artboards' : 'Sections' }}
+      </span>
+      <UiButton v-if="canWrite" size="sm" variant="ghost" @click="emit('add')">
+        {{ variant === 'design' ? '+ Artboard' : '+ Add' }}
+      </UiButton>
     </div>
 
-    <ul v-if="sections.length" class="min-h-0 shrink-0 overflow-y-auto px-1.5 pb-2" :class="structureRoot ? 'max-h-[40%]' : 'flex-1'">
+    <ul
+      v-if="sections.length"
+      class="min-h-0 shrink-0 overflow-y-auto px-1.5 pb-2"
+      :class="structureRoot ? (variant === 'design' ? 'max-h-[28%]' : 'max-h-[40%]') : 'flex-1'"
+    >
       <li
         v-for="(section, index) in sections"
         :key="section.id"
@@ -111,7 +127,7 @@ function onDragEnd() {
             class="type-button-12 min-w-0 flex-1 truncate rounded px-0.5 py-0.5 text-left"
             :class="section.id === selectedId ? 'text-brand' : 'text-ink'"
             @click="emit('select', section.id)"
-          >{{ labelFor(section) }}</button>
+          >{{ variant === 'design' ? 'Artboard' : labelFor(section) }}</button>
 
           <span class="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
             <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink disabled:opacity-25" :disabled="index === 0" aria-label="Move up" @click="emit('move', index, -1)">↑</button>
@@ -124,9 +140,11 @@ function onDragEnd() {
     </ul>
 
     <div v-else class="px-4 py-8 text-center">
-      <p class="text-[0.75rem] text-faint">No sections yet.</p>
+      <p class="text-[0.75rem] text-faint">
+        {{ variant === 'design' ? 'No artboard yet.' : 'No sections yet.' }}
+      </p>
       <UiButton v-if="canWrite" type="button" size="sm" class="mt-3" @click="emit('add')">
-        Add a section
+        {{ variant === 'design' ? 'Create artboard' : 'Add a section' }}
       </UiButton>
     </div>
 
@@ -138,6 +156,7 @@ function onDragEnd() {
         :root="structureRoot"
         :selected-node-id="selectedNodeId ?? null"
         :can-write="canWrite"
+        :layers-label="variant === 'design' ? 'Layers' : 'Structure'"
         @select-node="emit('select-node', $event)"
         @add-child="(parentId, type) => emit('add-child', parentId, type)"
         @duplicate="emit('duplicate-node', $event)"

@@ -36,7 +36,7 @@ function relative(iso: string): string {
 }
 
 function eur(value: number): string {
-  return new Intl.NumberFormat('nl-NL', {
+  return new Intl.NumberFormat('en-GB', {
     style: 'currency',
     currency: 'EUR',
     maximumFractionDigits: 0,

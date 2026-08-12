@@ -13,6 +13,8 @@ import {
   createLayoutNode,
   insertLayoutNode,
   isLayoutCanvasBlock,
+  layoutCanvasPropsSchema,
+  layoutNodeSchema,
   setLayoutNodeFrame,
   type LayoutContainerNode,
   type LayoutNode,
@@ -152,6 +154,18 @@ watch(builderMode, (next) => {
     leftTab.value = 'layers'
     rightOpen.value = true
     rightTab.value = 'style'
+    nextTick(() => {
+      if (!data.value) return
+      if (can('page:write')) {
+        const root = ensureDesignArtboard()
+        if (root && !layoutCanvas.selectedNodeId.value) {
+          layoutCanvas.selectedNodeId.value = root.id
+        }
+      } else {
+        const first = sections.value.find((section) => isLayoutCanvasBlock(section.block))
+        if (first) selectedId.value = first.id
+      }
+    })
   } else {
     leftOpen.value = true
     rightOpen.value = true
@@ -295,6 +309,120 @@ function onLayoutNodeStyles(styles: Record<string, unknown>) {
   const id = layoutCanvas.selectedNodeId.value
   if (!root || !id) return
   applyLayoutResult(layoutCanvas.patchStyles(root, id, styles))
+}
+
+function onLayoutNodeHoverStyles(styles: Record<string, unknown>) {
+  const root = layoutRoot.value
+  const id = layoutCanvas.selectedNodeId.value
+  if (!root || !id) return
+  applyLayoutResult(layoutCanvas.patchHoverStyles(root, id, styles))
+}
+
+function onDesignNudge(id: string, dx: number, dy: number) {
+  const root = layoutRoot.value
+  if (!root) return
+  applyLayoutResult(layoutCanvas.nudge(root, id, dx, dy))
+}
+
+function onDesignAlign(id: string, alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
+  const root = layoutRoot.value
+  if (!root) return
+  applyLayoutResult(layoutCanvas.alignInParent(root, id, alignment))
+}
+
+function onDesignBumpZ(id: string, delta: number) {
+  const root = layoutRoot.value
+  if (!root) return
+  applyLayoutResult(layoutCanvas.bumpZ(root, id, delta))
+}
+
+function alignSelected(alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
+  const id = layoutCanvas.selectedNodeId.value
+  if (!id) return
+  onDesignAlign(id, alignment)
+}
+
+function bumpSelectedZ(delta: number) {
+  const id = layoutCanvas.selectedNodeId.value
+  if (!id) return
+  onDesignBumpZ(id, delta)
+}
+
+const assistDraftMessage = ref('')
+const assistLayoutContext = computed(() => {
+  if (!freeformOnly.value || !selected.value || !isLayoutCanvasBlock(selected.value.block)) return null
+  return {
+    sectionId: selected.value.id,
+    selectedNodeId: layoutCanvas.selectedNodeId.value ?? undefined,
+    selectedNode: layoutSelectedNode.value ?? undefined,
+  }
+})
+
+function onEditLayoutNodeWithAi() {
+  const node = layoutSelectedNode.value
+  if (!node) return
+  rightTab.value = 'agent'
+  rightOpen.value = true
+  const text = `Modify the selected ${node.type} node (${node.id}): improve visual hierarchy, spacing, and hover styles while keeping its purpose.`
+  assistDraftMessage.value = ''
+  nextTick(() => {
+    assistDraftMessage.value = text
+  })
+}
+
+function onAssistLayoutAction(
+  action:
+    | { type: 'replaceLayoutRoot'; sectionId: string; root: Record<string, unknown> }
+    | {
+        type: 'patchLayoutNode'
+        sectionId: string
+        nodeId: string
+        patch?: Record<string, unknown>
+        styles?: Record<string, unknown>
+        stylesHover?: Record<string, unknown>
+      }
+    | { type: 'replaceLayoutSubtree'; sectionId: string; nodeId: string; node: Record<string, unknown> },
+) {
+  const section = sections.value.find((entry) => entry.id === action.sectionId)
+  if (!section || !isLayoutCanvasBlock(section.block)) {
+    errorMessage.value = 'Layout action targets a missing layout-canvas section.'
+    return
+  }
+  const currentRoot = layoutCanvas.rootOf(section)
+  if (!currentRoot) return
+
+  try {
+    if (action.type === 'replaceLayoutRoot') {
+      const validated = layoutCanvasPropsSchema.parse({ root: action.root })
+      selectedId.value = action.sectionId
+      applyLayoutResult({ root: validated.root, selectedNodeId: validated.root.id })
+      message.value = 'Artboard replaced by AI.'
+      return
+    }
+    if (action.type === 'patchLayoutNode') {
+      let next = currentRoot
+      if (action.patch && Object.keys(action.patch).length) {
+        next = layoutCanvas.patchNode(next, action.nodeId, action.patch as Partial<LayoutNode>).root
+      }
+      if (action.styles && Object.keys(action.styles).length) {
+        next = layoutCanvas.patchStyles(next, action.nodeId, action.styles).root
+      }
+      if (action.stylesHover && Object.keys(action.stylesHover).length) {
+        next = layoutCanvas.patchHoverStyles(next, action.nodeId, action.stylesHover).root
+      }
+      selectedId.value = action.sectionId
+      applyLayoutResult({ root: next, selectedNodeId: action.nodeId })
+      message.value = 'Node updated by AI.'
+      return
+    }
+    const node = layoutNodeSchema.parse({ ...action.node, id: action.nodeId })
+    selectedId.value = action.sectionId
+    applyLayoutResult(layoutCanvas.replaceSubtree(currentRoot, action.nodeId, node))
+    message.value = 'Subtree replaced by AI.'
+  } catch (caught) {
+    errorMessage.value =
+      caught instanceof Error ? caught.message : 'Could not apply that layout action.'
+  }
 }
 
 function labelFor(section: Section): string {
@@ -491,6 +619,9 @@ function insertEmptyLayoutCanvas() {
 
 const designImportOpen = ref(false)
 const designOptimizeBusy = ref(false)
+const designGenerateOpen = ref(false)
+const designGenerateBusy = ref(false)
+const designGeneratePrompt = ref('')
 
 function ensureDesignArtboard(): LayoutNode | null {
   if (!selected.value || !isLayoutCanvasBlock(selected.value.block)) {
@@ -513,19 +644,179 @@ function ensureDesignArtboard(): LayoutNode | null {
 }
 
 function addDesignNode(type: LayoutNodeType) {
+  addDesignPreset(
+    type === 'container'
+      ? 'frame'
+      : type === 'text'
+        ? 'text'
+        : type === 'image'
+          ? 'image'
+          : 'button',
+  )
+}
+
+type DesignPreset =
+  | 'frame'
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'heading'
+  | 'text'
+  | 'image'
+  | 'button'
+
+function addDesignPreset(preset: DesignPreset) {
   const root = ensureDesignArtboard()
   if (!root || root.type !== 'container') return
   const count = root.children?.length ?? 0
-  const node = createLayoutNode(type)
+  const offset = `${40 + (count % 5) * 28}px`
+
+  let node = createLayoutNode(
+    preset === 'heading' || preset === 'text'
+      ? 'text'
+      : preset === 'image'
+        ? 'image'
+        : preset === 'button'
+          ? 'button'
+          : 'container',
+  )
+
+  let width = '240px'
+  let height = '120px'
+
+  if (node.type === 'container') {
+    if (preset === 'frame') {
+      node.styles = {
+        ...(node.styles ?? {}),
+        background: 'transparent',
+        borderWidth: '1px',
+        borderStyle: 'dashed',
+        borderColor: '#cbd5e1',
+        padding: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+      }
+      width = '320px'
+      height = '200px'
+    } else if (preset === 'rectangle') {
+      node.styles = {
+        background: '#e2e8f0',
+        borderRadius: '8px',
+      }
+      width = '200px'
+      height = '120px'
+    } else if (preset === 'ellipse') {
+      node.styles = {
+        background: '#e2e8f0',
+        borderRadius: '9999px',
+      }
+      width = '140px'
+      height = '140px'
+    } else if (preset === 'line') {
+      node.styles = {
+        background: '#94a3b8',
+        borderRadius: '1px',
+      }
+      width = '240px'
+      height = '2px'
+    }
+  } else if (node.type === 'text') {
+    if (preset === 'heading') {
+      node.tag = 'h1'
+      node.content = 'Heading'
+      node.styles = {
+        fontSize: '2rem',
+        fontWeight: '700',
+        color: '#0f172a',
+        letterSpacing: '-0.02em',
+        lineHeight: '1.2',
+      }
+      width = '420px'
+      height = '56px'
+    } else {
+      node.tag = 'p'
+      node.content = 'Double-click properties to edit this text.'
+      node.styles = {
+        fontSize: '1rem',
+        color: '#334155',
+        lineHeight: '1.6',
+      }
+      width = '320px'
+      height = '48px'
+    }
+  } else if (node.type === 'image') {
+    node.alt = 'Image'
+    node.styles = {
+      background: '#f1f5f9',
+      objectFit: 'cover',
+      borderRadius: '8px',
+    }
+    width = '280px'
+    height = '180px'
+  } else if (node.type === 'button') {
+    node.label = 'Button'
+    node.styles = {
+      background: '#0f172a',
+      color: '#fff',
+      paddingTop: '0.65rem',
+      paddingRight: '1.1rem',
+      paddingBottom: '0.65rem',
+      paddingLeft: '1.1rem',
+      borderRadius: '0.5rem',
+      fontWeight: '600',
+      cursor: 'pointer',
+      textAlign: 'center',
+    }
+    node.stylesHover = { background: '#1e293b' }
+    width = '140px'
+    height = '44px'
+  }
+
   const withChild = insertLayoutNode(root, root.id, node)
   const withFrame = setLayoutNodeFrame(withChild, node.id, {
-    left: `${40 + (count % 4) * 24}px`,
-    top: `${40 + (count % 4) * 24}px`,
-    width: type === 'text' ? '280px' : type === 'button' ? '140px' : '240px',
-    height: type === 'text' ? '48px' : type === 'button' ? '44px' : type === 'image' ? '160px' : '120px',
+    left: offset,
+    top: offset,
+    width,
+    height,
   })
   applyLayoutResult({ root: withFrame, selectedNodeId: node.id })
-  message.value = `Added ${type}.`
+  message.value = `Added ${preset}.`
+}
+
+const designSections = computed(() =>
+  sections.value.filter((section) => isLayoutCanvasBlock(section.block)),
+)
+
+function designIndexToPage(index: number): number {
+  const section = designSections.value[index]
+  if (!section) return -1
+  return sections.value.findIndex((entry) => entry.id === section.id)
+}
+
+function onDesignReorder(from: number, to: number) {
+  const fromI = designIndexToPage(from)
+  const toI = designIndexToPage(to)
+  if (fromI < 0 || toI < 0) return
+  reorder(fromI, toI)
+}
+
+function onDesignMove(index: number, delta: number) {
+  const pageIndex = designIndexToPage(index)
+  if (pageIndex < 0) return
+  move(pageIndex, delta)
+}
+
+function onDesignDuplicate(index: number) {
+  const pageIndex = designIndexToPage(index)
+  if (pageIndex < 0) return
+  duplicate(pageIndex)
+}
+
+function onDesignRemove(index: number) {
+  const pageIndex = designIndexToPage(index)
+  if (pageIndex < 0) return
+  remove(pageIndex)
 }
 
 function onDesignCommitFrame(
@@ -592,6 +883,33 @@ async function optimizeDesignWithAi() {
       caught instanceof ApiError ? caught.message : 'Optimize failed.'
   } finally {
     designOptimizeBusy.value = false
+  }
+}
+
+async function generateDesignWithAi() {
+  const prompt = designGeneratePrompt.value.trim()
+  if (!prompt) {
+    errorMessage.value = 'Describe the artboard you want to generate.'
+    return
+  }
+  ensureDesignArtboard()
+  const root = layoutRoot.value
+  designGenerateBusy.value = true
+  errorMessage.value = ''
+  try {
+    const result = await api.post<{ root: LayoutContainerNode; model: string }>(
+      '/api/v1/ai/design-generate',
+      { prompt, root: root ?? undefined },
+    )
+    applyLayoutResult({ root: result.root, selectedNodeId: result.root.id })
+    message.value = `Generated (${result.model}).`
+    designGenerateOpen.value = false
+    designGeneratePrompt.value = ''
+  } catch (caught) {
+    errorMessage.value =
+      caught instanceof ApiError ? caught.message : 'Generate failed.'
+  } finally {
+    designGenerateBusy.value = false
   }
 }
 
@@ -828,6 +1146,24 @@ function onKeydown(event: KeyboardEvent) {
   if (modifier && event.key.toLowerCase() === 's') {
     event.preventDefault()
     if (dirty.value) void save()
+    return
+  }
+
+  if (modifier && (event.key === '=' || event.key === '+' || event.code === 'Equal')) {
+    event.preventDefault()
+    nudgeZoom(10)
+    return
+  }
+
+  if (modifier && (event.key === '-' || event.code === 'Minus')) {
+    event.preventDefault()
+    nudgeZoom(-10)
+    return
+  }
+
+  if (modifier && event.key === '0') {
+    event.preventDefault()
+    zoom.value = 100
     return
   }
 
@@ -1221,7 +1557,40 @@ async function openLiveView() {
   if (import.meta.client) window.open(liveUrl.value, '_blank', 'noopener,noreferrer')
 }
 
-const ZOOM_STEPS = [50, 70, 100, 125]
+const ZOOM_MIN = 25
+const ZOOM_MAX = 200
+const ZOOM_STEPS = [25, 50, 70, 100, 125, 150, 200]
+
+function clampZoom(value: number): number {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value)))
+}
+
+/** Figma-style: ⌘/Ctrl + scroll (and trackpad pinch) zooms the artboard. */
+function onDesignCanvasWheel(event: WheelEvent) {
+  if (!designMode.value) return
+  if (!(event.ctrlKey || event.metaKey)) return
+  event.preventDefault()
+  const intensity = Math.min(24, Math.abs(event.deltaY))
+  const step = Math.max(3, Math.round(intensity * 0.35))
+  const direction = event.deltaY > 0 ? -1 : 1
+  zoom.value = clampZoom(zoom.value + direction * step)
+}
+
+const designCanvasScrollEl = ref<HTMLElement | null>(null)
+
+watch(
+  [designMode, designCanvasScrollEl],
+  ([on, el], _prev, onCleanup) => {
+    if (!import.meta.client || !on || !el) return
+    el.addEventListener('wheel', onDesignCanvasWheel, { passive: false })
+    onCleanup(() => el.removeEventListener('wheel', onDesignCanvasWheel))
+  },
+)
+
+function nudgeZoom(delta: number) {
+  zoom.value = clampZoom(zoom.value + delta)
+}
+
 const DEVICES = [
   { id: 'desktop', label: 'Desktop', icon: Monitor },
   { id: 'tablet', label: 'Tablet', icon: Tablet },
@@ -1406,13 +1775,31 @@ function selectFromPanel(id: string) {
         </button>
       </div>
 
-      <select
-        v-model.number="zoom"
-        class="type-button-12 h-7 rounded-md border border-line bg-raised px-1.5 tabular-nums text-soft"
-        aria-label="Zoom"
-      >
-        <option v-for="step in ZOOM_STEPS" :key="step" :value="step">{{ step }}%</option>
-      </select>
+      <div class="flex items-center gap-1">
+        <button
+          type="button"
+          class="type-button-12 grid h-7 w-7 place-items-center rounded-md border border-line bg-raised text-soft hover:text-ink"
+          title="Zoom out (⌘-)"
+          aria-label="Zoom out"
+          @click="nudgeZoom(-10)"
+        >−</button>
+        <select
+          v-model.number="zoom"
+          class="type-button-12 h-7 rounded-md border border-line bg-raised px-1.5 tabular-nums text-soft"
+          aria-label="Zoom"
+          title="⌘ scroll to zoom"
+        >
+          <option v-if="!ZOOM_STEPS.includes(zoom)" :value="zoom">{{ zoom }}%</option>
+          <option v-for="step in ZOOM_STEPS" :key="step" :value="step">{{ step }}%</option>
+        </select>
+        <button
+          type="button"
+          class="type-button-12 grid h-7 w-7 place-items-center rounded-md border border-line bg-raised text-soft hover:text-ink"
+          title="Zoom in (⌘+)"
+          aria-label="Zoom in"
+          @click="nudgeZoom(10)"
+        >+</button>
+      </div>
 
       <!-- Page title and SEO live beside the zoom control now: they belong to
            the page, not to the layer list they used to sit under. Guarded by
@@ -1463,33 +1850,62 @@ function selectFromPanel(id: string) {
         <aside
           class="editor-chrome flex min-h-0 w-[260px] shrink-0 flex-col border-r border-line bg-paper"
         >
-          <div class="flex shrink-0 flex-wrap gap-1 border-b border-line px-2 py-2">
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="addDesignNode('container')">Frame</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="addDesignNode('text')">Text</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="addDesignNode('image')">Image</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="addDesignNode('button')">Button</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="designImportOpen = true">Import</UiButton>
-            <UiButton
-              size="sm"
-              variant="ghost"
-              :loading="designOptimizeBusy"
-              :disabled="!can('page:write') || !isSelectedLayoutCanvas"
-              @click="optimizeDesignWithAi"
-            >Optimize AI</UiButton>
+          <div class="flex shrink-0 flex-col gap-1.5 border-b border-line px-2 py-2">
+            <p class="type-button-10 px-0.5 uppercase tracking-[0.06em] text-faint">Insert</p>
+            <div class="flex flex-wrap gap-1">
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Frame" @click="addDesignPreset('frame')">Frame</UiButton>
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Rectangle" @click="addDesignPreset('rectangle')">Rect</UiButton>
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Ellipse" @click="addDesignPreset('ellipse')">Ellipse</UiButton>
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Line" @click="addDesignPreset('line')">Line</UiButton>
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Heading" @click="addDesignPreset('heading')">H1</UiButton>
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Text" @click="addDesignPreset('text')">Text</UiButton>
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Image" @click="addDesignPreset('image')">Image</UiButton>
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Button" @click="addDesignPreset('button')">Button</UiButton>
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="designImportOpen = true">Import</UiButton>
+              <UiButton
+                size="sm"
+                variant="ghost"
+                :disabled="!can('page:write')"
+                @click="designGenerateOpen = true"
+              >Generate AI</UiButton>
+              <UiButton
+                size="sm"
+                variant="ghost"
+                :loading="designOptimizeBusy"
+                :disabled="!can('page:write') || !isSelectedLayoutCanvas"
+                @click="optimizeDesignWithAi"
+              >Optimize AI</UiButton>
+            </div>
+          </div>
+          <div
+            v-if="selectedLayoutNodeId && selectedLayoutNodeId !== layoutRoot?.id"
+            class="flex shrink-0 flex-wrap gap-1 border-b border-line px-2 py-1.5"
+          >
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align left" @click="alignSelected('left')">L</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align center" @click="alignSelected('center')">C</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align right" @click="alignSelected('right')">R</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align top" @click="alignSelected('top')">T</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align middle" @click="alignSelected('middle')">M</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align bottom" @click="alignSelected('bottom')">B</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Bring forward (⌘])" @click="bumpSelectedZ(1)">↑Z</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Send backward (⌘[)" @click="bumpSelectedZ(-1)">↓Z</UiButton>
           </div>
           <div class="min-h-0 flex-1 overflow-hidden">
             <EditorLayersPanel
-              :sections="sections"
+              variant="design"
+              :sections="designSections"
               :selected-id="selectedId"
               :generating-ids="generatingIds"
               :can-write="can('page:write')"
               :structure-root="layoutRoot"
               :selected-node-id="selectedLayoutNodeId"
               @select="selectFromPanel"
-              @reorder="reorder"
-              @move="move"
-              @duplicate="duplicate"
-              @remove="remove"
+              @reorder="onDesignReorder"
+              @move="onDesignMove"
+              @duplicate="onDesignDuplicate"
+              @remove="onDesignRemove"
               @add="ensureDesignArtboard()"
               @select-node="onSelectLayoutNode"
               @add-child="onLayoutAddChild"
@@ -1500,7 +1916,11 @@ function selectFromPanel(id: string) {
           </div>
         </aside>
 
-        <div data-editor-scroll class="relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas">
+        <div
+          ref="designCanvasScrollEl"
+          data-editor-scroll
+          class="relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas"
+        >
           <p
             v-if="message || errorMessage"
             class="type-button-12 absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg px-3 py-1.5 shadow-raised"
@@ -1519,9 +1939,12 @@ function selectFromPanel(id: string) {
             :disabled="!can('page:write')"
             @select="onSelectLayoutNode"
             @commit-frame="onDesignCommitFrame"
+            @nudge="onDesignNudge"
+            @align="onDesignAlign"
+            @bump-z="onDesignBumpZ"
           >
             <EditorCanvas
-              :sections="sections.filter((s) => isLayoutCanvasBlock(s.block))"
+              :sections="designSections"
               :theme="data.site.theme"
               :selected-id="selectedId"
               :selected-node-id="selectedLayoutNodeId"
@@ -1530,13 +1953,14 @@ function selectFromPanel(id: string) {
               :can-write="can('page:write')"
               :generating-ids="generatingIds"
               :brand-logo="brandLogo"
+              :hide-section-toolbar="true"
               @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
               @select-node="onSelectLayoutNode"
-              @reorder="reorder"
-              @move-up="move($event, -1)"
-              @move-down="move($event, 1)"
-              @duplicate="duplicate"
-              @remove="remove"
+              @reorder="onDesignReorder"
+              @move-up="onDesignMove($event, -1)"
+              @move-down="onDesignMove($event, 1)"
+              @duplicate="onDesignDuplicate"
+              @remove="onDesignRemove"
               @ask-ai="askAi"
               @library-drop="onLibraryDrop"
               @open-insert="ensureDesignArtboard()"
@@ -1548,11 +1972,15 @@ function selectFromPanel(id: string) {
           >
             <p class="type-button text-ink">Start a Design artboard</p>
             <p class="type-caption-12 max-w-sm text-soft">
-              Add a frame or import HTML / paste from Figma. Only basic layout nodes — no component marketplace.
+              Insert Frame, Text, Image, or Button — or Generate with AI. Classic page sections stay in Editor mode.
             </p>
-            <UiButton size="sm" variant="primary" :disabled="!can('page:write')" @click="ensureDesignArtboard()">
-              New artboard
-            </UiButton>
+            <div class="flex flex-wrap justify-center gap-2">
+              <UiButton size="sm" :disabled="!can('page:write')" @click="addDesignPreset('frame')">Add Frame</UiButton>
+              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="designGenerateOpen = true">Generate AI</UiButton>
+              <UiButton size="sm" variant="primary" :disabled="!can('page:write')" @click="ensureDesignArtboard()">
+                New artboard
+              </UiButton>
+            </div>
           </div>
         </div>
 
@@ -1562,21 +1990,25 @@ function selectFromPanel(id: string) {
           :style="{ width: `${rightWidth}px` }"
         >
           <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-            <span class="type-button-12 text-ink">Properties</span>
+            <span class="type-button-12 text-ink">Design</span>
             <button
               type="button"
               class="type-button-10 rounded-md px-2 py-1 text-faint hover:bg-sunken hover:text-ink"
               @click="rightOpen = false"
             >Close</button>
           </div>
-          <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <div class="min-h-0 flex-1 overflow-y-auto p-2">
             <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
               <LayoutNodeInspector
+                variant="design"
                 :node="layoutSelectedNode"
                 :disabled="!can('page:write')"
                 :site-id="data.site.id"
+                :show-ai-edit="true"
                 @update="onLayoutNodePatch"
                 @update-styles="onLayoutNodeStyles"
+                @update-hover-styles="onLayoutNodeHoverStyles"
+                @edit-with-ai="onEditLayoutNodeWithAi"
               />
             </template>
             <SiteDesignRail
@@ -1589,6 +2021,30 @@ function selectFromPanel(id: string) {
         </aside>
 
         <DesignImportDialog v-model:open="designImportOpen" @imported="onDesignImported" />
+
+        <div
+          v-if="designGenerateOpen"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Generate artboard with AI"
+        >
+          <div class="w-full max-w-md rounded-xl border border-line bg-paper p-4 shadow-raised">
+            <h2 class="type-button text-ink">Generate artboard</h2>
+            <p class="type-caption-12 mt-1 text-soft">Describe the page composition. Replaces the current Design artboard.</p>
+            <UiTextarea
+              class="mt-3"
+              :rows="4"
+              :model-value="designGeneratePrompt"
+              placeholder="Hero for a fitness studio: bold headline, short subcopy, dark CTA…"
+              @update:model-value="designGeneratePrompt = $event"
+            />
+            <div class="mt-3 flex justify-end gap-2">
+              <UiButton size="sm" variant="ghost" :disabled="designGenerateBusy" @click="designGenerateOpen = false">Cancel</UiButton>
+              <UiButton size="sm" variant="primary" :loading="designGenerateBusy" @click="generateDesignWithAi">Generate</UiButton>
+            </div>
+          </div>
+        </div>
       </template>
 
       <!-- Assistant-led: Interactive or AI Freeform -->
@@ -1599,9 +2055,12 @@ function selectFromPanel(id: string) {
         >
           <AssistantPanel
             :freeform-mode="aiFreeform"
+            :layout-context="assistLayoutContext"
+            :draft-message="assistDraftMessage"
             @insert-catalogue="onInsertCatalogue"
             @theme-updated="applyThemeLocal"
             @insert-layout-canvas="insertEmptyLayoutCanvas"
+            @layout-action="onAssistLayoutAction"
           />
         </aside>
 
@@ -1724,16 +2183,20 @@ function selectFromPanel(id: string) {
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto p-4">
             <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
-              <div class="mb-4 border-b border-line pb-3">
+              <div v-if="!aiFreeform" class="mb-4 border-b border-line pb-3">
                 <h2 class="type-button text-ink">{{ selectedBlock?.name ?? 'Empty section' }}</h2>
                 <p class="type-caption-12 mt-1 leading-relaxed text-soft">Edit the selected layout node.</p>
               </div>
               <LayoutNodeInspector
+                :variant="aiFreeform ? 'design' : 'classic'"
                 :node="layoutSelectedNode"
                 :disabled="!can('page:write')"
                 :site-id="data.site.id"
+                :show-ai-edit="aiFreeform"
                 @update="onLayoutNodePatch"
                 @update-styles="onLayoutNodeStyles"
+                @update-hover-styles="onLayoutNodeHoverStyles"
+                @edit-with-ai="onEditLayoutNodeWithAi"
               />
             </template>
             <template v-else-if="selected && selectedBlock && !aiFreeform">
@@ -1921,16 +2384,20 @@ function selectFromPanel(id: string) {
 
         <div v-if="rightTab === 'style'" class="min-h-0 flex-1 overflow-y-auto p-4">
           <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
-            <div class="mb-4 border-b border-line pb-3">
+            <div v-if="!freeformOnly" class="mb-4 border-b border-line pb-3">
               <h2 class="type-button text-ink">{{ selectedBlock?.name ?? 'Empty section' }}</h2>
               <p class="type-caption-12 mt-1 leading-relaxed text-soft">Edit the selected layout node.</p>
             </div>
             <LayoutNodeInspector
+              :variant="freeformOnly ? 'design' : 'classic'"
               :node="layoutSelectedNode"
               :disabled="!can('page:write')"
               :site-id="data.site.id"
+              :show-ai-edit="freeformOnly"
               @update="onLayoutNodePatch"
               @update-styles="onLayoutNodeStyles"
+              @update-hover-styles="onLayoutNodeHoverStyles"
+              @edit-with-ai="onEditLayoutNodeWithAi"
             />
           </template>
           <template v-else-if="selected && selectedBlock">

@@ -10,7 +10,12 @@ import {
   duplicateLayoutNode,
   updateLayoutNode,
   updateLayoutNodeStyles,
+  updateLayoutNodeHoverStyles,
   setLayoutNodeFrame,
+  alignLayoutNodeInParent,
+  nudgeLayoutNode,
+  bumpLayoutNodeZIndex,
+  replaceLayoutSubtree,
   DEFAULT_LAYOUT_CANVAS_ROOT,
   type LayoutNode,
   type LayoutNodeFrame,
@@ -129,8 +134,46 @@ export function useLayoutCanvasSelection() {
     return { root: updateLayoutNodeStyles(root, id, styles) }
   }
 
+  function patchHoverStyles(
+    root: LayoutNode,
+    id: string,
+    styles: Record<string, unknown>,
+  ): LayoutCanvasOpResult {
+    return { root: updateLayoutNodeHoverStyles(root, id, styles) }
+  }
+
   function setFrame(root: LayoutNode, id: string, frame: LayoutNodeFrame): LayoutCanvasOpResult {
     return { root: setLayoutNodeFrame(root, id, frame) }
+  }
+
+  function alignInParent(
+    root: LayoutNode,
+    id: string,
+    alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom',
+    parentSize?: { width: number; height: number },
+  ): LayoutCanvasOpResult {
+    return { root: alignLayoutNodeInParent(root, id, alignment, parentSize) }
+  }
+
+  function nudge(
+    root: LayoutNode,
+    id: string,
+    dx: number,
+    dy: number,
+  ): LayoutCanvasOpResult {
+    return { root: nudgeLayoutNode(root, id, dx, dy) }
+  }
+
+  function bumpZ(root: LayoutNode, id: string, delta: number): LayoutCanvasOpResult {
+    return { root: bumpLayoutNodeZIndex(root, id, delta) }
+  }
+
+  function replaceSubtree(
+    root: LayoutNode,
+    id: string,
+    replacement: LayoutNode,
+  ): LayoutCanvasOpResult {
+    return { root: replaceLayoutSubtree(root, id, replacement), selectedNodeId: id }
   }
 
   return {
@@ -146,6 +189,11 @@ export function useLayoutCanvasSelection() {
     moveNodeDown,
     patchNode,
     patchStyles,
+    patchHoverStyles,
     setFrame,
+    alignInParent,
+    nudge,
+    bumpZ,
+    replaceSubtree,
   }
 }

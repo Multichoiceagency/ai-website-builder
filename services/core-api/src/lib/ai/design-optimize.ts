@@ -80,9 +80,12 @@ export async function optimizeDesignRoot(input: {
     systemInstruction: `You optimize freeform website layout trees for a design canvas.
 Return ONLY JSON: {"root":{...}} matching the input shape.
 Node types: container | text | image | button. Preserve all node ids when possible.
-Allowed style keys include position, left, top, width, height, zIndex, flex, colors, typography.
+Allowed style keys include position, left, top, width, height, zIndex, flex, colors, typography,
+borders, boxShadow, overflow, rotate, fontFamily, textTransform, stylesHover.
 NEVER invent Motionsites, registry block ids, or React components.
-Improve spacing, visual hierarchy, and accessibility (alt text) per the instruction.`,
+Improve spacing, visual hierarchy, and accessibility (alt text) per the instruction.
+Use rich styles when helpful: paddingTop/Right/Bottom/Left, margin*, borderWidth/Style/Color,
+borderRadius, boxShadow, overflow, fontFamily, textTransform, letterSpacing, rotate, stylesHover.`,
     userText: JSON.stringify({
       instruction,
       root: input.root,

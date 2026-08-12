@@ -43,7 +43,7 @@ const { data, pending, error, refresh } = await useAsyncData(
 )
 
 function eur(value: number): string {
-  return new Intl.NumberFormat('nl-NL', {
+  return new Intl.NumberFormat('en-GB', {
     style: 'currency',
     currency: 'EUR',
     maximumFractionDigits: 0,
@@ -61,7 +61,7 @@ function seriesMax(points: { count: number }[] | undefined): number {
 
 function shortDay(day: string): string {
   const date = new Date(`${day}T12:00:00Z`)
-  return date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
 function relative(iso: string): string {
@@ -131,7 +131,7 @@ function relative(iso: string): string {
             <div
               v-for="point in data.series.signups"
               :key="point.day"
-              class="group relative flex min-w-0 flex-1 flex-col justify-end"
+              class="group relative flex h-full min-w-0 flex-1 flex-col justify-end"
               :title="`${point.day}: ${point.count}`"
             >
               <div
@@ -153,7 +153,7 @@ function relative(iso: string): string {
             <div
               v-for="point in data.series.tenants"
               :key="point.day"
-              class="group relative flex min-w-0 flex-1 flex-col justify-end"
+              class="group relative flex h-full min-w-0 flex-1 flex-col justify-end"
               :title="`${point.day}: ${point.count}`"
             >
               <div
@@ -175,7 +175,7 @@ function relative(iso: string): string {
             <div
               v-for="point in data.series.events"
               :key="point.day"
-              class="group relative flex min-w-0 flex-1 flex-col justify-end"
+              class="group relative flex h-full min-w-0 flex-1 flex-col justify-end"
               :title="`${point.day}: ${point.count}`"
             >
               <div

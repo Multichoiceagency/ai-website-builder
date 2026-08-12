@@ -327,7 +327,7 @@ export class GoogleAdsProvider implements AdsProvider {
       connected,
       available: configured && connected,
       reason: !configured
-        ? `Google Ads is not set up on this installation. Missing: ${missing.join(', ')}.`
+        ? 'Google Ads is not configured yet. Add Google Client ID, Client Secret, and Ads developer token under Settings → Integrations.'
         : !connected
           ? 'No Google Ads account is connected to this workspace yet.'
           : null,
@@ -346,7 +346,7 @@ export class GoogleAdsProvider implements AdsProvider {
       return {
         status: 'unconfigured',
         authorizationUrl: null,
-        reason: `Google Ads cannot be connected: this installation is missing ${missing.join(', ')}.`,
+        reason: 'Google Ads cannot be connected yet. Add the required credentials under Settings → Integrations.',
         missingConfiguration: missing,
         requiredScopes: GOOGLE_ADS_SCOPES,
         requiredApis: GOOGLE_ADS_REQUIRED_APIS,
@@ -440,7 +440,7 @@ export class GoogleAdsProvider implements AdsProvider {
     if (missing.length > 0) {
       return new ProviderUnavailableError(
         this.id,
-        `Google Ads is not set up on this installation. Missing: ${missing.join(', ')}.`,
+        `Google Ads is not configured yet. Add the required credentials under Settings → Integrations.`,
         missing,
       )
     }

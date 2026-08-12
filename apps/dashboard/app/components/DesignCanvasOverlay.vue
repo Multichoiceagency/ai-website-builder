@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
  * Design-mode selection chrome: drag move + 8-handle resize over the live artboard.
- * Commits frames via emit; parent owns undo. Storefront has no overlay.
+ * Commits frames via emit; parent owns undo. Keyboard nudge / z-order helpers.
+ * Storefront has no overlay.
  */
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { parseLayoutPx, type LayoutNode } from '@platform/schemas'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { findLayoutNode, parseLayoutPx, type LayoutNode } from '@platform/schemas'
 
 const props = defineProps<{
   root: LayoutNode
@@ -20,6 +21,9 @@ const emit = defineEmits<{
     id: string,
     frame: { left: string; top: string; width: string; height: string },
   ]
+  nudge: [id: string, dx: number, dy: number]
+  align: [id: string, alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom']
+  'bump-z': [id: string, delta: number]
 }>()
 
 type Handle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'move'
@@ -28,6 +32,14 @@ const artboardEl = ref<HTMLElement | null>(null)
 const box = ref<{ left: number; top: number; width: number; height: number } | null>(null)
 
 const scale = computed(() => Math.max(0.1, props.zoom / 100))
+
+const selectedNode = computed(() =>
+  props.selectedNodeId ? findLayoutNode(props.root, props.selectedNodeId) : null,
+)
+
+const isLocked = computed(
+  () => (selectedNode.value?.styles as { locked?: boolean } | undefined)?.locked === true,
+)
 
 function readNodeBox(nodeId: string): { left: number; top: number; width: number; height: number } | null {
   if (!artboardEl.value) return null
@@ -69,7 +81,7 @@ let drag: {
 } | null = null
 
 function onPointerDown(handle: Handle, event: PointerEvent) {
-  if (props.disabled || !props.selectedNodeId || !box.value) return
+  if (props.disabled || isLocked.value || !props.selectedNodeId || !box.value) return
   if (props.selectedNodeId === props.root.id) return
   event.preventDefault()
   event.stopPropagation()
@@ -144,9 +156,56 @@ function onArtboardClick(event: MouseEvent) {
   if (id) emit('select', id)
 }
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    target.isContentEditable
+  )
+}
+
+function onKeyDown(event: KeyboardEvent) {
+  if (props.disabled || !props.selectedNodeId || props.selectedNodeId === props.root.id) return
+  if (isTypingTarget(event.target)) return
+  if (isLocked.value && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+    return
+  }
+
+  const id = props.selectedNodeId
+  const step = event.shiftKey ? 10 : 1
+
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    emit('nudge', id, -step, 0)
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    emit('nudge', id, step, 0)
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    emit('nudge', id, 0, -step)
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    emit('nudge', id, 0, step)
+  } else if ((event.metaKey || event.ctrlKey) && event.key === ']') {
+    event.preventDefault()
+    emit('bump-z', id, 1)
+  } else if ((event.metaKey || event.ctrlKey) && event.key === '[') {
+    event.preventDefault()
+    emit('bump-z', id, -1)
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
+})
+
 onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('keydown', onKeyDown)
 })
 
 const handles: Handle[] = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se']
@@ -193,6 +252,7 @@ void styleHint
   <div
     ref="artboardEl"
     class="design-artboard relative"
+    tabindex="0"
     @click="onArtboardClick"
   >
     <slot />
@@ -207,19 +267,23 @@ void styleHint
         height: `${box.height}px`,
         outline: '1.5px solid color-mix(in oklab, var(--color-brand, #0f766e) 85%, transparent)',
         outlineOffset: '0',
+        opacity: isLocked ? '0.7' : '1',
       }"
     >
       <div
+        v-if="!isLocked"
         class="pointer-events-auto absolute inset-0 cursor-move"
         @pointerdown="onPointerDown('move', $event)"
       />
-      <div
-        v-for="h in handles"
-        :key="h"
-        class="pointer-events-auto absolute z-30 rounded-sm border border-ink bg-paper"
-        :style="handleStyle(h)"
-        @pointerdown="onPointerDown(h, $event)"
-      />
+      <template v-if="!isLocked">
+        <div
+          v-for="h in handles"
+          :key="h"
+          class="pointer-events-auto absolute z-30 rounded-sm border border-ink bg-paper"
+          :style="handleStyle(h)"
+          @pointerdown="onPointerDown(h, $event)"
+        />
+      </template>
     </div>
   </div>
 </template>

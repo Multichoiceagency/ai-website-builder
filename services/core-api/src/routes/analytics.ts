@@ -615,7 +615,7 @@ const analyticsRoutes: FastifyPluginAsync = async (app) => {
         configured: isGa4Configured(),
         connected,
         reason: !isGa4Configured()
-          ? 'Google OAuth is not configured on this environment.'
+          ? 'Google OAuth is not configured — add it under Settings → Integrations.'
           : connected
             ? 'Google is connected. List properties and run an overview.'
             : 'Connect Google under Settings → Integrations.',

@@ -64,6 +64,22 @@ const assistActionSchema = z.discriminatedUnion('type', [
     root: z.record(z.unknown()),
   }),
   z.object({
+    type: z.literal('patchLayoutNode'),
+    sectionId: z.string().min(1).max(120),
+    nodeId: z.string().min(1).max(64),
+    /** Content fields (label, content, src, alt, href, tag) — never type/id. */
+    patch: z.record(z.unknown()).optional(),
+    styles: z.record(z.unknown()).optional(),
+    stylesHover: z.record(z.unknown()).optional(),
+  }),
+  z.object({
+    type: z.literal('replaceLayoutSubtree'),
+    sectionId: z.string().min(1).max(120),
+    nodeId: z.string().min(1).max(64),
+    /** Replacement node JSON (id overwritten to nodeId client-side). */
+    node: z.record(z.unknown()),
+  }),
+  z.object({
     type: z.literal('patchSectionProps'),
     sectionId: z.string().min(1).max(120),
     props: z.record(z.unknown()).refine((value) => Object.keys(value).length > 0, {
@@ -157,6 +173,7 @@ You help the customer design pages as freeform layout trees only.
 
 Hard rules:
 - Build ONLY freeform layout trees (block id layout-canvas-01).
+- Node types ONLY: container | text | image | button.
 - NEVER cite Motionsites, registry heroes, scroll-video-scrub, or other component block ids.
 - NEVER recommend the Insert marketplace or component catalogue.
 - Prefer JSON: {"answer":"...","actions":[...]}.
@@ -165,9 +182,16 @@ Hard rules:
   - {"type":"insertBlock","blockId":"layout-canvas-01"} — same as insertLayoutCanvas
   - {"type":"setContentWidth","width":1600} or "full"|"1280"|"1440"|"1600"
   - {"type":"setPageLayout","maxWidth":1600}
+  - {"type":"replaceLayoutRoot","sectionId":"sec_…","root":{…}} — full artboard tree
+  - {"type":"patchLayoutNode","sectionId":"sec_…","nodeId":"…","styles":{…},"stylesHover":{…},"patch":{…}}
+  - {"type":"replaceLayoutSubtree","sectionId":"sec_…","nodeId":"…","node":{…}}
   - {"type":"patchSectionProps","sectionId":"sec_…","props":{…}} — only for layout-canvas sections
-- Be concise. Guide them to edit Structure / Properties for nodes (text, image, button, container).
-- If they ask to build a whole multi-page site, tell them to use Make website with AI Freeform
+- Style vocabulary: padding/margin (+ per-side), borderWidth/Style/Color, borderRadius (+ corners),
+  boxShadow, overflow, cursor, rotate, fontFamily, textTransform, letterSpacing, opacity,
+  position left/top/right/bottom/zIndex, flex/grid gaps, stylesHover for hover states.
+- When a selected node is provided in context, prefer patchLayoutNode or replaceLayoutSubtree
+  for that nodeId; use replaceLayoutRoot only when asked to redesign the whole artboard.
+- Be concise. If they ask to build a whole multi-page site, tell them to use Make website with AI Freeform
   (/website/new?mode=ai).`
 
 function assistSystemPrompt(freeformMode: boolean): string {
@@ -177,6 +201,13 @@ function assistSystemPrompt(freeformMode: boolean): string {
   return getPrompt('assist.system')?.text ?? ASSIST_SYSTEM_FALLBACK
 }
 
+export interface AssistLayoutContext {
+  sectionId?: string
+  selectedNodeId?: string
+  /** Compact JSON of the selected node for modify flows. */
+  selectedNode?: unknown
+}
+
 export interface AssistOptions {
   /** When false, skip catalogue digest (tests / tiny prompts). Default true. */
   includeCatalogue?: boolean
@@ -184,6 +215,8 @@ export interface AssistOptions {
   freeformMode?: boolean
   /** Tenant for RAG (platform chunks always included). */
   tenantId?: string | null
+  /** Freeform selection context for patch / subtree actions. */
+  layoutContext?: AssistLayoutContext | null
 }
 
 export interface AssistResult {
@@ -208,6 +241,21 @@ export async function assistWithMessage(
   const { digest, hits } = includeCatalogue
     ? buildAssistCatalogueContext(message)
     : { digest: '', hits: [] as CatalogueHit[] }
+
+  let layoutContextBlock = ''
+  if (freeformMode && options.layoutContext) {
+    const ctx = options.layoutContext
+    layoutContextBlock = [
+      'Layout context (use these ids in actions):',
+      ctx.sectionId ? `sectionId: ${ctx.sectionId}` : '',
+      ctx.selectedNodeId ? `selectedNodeId: ${ctx.selectedNodeId}` : '',
+      ctx.selectedNode
+        ? `selectedNode JSON:\n${JSON.stringify(ctx.selectedNode).slice(0, 6_000)}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
 
   await ensurePlatformKnowledgeSeeded()
   let knowledgeBlock = ''
@@ -274,14 +322,20 @@ export async function assistWithMessage(
 
   const parts = [assistSystemPrompt(freeformMode)]
   if (knowledgeBlock) parts.push(knowledgeBlock)
+  if (layoutContextBlock) parts.push(layoutContextBlock)
   if (digest) {
     parts.push(`Catalogue context (cite ids from this list only):\n${digest}`)
   }
   const system = parts.join('\n\n')
 
-  const userText = knowledgeBlock
-    ? `${message.slice(0, 800)}\n\n${knowledgeBlock.slice(0, 1_500)}`
-    : message.slice(0, 1_000)
+  const userText = [
+    message.slice(0, 1_000),
+    layoutContextBlock ? layoutContextBlock.slice(0, 2_500) : '',
+    knowledgeBlock && !freeformMode ? knowledgeBlock.slice(0, 1_500) : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+    .slice(0, 4_000)
 
   if (llm.id === 'google') {
     return sanitizeAssistResult(await assistViaGemini(userText, system, hits), freeformMode)
@@ -308,7 +362,9 @@ function sanitizeAssistResult(result: AssistResult, freeformMode: boolean): Assi
       action.type === 'setContentWidth' ||
       action.type === 'setPageLayout' ||
       action.type === 'patchSectionProps' ||
-      action.type === 'replaceLayoutRoot'
+      action.type === 'replaceLayoutRoot' ||
+      action.type === 'patchLayoutNode' ||
+      action.type === 'replaceLayoutSubtree'
     ) {
       actions.push(action)
     }
@@ -356,7 +412,7 @@ async function assistViaGemini(
       },
       required: ['answer'],
     },
-    maxOutputTokens: 1_024,
+    maxOutputTokens: 4_096,
     thinking: 'off',
     timeoutMs: 30_000,
   })

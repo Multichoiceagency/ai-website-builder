@@ -60,6 +60,8 @@ const props = withDefaults(
     generatingIds?: string[]
     /** Site SEO / business brand logo — header-simple falls back to this. */
     brandLogo?: string
+    /** Design mode: hide classic section toolbar (Ask AI / reorder chrome). */
+    hideSectionToolbar?: boolean
   }>(),
   {
     mode: 'light',
@@ -68,6 +70,7 @@ const props = withDefaults(
     generatingIds: () => [],
     brandLogo: '',
     selectedNodeId: null,
+    hideSectionToolbar: false,
   },
 )
 
@@ -578,7 +581,7 @@ onBeforeUnmount(cancelDrag)
             />
 
             <SectionToolbar
-              v-if="selectedId === section.id && draggingIndex === null"
+              v-if="!hideSectionToolbar && selectedId === section.id && draggingIndex === null"
               :index="index"
               :total="sections.length"
               :label="section.block"

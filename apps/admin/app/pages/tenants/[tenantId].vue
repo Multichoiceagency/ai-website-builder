@@ -189,7 +189,7 @@ async function saveBranding() {
   <div v-if="data">
     <UiPageHeader
       :title="data.tenant.name"
-      :description="`${data.tenant.organizationName} · created ${new Date(data.tenant.createdAt).toLocaleDateString()}`"
+      :description="`${data.tenant.organizationName} · created ${new Date(data.tenant.createdAt).toLocaleDateString('en-GB')}`"
       back="/tenants"
       back-label="Clients"
     >

@@ -51,8 +51,9 @@ export const adsProviderStatusSchema = z.object({
   /** Why not, in words a user can act on. Null when available. */
   reason: z.string().max(300).nullable().default(null),
   /**
-   * Names of the environment variables the installation is missing. Names
-   * only — a value never leaves the server, configured or not.
+   * Setting keys this installation still needs (e.g. META_APP_ID).
+   * Names only — a value never leaves the server. The dashboard maps these to
+   * human labels and points at Settings.
    */
   missingConfiguration: z.array(z.string().max(80)).max(20).default([]),
   /** OAuth scopes this provider needs, so an operator can request the right ones. */
@@ -70,7 +71,7 @@ export type AdsProviderStatus = z.infer<typeof adsProviderStatusSchema>
  *
  * `unconfigured` is a normal outcome, not an error: an installation without an
  * OAuth client has to be able to say so to the browser, so the dashboard can
- * render what an administrator must do instead of a button that fails on click.
+ * point at Settings instead of a button that fails on click.
  */
 export const adsConnectResultSchema = z.object({
   status: z.enum(['unconfigured', 'authorization_required', 'connected']),

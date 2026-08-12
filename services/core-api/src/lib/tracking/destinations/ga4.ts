@@ -63,7 +63,7 @@ export class Ga4Destination implements TrackingDestination {
 
   async send(normalized: NormalizedTrackingEvent): Promise<DestinationSendResult> {
     const credentials = readCredentials()
-    if (!credentials) return { status: 'skipped', reason: 'GA4 is not configured on this environment.' }
+    if (!credentials) return { status: 'skipped', reason: 'GA4 is not configured — add it under Settings.' }
 
     const { event } = normalized
 

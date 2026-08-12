@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { AI_MODELS, generateComponentInputSchema, planAllowsModel, type AiModelAvailability } from '@platform/schemas'
 import { assistWithMessage } from '../lib/ai/assist.js'
 import { htmlToLayoutRoot } from '../lib/ai/design-import.js'
+import { generateDesignRoot } from '../lib/ai/design-generate.js'
 import { optimizeDesignRoot } from '../lib/ai/design-optimize.js'
 import { loadAdminRegistry } from '../lib/ai/admin-template-registry.js'
 import { generateAdminTemplate } from '../lib/ai/generate-admin-template.js'
@@ -35,6 +36,14 @@ const assistBodySchema = z.object({
   includeCatalogue: z.boolean().default(true),
   /** AI Freeform mode — no Motionsites / registry catalogue. */
   freeformMode: z.boolean().default(false),
+  /** Selected layout-canvas node context for modify actions. */
+  layoutContext: z
+    .object({
+      sectionId: z.string().min(1).max(120).optional(),
+      selectedNodeId: z.string().min(1).max(64).optional(),
+      selectedNode: z.unknown().optional(),
+    })
+    .optional(),
 })
 
 const codegenBodySchema = z.object({
@@ -71,6 +80,11 @@ const designOptimizeBodySchema = z.object({
   instruction: z.string().trim().max(2_000).default('Improve spacing, hierarchy, and readability.'),
 })
 
+const designGenerateBodySchema = z.object({
+  prompt: z.string().trim().min(2).max(4_000),
+  root: z.unknown().optional(),
+})
+
 const aiRoutes: FastifyPluginAsync = async (app) => {
   app.get('/models', async (request, reply) => {
     const context = requireTenant(request, 'ai:use')
@@ -86,7 +100,7 @@ const aiRoutes: FastifyPluginAsync = async (app) => {
         requiresUpgrade: !allowedByPlan,
         unavailableReason:
           allowedByPlan && !providerReady
-            ? `No ${model.provider} API key is configured on this environment.`
+            ? `No ${model.provider} API key is configured — add it under Settings → AI.`
             : undefined,
       }
     })
@@ -103,12 +117,13 @@ const aiRoutes: FastifyPluginAsync = async (app) => {
         includeCatalogue: input.freeformMode ? false : input.includeCatalogue,
         freeformMode: input.freeformMode,
         tenantId: context.tenantId,
+        layoutContext: input.layoutContext,
       })
       if (!result) {
         throw new AppError(
           503,
           'ai_unavailable',
-          'No language model is configured on this environment. Use the actions below, or add a Gemini or Anthropic key.',
+          'No language model is configured yet. Use the actions below, or add a Gemini or Anthropic key under Settings → AI.',
         )
       }
       return reply.send(ok(result))
@@ -178,6 +193,29 @@ const aiRoutes: FastifyPluginAsync = async (app) => {
         422,
         'design_optimize_failed',
         error instanceof Error ? error.message : 'Could not optimize that design.',
+      )
+    }
+  })
+
+  /**
+   * Design generate — create a full layout-canvas artboard from a prompt.
+   */
+  app.post('/design-generate', async (request, reply) => {
+    requireTenant(request, 'ai:use')
+    const input = parseOrThrow(designGenerateBodySchema, request.body ?? {}, 'design-generate')
+
+    try {
+      const result = await generateDesignRoot({
+        prompt: input.prompt,
+        currentRoot: input.root as Parameters<typeof generateDesignRoot>[0]['currentRoot'],
+      })
+      return reply.send(ok(result))
+    } catch (error) {
+      if (error instanceof AppError) throw error
+      throw new AppError(
+        422,
+        'design_generate_failed',
+        error instanceof Error ? error.message : 'Could not generate that design.',
       )
     }
   })

@@ -23,11 +23,17 @@ export const LAYOUT_JUSTIFY = [
 ] as const
 export const LAYOUT_ALIGN = ['stretch', 'flex-start', 'flex-end', 'center', 'baseline'] as const
 export const LAYOUT_POSITION = ['relative', 'absolute'] as const
+export const LAYOUT_OVERFLOW = ['visible', 'hidden', 'scroll', 'auto', 'clip'] as const
+export const LAYOUT_BORDER_STYLE = ['none', 'solid', 'dashed', 'dotted'] as const
+export const LAYOUT_CURSOR = ['auto', 'default', 'pointer', 'move', 'text', 'not-allowed', 'crosshair'] as const
+export const LAYOUT_TEXT_TRANSFORM = ['none', 'uppercase', 'lowercase', 'capitalize'] as const
 
 const cssLength = z.string().max(64)
 const cssColor = z.string().max(120)
+const cssShadow = z.string().max(240)
+const cssFontFamily = z.string().max(120)
 
-/** Shared box / visual styles applied to any node. */
+/** Shared box / visual styles applied to any node (Frappe-like Style/Spacing/Position). */
 export const layoutBoxStylesSchema = z.object({
   width: cssLength.optional(),
   height: cssLength.optional(),
@@ -36,9 +42,31 @@ export const layoutBoxStylesSchema = z.object({
   maxWidth: cssLength.optional(),
   maxHeight: cssLength.optional(),
   padding: cssLength.optional(),
+  paddingTop: cssLength.optional(),
+  paddingRight: cssLength.optional(),
+  paddingBottom: cssLength.optional(),
+  paddingLeft: cssLength.optional(),
   margin: cssLength.optional(),
+  marginTop: cssLength.optional(),
+  marginRight: cssLength.optional(),
+  marginBottom: cssLength.optional(),
+  marginLeft: cssLength.optional(),
   background: cssColor.optional(),
   borderRadius: cssLength.optional(),
+  borderTopLeftRadius: cssLength.optional(),
+  borderTopRightRadius: cssLength.optional(),
+  borderBottomRightRadius: cssLength.optional(),
+  borderBottomLeftRadius: cssLength.optional(),
+  borderWidth: cssLength.optional(),
+  borderStyle: z.enum(LAYOUT_BORDER_STYLE).optional(),
+  borderColor: cssColor.optional(),
+  boxShadow: cssShadow.optional(),
+  overflow: z.enum(LAYOUT_OVERFLOW).optional(),
+  overflowX: z.enum(LAYOUT_OVERFLOW).optional(),
+  overflowY: z.enum(LAYOUT_OVERFLOW).optional(),
+  cursor: z.enum(LAYOUT_CURSOR).optional(),
+  /** CSS rotate angle, e.g. `12deg`. */
+  rotate: cssLength.optional(),
   opacity: z.number().min(0).max(1).optional(),
   flexGrow: z.number().min(0).max(10).optional(),
   flexShrink: z.number().min(0).max(10).optional(),
@@ -50,7 +78,26 @@ export const layoutBoxStylesSchema = z.object({
   right: cssLength.optional(),
   bottom: cssLength.optional(),
   zIndex: z.number().int().min(-999).max(9999).optional(),
+  /** Soft-hide in editor/preview without deleting the node. */
+  visibility: z.enum(['visible', 'hidden']).optional(),
+  /** When true, Design mode refuses drag/resize. */
+  locked: z.boolean().optional(),
 })
+
+/**
+ * Hover-state visual overrides (subset of box + type styles).
+ * Applied via `[data-node-id]:hover` CSS variables / inline style sheet.
+ */
+export const layoutHoverStylesSchema = z.object({
+  background: cssColor.optional(),
+  color: cssColor.optional(),
+  borderColor: cssColor.optional(),
+  borderWidth: cssLength.optional(),
+  boxShadow: cssShadow.optional(),
+  opacity: z.number().min(0).max(1).optional(),
+  transform: z.string().max(120).optional(),
+})
+export type LayoutHoverStyles = z.infer<typeof layoutHoverStylesSchema>
 
 /** Flex / grid layout styles — meaningful on containers. */
 export const layoutContainerStylesSchema = layoutBoxStylesSchema.extend({
@@ -68,11 +115,13 @@ export const layoutContainerStylesSchema = layoutBoxStylesSchema.extend({
 export type LayoutContainerStyles = z.infer<typeof layoutContainerStylesSchema>
 
 export const layoutTextStylesSchema = layoutBoxStylesSchema.extend({
+  fontFamily: cssFontFamily.optional(),
   fontSize: cssLength.optional(),
   fontWeight: z.union([z.string().max(32), z.number()]).optional(),
   lineHeight: cssLength.optional(),
   letterSpacing: cssLength.optional(),
   textAlign: z.enum(['left', 'center', 'right', 'justify']).optional(),
+  textTransform: z.enum(LAYOUT_TEXT_TRANSFORM).optional(),
   color: cssColor.optional(),
 })
 export type LayoutTextStyles = z.infer<typeof layoutTextStylesSchema>
@@ -83,8 +132,12 @@ export const layoutImageStylesSchema = layoutBoxStylesSchema.extend({
 export type LayoutImageStyles = z.infer<typeof layoutImageStylesSchema>
 
 export const layoutButtonStylesSchema = layoutBoxStylesSchema.extend({
+  fontFamily: cssFontFamily.optional(),
   fontSize: cssLength.optional(),
   fontWeight: z.union([z.string().max(32), z.number()]).optional(),
+  lineHeight: cssLength.optional(),
+  letterSpacing: cssLength.optional(),
+  textTransform: z.enum(LAYOUT_TEXT_TRANSFORM).optional(),
   color: cssColor.optional(),
   textAlign: z.enum(['left', 'center', 'right']).optional(),
 })
@@ -100,6 +153,7 @@ export interface LayoutContainerNode {
   id: string
   type: 'container'
   styles?: LayoutContainerStyles
+  stylesHover?: LayoutHoverStyles
   children?: LayoutNode[]
 }
 
@@ -109,6 +163,7 @@ export interface LayoutTextNode {
   content?: string
   tag?: 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'span'
   styles?: LayoutTextStyles
+  stylesHover?: LayoutHoverStyles
 }
 
 export interface LayoutImageNode {
@@ -117,6 +172,7 @@ export interface LayoutImageNode {
   src?: string
   alt?: string
   styles?: LayoutImageStyles
+  stylesHover?: LayoutHoverStyles
 }
 
 export interface LayoutButtonNode {
@@ -125,6 +181,7 @@ export interface LayoutButtonNode {
   label?: string
   href?: string
   styles?: LayoutButtonStyles
+  stylesHover?: LayoutHoverStyles
 }
 
 export const layoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
@@ -133,6 +190,7 @@ export const layoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
       id: z.string().min(1).max(64),
       type: z.literal('container'),
       styles: layoutContainerStylesSchema.optional(),
+      stylesHover: layoutHoverStylesSchema.optional(),
       children: z.array(layoutNodeSchema).max(64).default([]),
     }),
     z.object({
@@ -141,6 +199,7 @@ export const layoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
       content: z.string().max(4000).default(''),
       tag: z.enum(['p', 'h1', 'h2', 'h3', 'h4', 'span']).default('p'),
       styles: layoutTextStylesSchema.optional(),
+      stylesHover: layoutHoverStylesSchema.optional(),
     }),
     z.object({
       id: z.string().min(1).max(64),
@@ -148,6 +207,7 @@ export const layoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
       src: z.string().max(2048).default(''),
       alt: z.string().max(400).default(''),
       styles: layoutImageStylesSchema.optional(),
+      stylesHover: layoutHoverStylesSchema.optional(),
     }),
     z.object({
       id: z.string().min(1).max(64),
@@ -155,6 +215,7 @@ export const layoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
       label: z.string().max(120).default('Button'),
       href: z.string().max(2048).default('#'),
       styles: layoutButtonStylesSchema.optional(),
+      stylesHover: layoutHoverStylesSchema.optional(),
     }),
   ]),
 )
@@ -357,6 +418,119 @@ export function updateLayoutNodeStyles(
     }
     return { ...node, styles: next } as LayoutNode
   })
+}
+
+/** Merge hover-style keys onto a node (same clear-on-empty semantics as updateLayoutNodeStyles). */
+export function updateLayoutNodeHoverStyles(
+  root: LayoutNode,
+  id: string,
+  styles: Record<string, unknown>,
+): LayoutNode {
+  return rebuildLayoutTree(root, id, (node) => {
+    const next: Record<string, unknown> = { ...((node as { stylesHover?: Record<string, unknown> }).stylesHover ?? {}) }
+    for (const [key, value] of Object.entries(styles)) {
+      if (value === undefined || value === '' || value === null) delete next[key]
+      else next[key] = value
+    }
+    const stylesHover = Object.keys(next).length ? next : undefined
+    return { ...node, stylesHover } as LayoutNode
+  })
+}
+
+/**
+ * Align a node's absolute frame inside its parent (or artboard root) box.
+ * Parent size is inferred from parent styles width/height when available.
+ */
+export function alignLayoutNodeInParent(
+  root: LayoutNode,
+  id: string,
+  alignment:
+    | 'left'
+    | 'center'
+    | 'right'
+    | 'top'
+    | 'middle'
+    | 'bottom',
+  parentSize?: { width: number; height: number },
+): LayoutNode {
+  const node = findLayoutNode(root, id)
+  if (!node || node.id === root.id) return root
+  const location = findLayoutNodeParent(root, id)
+  const parent = location?.parent ?? (root.type === 'container' ? root : null)
+  if (!parent) return root
+
+  const nodeW = parseLayoutPx((node.styles as { width?: string } | undefined)?.width) ?? 100
+  const nodeH = parseLayoutPx((node.styles as { height?: string } | undefined)?.height) ?? 40
+  const parentW =
+    parentSize?.width ??
+    parseLayoutPx((parent.styles as { width?: string } | undefined)?.width) ??
+    1440
+  const parentH =
+    parentSize?.height ??
+    parseLayoutPx((parent.styles as { height?: string } | undefined)?.height) ??
+    parseLayoutPx((parent.styles as { minHeight?: string } | undefined)?.minHeight) ??
+    900
+
+  const left = parseLayoutPx((node.styles as { left?: string } | undefined)?.left) ?? 0
+  const top = parseLayoutPx((node.styles as { top?: string } | undefined)?.top) ?? 0
+  const frame: LayoutNodeFrame = {}
+
+  if (alignment === 'left') frame.left = '0px'
+  if (alignment === 'center') frame.left = `${Math.round((parentW - nodeW) / 2)}px`
+  if (alignment === 'right') frame.left = `${Math.round(parentW - nodeW)}px`
+  if (alignment === 'top') frame.top = '0px'
+  if (alignment === 'middle') frame.top = `${Math.round((parentH - nodeH) / 2)}px`
+  if (alignment === 'bottom') frame.top = `${Math.round(parentH - nodeH)}px`
+  if (alignment === 'left' || alignment === 'center' || alignment === 'right') {
+    frame.top = `${Math.round(top)}px`
+    frame.width = `${Math.round(nodeW)}px`
+    frame.height = `${Math.round(nodeH)}px`
+  } else {
+    frame.left = `${Math.round(left)}px`
+    frame.width = `${Math.round(nodeW)}px`
+    frame.height = `${Math.round(nodeH)}px`
+  }
+  return setLayoutNodeFrame(root, id, frame)
+}
+
+/** Nudge an absolute node's left/top by dx/dy pixels. */
+export function nudgeLayoutNode(root: LayoutNode, id: string, dx: number, dy: number): LayoutNode {
+  const node = findLayoutNode(root, id)
+  if (!node || node.id === root.id) return root
+  const left = parseLayoutPx((node.styles as { left?: string } | undefined)?.left) ?? 0
+  const top = parseLayoutPx((node.styles as { top?: string } | undefined)?.top) ?? 0
+  const width = (node.styles as { width?: string } | undefined)?.width
+  const height = (node.styles as { height?: string } | undefined)?.height
+  return setLayoutNodeFrame(root, id, {
+    left: `${Math.round(left + dx)}px`,
+    top: `${Math.round(top + dy)}px`,
+    width,
+    height,
+  })
+}
+
+/** Adjust z-index by delta (bring forward / send backward). */
+export function bumpLayoutNodeZIndex(root: LayoutNode, id: string, delta: number): LayoutNode {
+  const node = findLayoutNode(root, id)
+  if (!node) return root
+  const current = (node.styles as { zIndex?: number } | undefined)?.zIndex ?? 0
+  return updateLayoutNodeStyles(root, id, { zIndex: Math.max(-999, Math.min(9999, current + delta)) })
+}
+
+/**
+ * Replace a node (and its subtree) while preserving the target id.
+ * Root replacement must remain a container.
+ */
+export function replaceLayoutSubtree(
+  root: LayoutNode,
+  id: string,
+  replacement: LayoutNode,
+): LayoutNode {
+  if (root.id === id) {
+    if (replacement.type !== 'container') return root
+    return { ...replacement, id: root.id, type: 'container' }
+  }
+  return rebuildLayoutTree(root, id, (node) => ({ ...replacement, id: node.id }) as LayoutNode)
 }
 
 function framePx(value: number | string | undefined): string | undefined {

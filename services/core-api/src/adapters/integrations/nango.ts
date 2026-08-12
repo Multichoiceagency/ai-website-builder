@@ -199,7 +199,9 @@ export function isNangoConfigured(): boolean {
 }
 
 export function nangoConfigurationProblem(): string | null {
-  if (!env.NANGO_SECRET_KEY) return 'NANGO_SECRET_KEY is not set. Start Nango (`pnpm infra:nango`) and add the secret key.'
+  if (!env.NANGO_SECRET_KEY) {
+    return 'Nango is not configured — add the Nango secret key under Settings → Integrations.'
+  }
   return null
 }
 

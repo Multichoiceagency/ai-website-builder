@@ -64,7 +64,7 @@ export class TrackingRouter {
       return {
         destination: destination.id,
         status: 'not_configured',
-        reason: `No ${destination.label} credentials are configured on this environment.`,
+        reason: `No ${destination.label} credentials are configured — add them under Settings.`,
         latencyMs: null,
       }
     }

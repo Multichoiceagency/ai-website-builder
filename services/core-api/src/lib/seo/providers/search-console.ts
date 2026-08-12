@@ -57,7 +57,7 @@ export class GoogleSearchConsoleProvider implements SearchConsoleProvider {
         provider: this.id,
         configured: false,
         connected: false,
-        reason: 'The platform Google OAuth client is not configured on this environment.',
+        reason: 'Google OAuth is not configured — add the client under Settings → Integrations.',
       }
     }
     if (!tenantId) {

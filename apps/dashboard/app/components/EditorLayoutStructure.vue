@@ -26,11 +26,15 @@ import {
  * depth-first via `walkLayoutNodes`; keyboard arrows move selection along
  * that same flattened list.
  */
-const props = defineProps<{
-  root: LayoutNode
-  selectedNodeId: string | null
-  canWrite: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    root: LayoutNode
+    selectedNodeId: string | null
+    canWrite: boolean
+    layersLabel?: string
+  }>(),
+  { layersLabel: 'Structure' },
+)
 
 const emit = defineEmits<{
   'select-node': [id: string]
@@ -41,7 +45,7 @@ const emit = defineEmits<{
 }>()
 
 const ADD_TYPES: { type: LayoutNodeType; label: string; icon: typeof Box }[] = [
-  { type: 'container', label: 'Container', icon: Box },
+  { type: 'container', label: 'Frame', icon: Box },
   { type: 'text', label: 'Text', icon: Type },
   { type: 'image', label: 'Image', icon: Image },
   { type: 'button', label: 'Button', icon: Square },
@@ -109,6 +113,7 @@ watch(
 )
 
 function typeLabel(type: LayoutNodeType): string {
+  if (type === 'container') return 'Frame'
   return type.charAt(0).toUpperCase() + type.slice(1)
 }
 
@@ -189,7 +194,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
     <div class="flex shrink-0 items-center justify-between px-3 py-2">
-      <span class="type-button-10 uppercase tracking-[0.08em] text-faint">Structure</span>
+      <span class="type-button-10 uppercase tracking-[0.08em] text-faint">{{ layersLabel }}</span>
     </div>
 
     <ul

@@ -11,6 +11,7 @@ import {
   type CampaignDraftPreview,
 } from '@platform/schemas'
 import type { CampaignRow } from './CampaignTable.vue'
+import { settingLabel } from '../utils/settingLabels'
 
 /**
  * The ads workspace, for any network.
@@ -205,7 +206,7 @@ async function publish() {
             <h2 class="text-heading font-semibold text-ink">Connection</h2>
             <UiBadge v-if="status?.available" tone="positive">Connected</UiBadge>
             <UiBadge v-else-if="status?.configured" tone="warning">Not connected</UiBadge>
-            <UiBadge v-else tone="neutral">Not available on this installation</UiBadge>
+            <UiBadge v-else tone="neutral">Needs setup in Settings</UiBadge>
           </div>
           <p v-if="status?.reason" class="mt-1.5 max-w-2xl text-[0.875rem] leading-relaxed text-soft">
             {{ status.reason }}
@@ -215,29 +216,41 @@ async function publish() {
           </p>
         </div>
 
-        <UiButton
-          v-if="can('ads:write') && !status?.connected"
-          size="sm"
-          :loading="connecting"
-          :disabled="!status?.configured"
-          @click="connect"
-        >
-          Connect {{ label }}
-        </UiButton>
+        <div class="flex flex-wrap items-center gap-2">
+          <UiButton
+            v-if="!status?.configured"
+            size="sm"
+            to="/settings/integrations"
+          >
+            Open Settings
+          </UiButton>
+          <UiButton
+            v-if="can('ads:write') && !status?.connected"
+            size="sm"
+            :loading="connecting"
+            :disabled="!status?.configured"
+            @click="connect"
+          >
+            Connect {{ label }}
+          </UiButton>
+        </div>
       </div>
 
       <div v-if="status && !status.configured" class="mt-5 grid gap-4 sm:grid-cols-2">
         <div>
-          <h3 class="text-label font-semibold uppercase text-faint">Your administrator needs to set</h3>
+          <h3 class="text-label font-semibold uppercase text-faint">Configure in Settings</h3>
           <ul class="mt-2 flex flex-col gap-1">
             <li
               v-for="name in status.missingConfiguration"
               :key="name"
-              class="font-mono text-[0.8125rem] text-ink"
+              class="text-[0.8125rem] text-ink"
             >
-              {{ name }}
+              {{ settingLabel(name) }}
             </li>
           </ul>
+          <p class="mt-2 text-[0.8125rem] text-faint">
+            Add these under Settings → Integrations, then return here to connect.
+          </p>
         </div>
         <div>
           <h3 class="text-label font-semibold uppercase text-faint">APIs and scopes required</h3>

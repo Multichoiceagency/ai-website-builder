@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import type { GoogleBusinessStatus } from '@platform/schemas'
+import { settingLabel } from '../../utils/settingLabels'
 
 /**
  * Google Business Profile (§19).
  *
  * Connection runs through the Integration Gateway (`POST …/integrations/google/authorize`).
- * When OAuth is not configured the screen spells out what an administrator must
- * set — never a Connect button that fails silently on click.
+ * When OAuth is not configured the screen points at Settings — never a Connect
+ * button that fails silently on click.
  */
 const api = useApi()
 const route = useRoute()
@@ -34,7 +35,7 @@ async function connect() {
 
 const heading = computed(() => {
   if (!status.value) return 'Checking…'
-  if (!status.value.configured) return 'Why you cannot connect this yet'
+  if (!status.value.configured) return 'Finish setup in Settings'
   if (!status.value.connected) return 'Connect your Google Business Profile'
   return 'Your Google Business Profile'
 })
@@ -49,7 +50,7 @@ const heading = computed(() => {
       <template #actions>
         <UiBadge v-if="status?.available" tone="positive">Connected</UiBadge>
         <UiBadge v-else-if="status?.configured" tone="warning">Not connected</UiBadge>
-        <UiBadge v-else tone="neutral">Not available on this installation</UiBadge>
+        <UiBadge v-else tone="neutral">Needs setup in Settings</UiBadge>
       </template>
     </UiPageHeader>
 
@@ -63,15 +64,24 @@ const heading = computed(() => {
             </p>
           </div>
 
-          <UiButton
-            v-if="can('integration:write') && status?.configured && !status.connected"
-            size="sm"
-            variant="primary"
-            :loading="connecting"
-            @click="connect"
-          >
-            Connect Google
-          </UiButton>
+          <div class="flex flex-wrap items-center gap-2">
+            <UiButton
+              v-if="status && !status.configured"
+              size="sm"
+              to="/settings/integrations"
+            >
+              Open Settings
+            </UiButton>
+            <UiButton
+              v-if="can('integration:write') && status?.configured && !status.connected"
+              size="sm"
+              variant="primary"
+              :loading="connecting"
+              @click="connect"
+            >
+              Connect Google
+            </UiButton>
+          </div>
         </div>
 
         <p v-if="connectError" class="mb-4 rounded-lg bg-danger-soft px-3 py-2 text-[0.8125rem] text-danger" role="alert">
@@ -95,16 +105,17 @@ const heading = computed(() => {
         <div v-if="status && !status.configured" class="flex flex-col gap-5">
           <div>
             <h3 class="text-label font-semibold uppercase text-faint">
-              1 — Environment variables your administrator must set
+              1 — Configure in Settings
             </h3>
             <ul class="mt-2 flex flex-col gap-1">
-              <li v-for="name in status.missingConfiguration" :key="name" class="font-mono text-[0.8125rem] text-ink">
-                {{ name }}
+              <li v-for="name in status.missingConfiguration" :key="name" class="text-[0.8125rem] text-ink">
+                {{ settingLabel(name) }}
               </li>
             </ul>
             <p class="mt-2 text-[0.8125rem] text-faint">
-              These are the platform's own OAuth client. They are never asked of you, and no value is ever shown here.
+              Add these under Settings → Integrations. Values are never shown here after saving.
             </p>
+            <UiButton class="mt-3" size="sm" to="/settings/integrations">Open Settings → Integrations</UiButton>
           </div>
 
           <div>

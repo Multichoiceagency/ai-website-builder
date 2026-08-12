@@ -11,6 +11,12 @@ import {
   removeLayoutNode,
   updateLayoutNode,
   updateLayoutNodeStyles,
+  updateLayoutNodeHoverStyles,
+  alignLayoutNodeInParent,
+  nudgeLayoutNode,
+  bumpLayoutNodeZIndex,
+  replaceLayoutSubtree,
+  setLayoutNodeFrame,
   walkLayoutNodes,
   type LayoutContainerNode,
   type LayoutNode,
@@ -142,5 +148,31 @@ describe('layout-canvas node ops', () => {
     moveLayoutNode(before, 't1', 'root', 0)
     duplicateLayoutNode(before, 'row')
     expect(JSON.stringify(before)).toBe(snapshot)
+  })
+
+  it('hover styles, align, nudge, z-index, and subtree replace work', () => {
+    let root = setLayoutNodeFrame(tree(), 't1', {
+      left: '10px',
+      top: '20px',
+      width: '100px',
+      height: '40px',
+    })
+    root = updateLayoutNodeHoverStyles(root, 't1', { background: '#111', opacity: 0.9 })
+    expect(findLayoutNode(root, 't1')).toMatchObject({
+      stylesHover: { background: '#111', opacity: 0.9 },
+    })
+    root = nudgeLayoutNode(root, 't1', 5, -2)
+    expect(findLayoutNode(root, 't1')?.styles).toMatchObject({ left: '15px', top: '18px' })
+    root = bumpLayoutNodeZIndex(root, 't1', 2)
+    expect(findLayoutNode(root, 't1')?.styles).toMatchObject({ zIndex: 2 })
+    root = alignLayoutNodeInParent(root, 't1', 'left', { width: 400, height: 300 })
+    expect(findLayoutNode(root, 't1')?.styles?.left).toBe('0px')
+    root = replaceLayoutSubtree(root, 't1', {
+      id: 'ignored',
+      type: 'text',
+      content: 'Replaced',
+      tag: 'h2',
+    })
+    expect(findLayoutNode(root, 't1')).toMatchObject({ id: 't1', content: 'Replaced', tag: 'h2' })
   })
 })

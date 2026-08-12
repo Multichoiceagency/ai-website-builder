@@ -88,15 +88,19 @@ export function isGoogleConfigured(): boolean {
  * when it is usable.
  */
 export function googleConfigurationProblem(): string | null {
-  if (!env.GOOGLE_CLIENT_ID) return 'GOOGLE_CLIENT_ID is not set.'
-  if (!env.GOOGLE_CLIENT_SECRET) return 'GOOGLE_CLIENT_SECRET is not set.'
+  if (!env.GOOGLE_CLIENT_ID) {
+    return 'Google Client ID is missing — add it under Settings → Integrations.'
+  }
+  if (!env.GOOGLE_CLIENT_SECRET) {
+    return 'Google Client Secret is missing — add it under Settings → Integrations.'
+  }
 
   if (!env.GOOGLE_CLIENT_ID.endsWith('.apps.googleusercontent.com')) {
-    return 'GOOGLE_CLIENT_ID does not look like an OAuth client ID — it should end in .apps.googleusercontent.com.'
+    return 'Google Client ID does not look like an OAuth client ID — it should end in .apps.googleusercontent.com. Update it under Settings → Integrations.'
   }
 
   if (env.GOOGLE_CLIENT_SECRET.startsWith('AIza')) {
-    return 'GOOGLE_CLIENT_SECRET looks like an API key (it starts with "AIza"), not an OAuth client secret. Create Credentials → OAuth client ID → Web application; its secret starts with "GOCSPX-".'
+    return 'Google Client Secret looks like an API key (it starts with "AIza"), not an OAuth client secret. Create Credentials → OAuth client ID → Web application (secret starts with "GOCSPX-"), then save it under Settings → Integrations.'
   }
 
   return null

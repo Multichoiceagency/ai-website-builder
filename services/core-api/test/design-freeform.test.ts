@@ -78,3 +78,34 @@ describe('optimizeDesignRoot', () => {
     expect(JSON.stringify(result.root)).not.toMatch(/scroll-video|motion-section|header-/)
   })
 })
+
+describe('generateDesignRoot', () => {
+  it('returns a validated artboard with rich styles without registry blocks', async () => {
+    const { generateDesignRoot } = await import('../src/lib/ai/design-generate.js')
+    const result = await generateDesignRoot({
+      prompt: 'Fitness studio hero with headline and CTA',
+    })
+    expect(result.root.type).toBe('container')
+    layoutCanvasPropsSchema.parse({ root: result.root })
+    expect((result.root.children?.length ?? 0) > 0).toBe(true)
+    expect(JSON.stringify(result.root)).not.toMatch(/scroll-video|motion-section|header-/)
+  })
+})
+
+describe('rich layout styles schema', () => {
+  it('accepts borders, shadow, per-side spacing, hover, and typography', () => {
+    const parsed = layoutBoxStylesSchema.parse({
+      paddingTop: '8px',
+      marginLeft: '12px',
+      borderWidth: '1px',
+      borderStyle: 'solid',
+      borderColor: '#e4e4e7',
+      boxShadow: '0 4px 12px rgba(0,0,0,.1)',
+      overflow: 'hidden',
+      rotate: '4deg',
+      cursor: 'pointer',
+    })
+    expect(parsed.borderStyle).toBe('solid')
+    expect(parsed.rotate).toBe('4deg')
+  })
+})

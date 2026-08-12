@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, type Component } from 'vue'
+import { computed, nextTick, ref, watch, type Component } from 'vue'
 import { ArrowUp, ChevronDown, FilePlus2, Globe, Mic, Plus, Search, Sparkles, Square } from '@lucide/vue'
 import type { Site, Theme } from '@platform/schemas'
 import { themeFromSeed } from '@platform/theming'
@@ -35,8 +35,16 @@ const props = withDefaults(
     closable?: boolean
     /** AI Freeform — no Motionsites / registry catalogue. */
     freeformMode?: boolean
+    /** Selected layout-canvas context for modify actions. */
+    layoutContext?: {
+      sectionId?: string
+      selectedNodeId?: string
+      selectedNode?: unknown
+    } | null
+    /** Prefill the composer (e.g. Edit with AI). */
+    draftMessage?: string
   }>(),
-  { closable: false, freeformMode: false },
+  { closable: false, freeformMode: false, layoutContext: null, draftMessage: '' },
 )
 const emit = defineEmits<{
   close: []
@@ -44,6 +52,19 @@ const emit = defineEmits<{
   /** Live canvas should adopt this theme after an assist width/layout action. */
   'theme-updated': [theme: Theme]
   'insert-layout-canvas': []
+  'layout-action': [
+    action:
+      | { type: 'replaceLayoutRoot'; sectionId: string; root: Record<string, unknown> }
+      | {
+          type: 'patchLayoutNode'
+          sectionId: string
+          nodeId: string
+          patch?: Record<string, unknown>
+          styles?: Record<string, unknown>
+          stylesHover?: Record<string, unknown>
+        }
+      | { type: 'replaceLayoutSubtree'; sectionId: string; nodeId: string; node: Record<string, unknown> },
+  ]
 }>()
 
 type AssistActionPayload =
@@ -54,6 +75,15 @@ type AssistActionPayload =
   | { type: 'insertBlock'; blockId: string }
   | { type: 'insertLayoutCanvas'; title?: string }
   | { type: 'replaceLayoutRoot'; sectionId: string; root: Record<string, unknown> }
+  | {
+      type: 'patchLayoutNode'
+      sectionId: string
+      nodeId: string
+      patch?: Record<string, unknown>
+      styles?: Record<string, unknown>
+      stylesHover?: Record<string, unknown>
+    }
+  | { type: 'replaceLayoutSubtree'; sectionId: string; nodeId: string; node: Record<string, unknown> }
   | { type: 'patchSectionProps'; sectionId: string; props: Record<string, unknown> }
 
 function friendlyAssistError(error: unknown): string {
@@ -203,6 +233,20 @@ async function applyAssistActions(actions: AssistActionPayload[] | undefined) {
       } else if (action.type === 'insertLayoutCanvas') {
         emit('insert-layout-canvas')
         say('assistant', 'Added an Empty section (layout canvas).')
+      } else if (
+        action.type === 'replaceLayoutRoot' ||
+        action.type === 'patchLayoutNode' ||
+        action.type === 'replaceLayoutSubtree'
+      ) {
+        emit('layout-action', action)
+        say(
+          'assistant',
+          action.type === 'replaceLayoutRoot'
+            ? 'Applied a new artboard layout.'
+            : action.type === 'patchLayoutNode'
+              ? `Updated node \`${action.nodeId}\`.`
+              : `Replaced subtree for \`${action.nodeId}\`.`,
+        )
       } else if (action.type === 'insertBlock' && action.blockId) {
         if (props.freeformMode && action.blockId !== 'layout-canvas-01') {
           emit('insert-layout-canvas')
@@ -264,6 +308,17 @@ const wizardActive = ref(false)
 const wizardGoal = ref('')
 const pendingPlan = ref<string[]>([])
 const composerMode = ref<'build' | 'chat'>('build')
+
+watch(
+  () => props.draftMessage,
+  (value) => {
+    if (value?.trim()) {
+      draft.value = value
+      composerMode.value = 'chat'
+    }
+  },
+  { immediate: true },
+)
 const thinking = ref(false)
 
 let nextId = 1
@@ -454,6 +509,7 @@ async function finishWizard(answers: WizardAnswers) {
         message: brief.slice(0, 990),
         includeCatalogue: !props.freeformMode,
         freeformMode: props.freeformMode,
+        layoutContext: props.freeformMode ? props.layoutContext ?? undefined : undefined,
       })
       modelNote = result.answer
     } catch {
@@ -598,11 +654,12 @@ async function submit() {
       answer: string
       model: string
       catalogueHits?: CatalogueHit[]
-      actions?: { type: string; width?: string | number; blockId?: string }[]
+      actions?: AssistActionPayload[]
     }>('/api/v1/ai/assist', {
       message: text,
       includeCatalogue: !props.freeformMode,
       freeformMode: props.freeformMode,
+      layoutContext: props.freeformMode ? props.layoutContext ?? undefined : undefined,
     })
     thinking.value = false
     messages.value = messages.value.slice(0, -1)

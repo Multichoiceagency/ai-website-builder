@@ -67,7 +67,7 @@ async function setStaff(user: UserRow, staff: boolean) {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('nl-NL', {
+  return new Date(iso).toLocaleString('en-GB', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

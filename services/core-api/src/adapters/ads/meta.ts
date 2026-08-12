@@ -311,7 +311,7 @@ export class MetaAdsProvider implements AdsProvider {
       connected,
       available: configured && connected,
       reason: !configured
-        ? `Meta Ads is not set up on this installation. Missing: ${missing.join(', ')}.`
+        ? 'Meta Ads is not configured yet. Add Meta App ID and Meta App Secret under Settings → Integrations.'
         : !connected
           ? 'No Meta ad account is connected to this workspace yet.'
           : null,
@@ -330,7 +330,7 @@ export class MetaAdsProvider implements AdsProvider {
       return {
         status: 'unconfigured',
         authorizationUrl: null,
-        reason: `Meta Ads cannot be connected: this installation is missing ${missing.join(', ')}.`,
+        reason: 'Meta Ads cannot be connected yet. Add the required credentials under Settings → Integrations.',
         missingConfiguration: missing,
         requiredScopes: META_ADS_SCOPES,
         requiredApis: META_ADS_REQUIRED_APIS,
@@ -392,7 +392,7 @@ export class MetaAdsProvider implements AdsProvider {
     if (missing.length > 0) {
       return new ProviderUnavailableError(
         this.id,
-        `Meta Ads is not set up on this installation. Missing: ${missing.join(', ')}.`,
+        `Meta Ads is not configured yet. Add the required credentials under Settings → Integrations.`,
         missing,
       )
     }

@@ -86,7 +86,7 @@ export class MetaCapiDestination implements TrackingDestination {
 
   async send(normalized: NormalizedTrackingEvent): Promise<DestinationSendResult> {
     const credentials = readCredentials()
-    if (!credentials) return { status: 'skipped', reason: 'Meta CAPI is not configured on this environment.' }
+    if (!credentials) return { status: 'skipped', reason: 'Meta CAPI is not configured — add it under Settings.' }
 
     const { event } = normalized
     const fbclid = normalized.touch.clickIds.fbclid

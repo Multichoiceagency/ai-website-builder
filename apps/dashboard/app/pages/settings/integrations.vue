@@ -5,9 +5,8 @@ import { ref } from 'vue'
  * Integrations (§18, §60).
  *
  * Reads the existing gateway endpoint rather than modelling providers here. The
- * `reason` a provider is unconfigured is shown verbatim: an operator who cannot
- * see *why* a connector is dark will open a ticket instead of fixing the
- * environment variable.
+ * `reason` a provider is unconfigured is shown verbatim and should point at
+ * Settings — never raw environment-variable instructions.
  *
  * `scopeCatalog` is what Google will ask for on Connect — shown before the
  * redirect so the workspace knows why each permission is requested.
@@ -97,7 +96,7 @@ async function connect(providerId: string) {
             <p class="type-button-12 flex flex-wrap items-center gap-2 text-ink">
               {{ provider.name }}
               <UiBadge :tone="provider.connection ? 'positive' : provider.configured ? 'neutral' : 'warning'">
-                {{ provider.connection ? 'Connected' : provider.configured ? 'Available' : 'Unavailable' }}
+                {{ provider.connection ? 'Connected' : provider.configured ? 'Available' : 'Needs setup' }}
               </UiBadge>
               <UiBadge v-if="provider.broker === 'nango'" tone="neutral">Nango</UiBadge>
             </p>

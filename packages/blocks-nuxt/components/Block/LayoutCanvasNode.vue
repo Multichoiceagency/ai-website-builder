@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /**
  * Recursive painter for layout-canvas nodes.
- * Maps typed node styles → CSS flex/grid/gap/padding/align (no framework source).
+ * Maps typed node styles → CSS (Frappe-like Style/Spacing/Typography/Hover).
  */
 import { computed, inject } from 'vue'
 import type {
   LayoutButtonStyles,
   LayoutContainerStyles,
+  LayoutHoverStyles,
   LayoutImageStyles,
   LayoutNode,
   LayoutTextStyles,
@@ -42,7 +43,7 @@ type AnyStyles =
 function boxCss(styles: AnyStyles): Record<string, string> {
   if (!styles) return {}
   const out: Record<string, string> = {}
-  const map: Array<[keyof typeof styles & string, string]> = [
+  const map: Array<[string, string]> = [
     ['width', 'width'],
     ['height', 'height'],
     ['minWidth', 'min-width'],
@@ -50,16 +51,38 @@ function boxCss(styles: AnyStyles): Record<string, string> {
     ['maxWidth', 'max-width'],
     ['maxHeight', 'max-height'],
     ['padding', 'padding'],
+    ['paddingTop', 'padding-top'],
+    ['paddingRight', 'padding-right'],
+    ['paddingBottom', 'padding-bottom'],
+    ['paddingLeft', 'padding-left'],
     ['margin', 'margin'],
+    ['marginTop', 'margin-top'],
+    ['marginRight', 'margin-right'],
+    ['marginBottom', 'margin-bottom'],
+    ['marginLeft', 'margin-left'],
     ['background', 'background'],
     ['borderRadius', 'border-radius'],
+    ['borderTopLeftRadius', 'border-top-left-radius'],
+    ['borderTopRightRadius', 'border-top-right-radius'],
+    ['borderBottomRightRadius', 'border-bottom-right-radius'],
+    ['borderBottomLeftRadius', 'border-bottom-left-radius'],
+    ['borderWidth', 'border-width'],
+    ['borderStyle', 'border-style'],
+    ['borderColor', 'border-color'],
+    ['boxShadow', 'box-shadow'],
+    ['overflow', 'overflow'],
+    ['overflowX', 'overflow-x'],
+    ['overflowY', 'overflow-y'],
+    ['cursor', 'cursor'],
     ['left', 'left'],
     ['top', 'top'],
     ['right', 'right'],
     ['bottom', 'bottom'],
+    ['visibility', 'visibility'],
   ]
+  const record = styles as Record<string, unknown>
   for (const [key, css] of map) {
-    const value = styles[key as keyof typeof styles]
+    const value = record[key]
     if (value !== undefined && value !== null && value !== '') out[css] = String(value)
   }
   if (typeof styles.opacity === 'number') out.opacity = String(styles.opacity)
@@ -68,8 +91,25 @@ function boxCss(styles: AnyStyles): Record<string, string> {
   if (styles.alignSelf) out['align-self'] = styles.alignSelf
   if (styles.position) out.position = styles.position
   if (typeof styles.zIndex === 'number') out['z-index'] = String(styles.zIndex)
+  if (styles.rotate) out.transform = `rotate(${styles.rotate})`
+  if (styles.locked && layoutCanvasEditing) out['pointer-events'] = 'none'
   return out
 }
+
+function hoverCssVars(hover: LayoutHoverStyles | undefined): Record<string, string> {
+  if (!hover) return {}
+  const out: Record<string, string> = {}
+  if (hover.background) out['--lc-hover-bg'] = hover.background
+  if (hover.color) out['--lc-hover-color'] = hover.color
+  if (hover.borderColor) out['--lc-hover-border-color'] = hover.borderColor
+  if (hover.borderWidth) out['--lc-hover-border-width'] = hover.borderWidth
+  if (hover.boxShadow) out['--lc-hover-shadow'] = hover.boxShadow
+  if (typeof hover.opacity === 'number') out['--lc-hover-opacity'] = String(hover.opacity)
+  if (hover.transform) out['--lc-hover-transform'] = hover.transform
+  return out
+}
+
+const hasHover = computed(() => Boolean(props.node.stylesHover && Object.keys(props.node.stylesHover).length))
 
 const containerStyle = computed(() => {
   if (props.node.type !== 'container') return {}
@@ -77,6 +117,7 @@ const containerStyle = computed(() => {
   const out: Record<string, string> = {
     display: styles?.display ?? (styles?.position === 'absolute' ? 'block' : 'flex'),
     ...boxCss(styles),
+    ...hoverCssVars(props.node.stylesHover),
   }
   const display = styles?.display ?? (styles?.position === 'absolute' ? 'block' : 'flex')
   if (display === 'flex' || display === 'grid') {
@@ -96,7 +137,6 @@ const containerStyle = computed(() => {
     if (styles?.rowGap) out['row-gap'] = styles.rowGap
     if (styles?.columnGap) out['column-gap'] = styles.columnGap
   }
-  // Empty containers without editor chrome still need a modest hit/layout box.
   if (isEmptyContainer.value && !emptyChrome.value && !out['min-height']) {
     out['min-height'] = '3rem'
   }
@@ -108,14 +148,16 @@ const textStyle = computed(() => {
   const styles = props.node.styles
   const out: Record<string, string> = {
     ...boxCss(styles),
+    ...hoverCssVars(props.node.stylesHover),
     color: styles?.color ?? 'var(--site-text)',
-    fontFamily: 'var(--site-font-body)',
+    fontFamily: styles?.fontFamily ?? 'var(--site-font-body)',
   }
   if (styles?.fontSize) out['font-size'] = styles.fontSize
   if (styles?.fontWeight !== undefined) out['font-weight'] = String(styles.fontWeight)
   if (styles?.lineHeight) out['line-height'] = styles.lineHeight
   if (styles?.letterSpacing) out['letter-spacing'] = styles.letterSpacing
   if (styles?.textAlign) out['text-align'] = styles.textAlign
+  if (styles?.textTransform) out['text-transform'] = styles.textTransform
   return out
 })
 
@@ -124,6 +166,7 @@ const imageStyle = computed(() => {
   const styles = props.node.styles
   const out: Record<string, string> = {
     ...boxCss(styles),
+    ...hoverCssVars(props.node.stylesHover),
     display: 'block',
     maxWidth: styles?.maxWidth ?? '100%',
   }
@@ -136,20 +179,26 @@ const buttonStyle = computed(() => {
   const styles = props.node.styles
   const out: Record<string, string> = {
     ...boxCss(styles),
+    ...hoverCssVars(props.node.stylesHover),
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     textDecoration: 'none',
-    cursor: 'pointer',
-    border: 'none',
+    cursor: styles?.cursor ?? 'pointer',
     background: styles?.background ?? 'var(--site-primary)',
     color: styles?.color ?? 'var(--site-primary-fg, #fff)',
     borderRadius: styles?.borderRadius ?? 'var(--site-radius)',
     padding: styles?.padding ?? '0.75rem 1.25rem',
-    fontFamily: 'var(--site-font-body)',
+    fontFamily: styles?.fontFamily ?? 'var(--site-font-body)',
+  }
+  if (!styles?.borderWidth && !styles?.borderColor) {
+    out.border = 'none'
   }
   if (styles?.fontSize) out['font-size'] = styles.fontSize
   if (styles?.fontWeight !== undefined) out['font-weight'] = String(styles.fontWeight)
+  if (styles?.lineHeight) out['line-height'] = styles.lineHeight
+  if (styles?.letterSpacing) out['letter-spacing'] = styles.letterSpacing
+  if (styles?.textTransform) out['text-transform'] = styles.textTransform
   if (styles?.textAlign) out['text-align'] = styles.textAlign
   return out
 })
@@ -159,6 +208,7 @@ const buttonStyle = computed(() => {
   <div
     v-if="node.type === 'container'"
     class="layout-canvas-node layout-canvas-node--container"
+    :class="{ 'layout-canvas-node--hoverable': hasHover }"
     :data-node-id="node.id"
     :data-node-type="node.type"
     :style="containerStyle"
@@ -186,6 +236,7 @@ const buttonStyle = computed(() => {
     :is="node.tag || 'p'"
     v-else-if="node.type === 'text'"
     class="layout-canvas-node layout-canvas-node--text"
+    :class="{ 'layout-canvas-node--hoverable': hasHover }"
     :data-node-id="node.id"
     :data-node-type="node.type"
     :style="textStyle"
@@ -196,6 +247,7 @@ const buttonStyle = computed(() => {
   <img
     v-else-if="node.type === 'image' && node.src"
     class="layout-canvas-node layout-canvas-node--image"
+    :class="{ 'layout-canvas-node--hoverable': hasHover }"
     :data-node-id="node.id"
     :data-node-type="node.type"
     :src="node.src"
@@ -206,6 +258,7 @@ const buttonStyle = computed(() => {
   <a
     v-else-if="node.type === 'button'"
     class="layout-canvas-node layout-canvas-node--button"
+    :class="{ 'layout-canvas-node--hoverable': hasHover }"
     :data-node-id="node.id"
     :data-node-type="node.type"
     :href="node.href || '#'"
@@ -214,3 +267,15 @@ const buttonStyle = computed(() => {
     {{ node.label || 'Button' }}
   </a>
 </template>
+
+<style>
+.layout-canvas-node--hoverable:hover {
+  background: var(--lc-hover-bg);
+  color: var(--lc-hover-color);
+  border-color: var(--lc-hover-border-color);
+  border-width: var(--lc-hover-border-width);
+  box-shadow: var(--lc-hover-shadow);
+  opacity: var(--lc-hover-opacity);
+  transform: var(--lc-hover-transform);
+}
+</style>

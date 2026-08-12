@@ -46,7 +46,7 @@ export function isGa4Configured(): boolean {
 
 export async function listGa4Properties(tenantId: string): Promise<Ga4PropertySummary[]> {
   if (!isGa4Configured()) {
-    throw new Ga4NotConnectedError('Google OAuth is not configured on this environment.')
+    throw new Ga4NotConnectedError('Google OAuth is not configured — add it under Settings → Integrations.')
   }
   if (!(await hasGoogleConnection(tenantId))) {
     throw new Ga4NotConnectedError('Connect Google under Settings → Integrations first.')
@@ -86,7 +86,7 @@ export async function runGa4Overview(
   days = 28,
 ): Promise<Ga4OverviewMetrics> {
   if (!isGa4Configured()) {
-    throw new Ga4NotConnectedError('Google OAuth is not configured on this environment.')
+    throw new Ga4NotConnectedError('Google OAuth is not configured — add it under Settings → Integrations.')
   }
   const token = await googleAccessTokenFor(tenantId)
   const propertyName = property.startsWith('properties/') ? property : `properties/${property}`
@@ -142,7 +142,7 @@ async function ga4RunReport(
   body: Record<string, unknown>,
 ): Promise<unknown> {
   if (!isGa4Configured()) {
-    throw new Ga4NotConnectedError('Google OAuth is not configured on this environment.')
+    throw new Ga4NotConnectedError('Google OAuth is not configured — add it under Settings → Integrations.')
   }
   const token = await googleAccessTokenFor(tenantId)
   const propertyName = property.startsWith('properties/') ? property : `properties/${property}`

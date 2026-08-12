@@ -78,7 +78,7 @@ export class GoogleAdsDestination implements TrackingDestination {
 
   async send(normalized: NormalizedTrackingEvent): Promise<DestinationSendResult> {
     const credentials = readCredentials()
-    if (!credentials) return { status: 'skipped', reason: 'Google Ads is not configured on this environment.' }
+    if (!credentials) return { status: 'skipped', reason: 'Google Ads is not configured — add it under Settings.' }
 
     if (!normalized.isConversion) {
       return { status: 'skipped', reason: `${normalized.event.name} is not a conversion event.` }
