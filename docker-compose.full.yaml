@@ -225,6 +225,15 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CSP_REPORT_ONLY: 'true'
 
+  # Public marketing site (Webtify clone — static Next export).
+  marketing:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.marketing
+    restart: unless-stopped
+    expose:
+      - "80"
+
 volumes:
   postgres-data:
   redis-data:
