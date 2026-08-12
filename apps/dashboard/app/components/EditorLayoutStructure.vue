@@ -61,7 +61,7 @@ const ICON_FOR: Record<LayoutNodeType, typeof Box> = {
 const ICON_STROKE = 1.75
 
 const ACTION_BTN =
-  'grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded text-faint transition-colors duration-150 hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:cursor-default disabled:opacity-25'
+  'grid h-6 w-6 shrink-0 cursor-pointer place-items-center rounded text-faint transition-colors duration-150 hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:pointer-events-none disabled:cursor-default disabled:opacity-25'
 
 interface FlatRow {
   node: LayoutNode
@@ -213,7 +213,7 @@ onBeforeUnmount(() => {
         class="rounded-md"
       >
         <div
-          class="group flex items-center gap-0.5 rounded-md py-0.5 pr-1 transition-colors duration-150"
+          class="group flex flex-col rounded-md py-0.5 pr-1 transition-colors duration-150"
           :class="
             row.node.id === selectedNodeId
               ? 'bg-brand-soft text-brand'
@@ -221,24 +221,26 @@ onBeforeUnmount(() => {
           "
           :style="{ paddingLeft: `${(row.level - 1) * 12 + 6}px` }"
         >
-          <button
-            type="button"
-            class="type-button-12 flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 truncate rounded px-0.5 py-1 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-            :class="row.node.id === selectedNodeId ? 'text-brand' : 'text-ink'"
-            @click="select(row.node.id)"
-          >
-            <component
-              :is="ICON_FOR[row.node.type]"
-              class="h-3.5 w-3.5 shrink-0 opacity-70"
-              :stroke-width="ICON_STROKE"
-              aria-hidden="true"
-            />
-            <span class="truncate">{{ rowLabel(row.node) }}</span>
-          </button>
+          <div class="flex min-w-0 items-center gap-0.5">
+            <button
+              type="button"
+              class="type-button-12 flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 truncate rounded px-0.5 py-1 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              :class="row.node.id === selectedNodeId ? 'text-brand' : 'text-ink'"
+              @click="select(row.node.id)"
+            >
+              <component
+                :is="ICON_FOR[row.node.type]"
+                class="h-3.5 w-3.5 shrink-0 opacity-70"
+                :stroke-width="ICON_STROKE"
+                aria-hidden="true"
+              />
+              <span class="truncate">{{ rowLabel(row.node) }}</span>
+            </button>
+          </div>
 
-          <span
+          <div
             v-if="canWrite && row.node.id === selectedNodeId"
-            class="relative flex shrink-0 items-center"
+            class="relative flex flex-wrap items-center gap-0.5 px-0.5 pb-1"
           >
             <button
               v-if="canAddChild"
@@ -259,7 +261,7 @@ onBeforeUnmount(() => {
               ref="addMenuEl"
               role="menu"
               aria-label="Add child type"
-              class="absolute right-0 top-full z-20 mt-1 min-w-[9.5rem] rounded-md border border-line bg-raised py-1 shadow-float"
+              class="absolute left-0 top-full z-20 mt-1 min-w-[9.5rem] rounded-md border border-line bg-raised py-1 shadow-float"
             >
               <button
                 v-for="entry in ADD_TYPES"
@@ -319,7 +321,7 @@ onBeforeUnmount(() => {
             >
               <Trash2 class="h-3.5 w-3.5" :stroke-width="ICON_STROKE" aria-hidden="true" />
             </button>
-          </span>
+          </div>
         </div>
       </li>
     </ul>

@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { getBlock } from '@platform/blocks'
 import type { LayoutNode, LayoutNodeType, Section } from '@platform/schemas'
 
 /**
  * The docked Layers panel: one row per section, in page order.
  *
- * When the selected section is a layout-canvas, Structure appears under the
- * list so nestable nodes share the same rail. Mutations are emitted only —
- * the page owns the document and undo history.
- *
- * Design variant: artboards only (layout-canvas) + Layers tree — no classic
- * registry sections mixed into the freeform canvas.
+ * Classic: Sections list + Structure subtree stacked.
+ * Design: Artboards | Layers tabs — Layers is a full-height tree, not a
+ * nested box clipped under the artboard list.
  */
 const props = withDefaults(
   defineProps<{
@@ -50,6 +47,16 @@ function labelFor(section: Section): string {
 
 const draggingIndex = ref<number | null>(null)
 const dropIndex = ref<number | null>(null)
+const designTab = ref<'artboards' | 'layers'>('layers')
+
+watch(
+  () => [props.variant, props.structureRoot?.id, props.selectedId] as const,
+  () => {
+    if (props.variant !== 'design') return
+    if (props.structureRoot) designTab.value = 'layers'
+  },
+  { immediate: true },
+)
 
 function onDragStart(index: number, event: DragEvent) {
   draggingIndex.value = index
@@ -70,99 +77,211 @@ function onDragEnd() {
   draggingIndex.value = null
   dropIndex.value = null
 }
+
+function selectArtboard(id: string) {
+  emit('select', id)
+  if (props.variant === 'design') designTab.value = 'layers'
+}
 </script>
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-    <div class="flex shrink-0 items-center justify-between px-3 py-2">
-      <span class="type-button-10 uppercase tracking-[0.08em] text-faint">
-        {{ variant === 'design' ? 'Artboards' : 'Sections' }}
-      </span>
-      <UiButton v-if="canWrite" size="sm" variant="ghost" @click="emit('add')">
-        {{ variant === 'design' ? '+ Artboard' : '+ Add' }}
-      </UiButton>
-    </div>
-
-    <ul
-      v-if="sections.length"
-      class="min-h-0 shrink-0 overflow-y-auto px-1.5 pb-2"
-      :class="structureRoot ? (variant === 'design' ? 'max-h-[28%]' : 'max-h-[40%]') : 'flex-1'"
-    >
-      <li
-        v-for="(section, index) in sections"
-        :key="section.id"
-        draggable="true"
-        class="rounded-md transition-[opacity,box-shadow]"
-        :class="[
-          draggingIndex === index ? 'opacity-40' : '',
-          dropIndex === index && draggingIndex !== index ? 'shadow-[inset_0_2px_0_0_var(--brand)]' : '',
-        ]"
-        @dragstart="onDragStart(index, $event)"
-        @dragover="onDragOver(index, $event)"
-        @drop="onDrop(index)"
-        @dragend="onDragEnd"
+    <!-- Design: Artboards | Layers as peer tabs (full height each) -->
+    <template v-if="variant === 'design'">
+      <div
+        class="flex shrink-0 items-center gap-0.5 border-b border-line px-1.5 py-1"
+        role="tablist"
+        aria-label="Design sidebar"
       >
-        <div
-          class="group flex items-center gap-1 rounded-md px-1.5 py-1.5 transition-colors"
-          :class="section.id === selectedId ? 'bg-brand-soft' : 'hover:bg-sunken'"
+        <button
+          type="button"
+          role="tab"
+          class="type-button-12 flex-1 rounded-md px-2 py-1.5 transition-colors"
+          :class="designTab === 'artboards' ? 'bg-brand-soft text-brand' : 'text-soft hover:bg-sunken hover:text-ink'"
+          :aria-selected="designTab === 'artboards'"
+          @click="designTab = 'artboards'"
         >
-          <span
-            v-if="generatingIds.includes(section.id)"
-            class="grid h-4 w-4 shrink-0 place-items-center px-0.5"
-            :title="section.block === 'motion-section-01' ? 'Generating Motionsites…' : 'Writing copy…'"
-          >
-            <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" aria-hidden="true" />
-            <span class="sr-only">{{
-              section.block === 'motion-section-01' ? 'Generating Motionsites' : 'Writing copy'
-            }}</span>
-          </span>
-          <span
-            v-else
-            class="type-button-12 cursor-grab select-none px-0.5 text-faint active:cursor-grabbing"
-            aria-hidden="true"
-          >⠿</span>
+          Artboards
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="type-button-12 flex-1 rounded-md px-2 py-1.5 transition-colors"
+          :class="designTab === 'layers' ? 'bg-brand-soft text-brand' : 'text-soft hover:bg-sunken hover:text-ink'"
+          :aria-selected="designTab === 'layers'"
+          :disabled="!structureRoot"
+          @click="designTab = 'layers'"
+        >
+          Layers
+        </button>
+      </div>
 
-          <button
-            type="button"
-            class="type-button-12 min-w-0 flex-1 truncate rounded px-0.5 py-0.5 text-left"
-            :class="section.id === selectedId ? 'text-brand' : 'text-ink'"
-            @click="emit('select', section.id)"
-          >{{ variant === 'design' ? 'Artboard' : labelFor(section) }}</button>
-
-          <span class="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
-            <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink disabled:opacity-25" :disabled="index === 0" aria-label="Move up" @click="emit('move', index, -1)">↑</button>
-            <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink disabled:opacity-25" :disabled="index === sections.length - 1" aria-label="Move down" @click="emit('move', index, 1)">↓</button>
-            <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink" aria-label="Duplicate" title="Duplicate (⌘D)" @click="emit('duplicate', index)">⧉</button>
-            <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-danger" aria-label="Remove" @click="emit('remove', index)">×</button>
-          </span>
+      <div
+        v-show="designTab === 'artboards'"
+        role="tabpanel"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
+        <div class="flex shrink-0 items-center justify-between px-3 py-2">
+          <span class="type-button-10 uppercase tracking-[0.08em] text-faint">Artboards</span>
+          <UiButton v-if="canWrite" size="sm" variant="ghost" @click="emit('add')">+ Artboard</UiButton>
         </div>
-      </li>
-    </ul>
 
-    <div v-else class="px-4 py-8 text-center">
-      <p class="text-[0.75rem] text-faint">
-        {{ variant === 'design' ? 'No artboard yet.' : 'No sections yet.' }}
-      </p>
-      <UiButton v-if="canWrite" type="button" size="sm" class="mt-3" @click="emit('add')">
-        {{ variant === 'design' ? 'Create artboard' : 'Add a section' }}
-      </UiButton>
-    </div>
+        <ul v-if="sections.length" class="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
+          <li
+            v-for="(section, index) in sections"
+            :key="section.id"
+            draggable="true"
+            class="rounded-md transition-[opacity,box-shadow]"
+            :class="[
+              draggingIndex === index ? 'opacity-40' : '',
+              dropIndex === index && draggingIndex !== index ? 'shadow-[inset_0_2px_0_0_var(--brand)]' : '',
+            ]"
+            @dragstart="onDragStart(index, $event)"
+            @dragover="onDragOver(index, $event)"
+            @drop="onDrop(index)"
+            @dragend="onDragEnd"
+          >
+            <div
+              class="group flex items-center gap-1 rounded-md px-1.5 py-1.5 transition-colors"
+              :class="section.id === selectedId ? 'bg-brand-soft' : 'hover:bg-sunken'"
+            >
+              <span
+                class="type-button-12 cursor-grab select-none px-0.5 text-faint active:cursor-grabbing"
+                aria-hidden="true"
+              >⠿</span>
+              <button
+                type="button"
+                class="type-button-12 min-w-0 flex-1 truncate rounded px-0.5 py-0.5 text-left"
+                :class="section.id === selectedId ? 'text-brand' : 'text-ink'"
+                @click="selectArtboard(section.id)"
+              >Artboard</button>
+              <span class="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
+                <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink disabled:opacity-25" :disabled="index === 0" aria-label="Move up" @click="emit('move', index, -1)">↑</button>
+                <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink disabled:opacity-25" :disabled="index === sections.length - 1" aria-label="Move down" @click="emit('move', index, 1)">↓</button>
+                <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink" aria-label="Duplicate" title="Duplicate (⌘D)" @click="emit('duplicate', index)">⧉</button>
+                <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-danger" aria-label="Remove" @click="emit('remove', index)">×</button>
+              </span>
+            </div>
+          </li>
+        </ul>
 
-    <div
-      v-if="structureRoot"
-      class="flex min-h-0 flex-1 flex-col border-t border-line"
-    >
-      <EditorLayoutStructure
-        :root="structureRoot"
-        :selected-node-id="selectedNodeId ?? null"
-        :can-write="canWrite"
-        :layers-label="variant === 'design' ? 'Layers' : 'Structure'"
-        @select-node="emit('select-node', $event)"
-        @add-child="(parentId, type) => emit('add-child', parentId, type)"
-        @duplicate="emit('duplicate-node', $event)"
-        @remove="emit('remove-node', $event)"
-        @move="(id, delta) => emit('move-node', id, delta)"
-      />
-    </div>
+        <div v-else class="px-4 py-8 text-center">
+          <p class="text-[0.75rem] text-faint">No artboard yet.</p>
+          <UiButton v-if="canWrite" type="button" size="sm" class="mt-3" @click="emit('add')">
+            Create artboard
+          </UiButton>
+        </div>
+      </div>
+
+      <div
+        v-show="designTab === 'layers'"
+        role="tabpanel"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
+        <EditorLayoutStructure
+          v-if="structureRoot"
+          :root="structureRoot"
+          :selected-node-id="selectedNodeId ?? null"
+          :can-write="canWrite"
+          layers-label="Layers"
+          @select-node="emit('select-node', $event)"
+          @add-child="(parentId, type) => emit('add-child', parentId, type)"
+          @duplicate="emit('duplicate-node', $event)"
+          @remove="emit('remove-node', $event)"
+          @move="(id, delta) => emit('move-node', id, delta)"
+        />
+        <div v-else class="px-4 py-8 text-center">
+          <p class="text-[0.75rem] text-faint">Select or create an artboard to edit layers.</p>
+        </div>
+      </div>
+    </template>
+
+    <!-- Classic: stacked Sections + Structure -->
+    <template v-else>
+      <div class="flex shrink-0 items-center justify-between px-3 py-2">
+        <span class="type-button-10 uppercase tracking-[0.08em] text-faint">Sections</span>
+        <UiButton v-if="canWrite" size="sm" variant="ghost" @click="emit('add')">+ Add</UiButton>
+      </div>
+
+      <ul
+        v-if="sections.length"
+        class="min-h-0 shrink-0 overflow-y-auto px-1.5 pb-2"
+        :class="structureRoot ? 'max-h-40' : 'flex-1'"
+      >
+        <li
+          v-for="(section, index) in sections"
+          :key="section.id"
+          draggable="true"
+          class="rounded-md transition-[opacity,box-shadow]"
+          :class="[
+            draggingIndex === index ? 'opacity-40' : '',
+            dropIndex === index && draggingIndex !== index ? 'shadow-[inset_0_2px_0_0_var(--brand)]' : '',
+          ]"
+          @dragstart="onDragStart(index, $event)"
+          @dragover="onDragOver(index, $event)"
+          @drop="onDrop(index)"
+          @dragend="onDragEnd"
+        >
+          <div
+            class="group flex items-center gap-1 rounded-md px-1.5 py-1.5 transition-colors"
+            :class="section.id === selectedId ? 'bg-brand-soft' : 'hover:bg-sunken'"
+          >
+            <span
+              v-if="generatingIds.includes(section.id)"
+              class="grid h-4 w-4 shrink-0 place-items-center px-0.5"
+              :title="section.block === 'motion-section-01' ? 'Generating Motionsites…' : 'Writing copy…'"
+            >
+              <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" aria-hidden="true" />
+              <span class="sr-only">{{
+                section.block === 'motion-section-01' ? 'Generating Motionsites' : 'Writing copy'
+              }}</span>
+            </span>
+            <span
+              v-else
+              class="type-button-12 cursor-grab select-none px-0.5 text-faint active:cursor-grabbing"
+              aria-hidden="true"
+            >⠿</span>
+
+            <button
+              type="button"
+              class="type-button-12 min-w-0 flex-1 truncate rounded px-0.5 py-0.5 text-left"
+              :class="section.id === selectedId ? 'text-brand' : 'text-ink'"
+              @click="emit('select', section.id)"
+            >{{ labelFor(section) }}</button>
+
+            <span class="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
+              <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink disabled:opacity-25" :disabled="index === 0" aria-label="Move up" @click="emit('move', index, -1)">↑</button>
+              <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink disabled:opacity-25" :disabled="index === sections.length - 1" aria-label="Move down" @click="emit('move', index, 1)">↓</button>
+              <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-ink" aria-label="Duplicate" title="Duplicate (⌘D)" @click="emit('duplicate', index)">⧉</button>
+              <button type="button" class="grid h-6 w-5 place-items-center rounded text-faint hover:text-danger" aria-label="Remove" @click="emit('remove', index)">×</button>
+            </span>
+          </div>
+        </li>
+      </ul>
+
+      <div v-else class="px-4 py-8 text-center">
+        <p class="text-[0.75rem] text-faint">No sections yet.</p>
+        <UiButton v-if="canWrite" type="button" size="sm" class="mt-3" @click="emit('add')">
+          Add a section
+        </UiButton>
+      </div>
+
+      <div
+        v-if="structureRoot"
+        class="flex min-h-0 flex-1 flex-col border-t border-line"
+      >
+        <EditorLayoutStructure
+          :root="structureRoot"
+          :selected-node-id="selectedNodeId ?? null"
+          :can-write="canWrite"
+          layers-label="Structure"
+          @select-node="emit('select-node', $event)"
+          @add-child="(parentId, type) => emit('add-child', parentId, type)"
+          @duplicate="emit('duplicate-node', $event)"
+          @remove="emit('remove-node', $event)"
+          @move="(id, delta) => emit('move-node', id, delta)"
+        />
+      </div>
+    </template>
   </div>
 </template>
