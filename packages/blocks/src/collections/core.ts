@@ -13,6 +13,7 @@ export const CORE_BLOCK_TAGS: Record<string, string[]> = {
   'header-simple-01': ['navigation', 'sticky', 'essential'],
   'header-liquid-glass-01': ['navigation', 'sticky', 'glass', 'motionsites', 'cinematic'],
   'footer-simple-01': ['navigation', 'contact', 'essential'],
+  'seo-network-01': ['navigation', 'seo', 'backlinks', 'network'],
   'hero-split-01': ['hero', 'image', 'conversion', 'essential'],
   'hero-centered-01': ['hero', 'statement', 'lightweight', 'essential'],
   'logos-strip-01': ['logos', 'social-proof', 'lightweight'],

@@ -158,3 +158,34 @@ export const footerSimple01 = defineBlock({
     legal: text(''),
   }),
 })
+
+/**
+ * Platform SEO partner network — injected on public pages for online sites.
+ * Anchors stay branded / partial-match (claude-seo backlink quality guidance).
+ */
+export const seoNetwork01 = defineBlock({
+  id: 'seo-network-01',
+  name: 'SEO — partner network',
+  description:
+    'Contextual partner links between online platform sites. Injected automatically when the site joins the network.',
+  category: 'footer',
+  capabilities: ['navigation', 'seo', 'backlinks'],
+  industries: ['*'],
+  style: ['minimal', 'clean'],
+  performanceClass: 'A',
+  scores: { performance: 99, accessibility: 98, mobile: 99 },
+  defaultMotion: { preset: 'none', trigger: 'none' },
+  fields: [
+    field.text('heading', 'Heading'),
+    field.textarea('intro', 'Short intro'),
+    field.items('links', 'Partner links', linkItemFields, { itemLabel: 'Partner', maxItems: 12 }),
+  ],
+  schema: z.object({
+    heading: text('Partner sites'),
+    intro: text('Related businesses on our network.'),
+    links: z
+      .array(linkItem)
+      .max(12)
+      .default([]),
+  }),
+})

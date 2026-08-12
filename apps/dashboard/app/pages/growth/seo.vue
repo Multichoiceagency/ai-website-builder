@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { SeoAudit, SeoIssue, SeoKeyword, SeoProviderStatus, SeoSeverity } from '@platform/schemas'
+import { computed, ref, watch } from 'vue'
+import type {
+  SeoAudit,
+  SeoIssue,
+  SeoKeyword,
+  SeoNetworkStatus,
+  SeoProviderStatus,
+  SeoSeverity,
+} from '@platform/schemas'
 
 /**
  * The SEO module (§15).
@@ -67,6 +74,61 @@ const { data: files, refresh: refreshFiles } = await useAsyncData(
   },
   { watch: [activeSiteId], default: () => null },
 )
+
+const { data: network, pending: networkPending, refresh: refreshNetwork } = await useAsyncData(
+  () => `seo:network:${activeSiteId.value}`,
+  () =>
+    activeSiteId.value
+      ? api.get<SeoNetworkStatus>(`/api/v1/seo/sites/${activeSiteId.value}/network`)
+      : Promise.resolve(null),
+  { watch: [activeSiteId], default: () => null },
+)
+
+const networkSyncBusy = ref(false)
+const networkError = ref('')
+const networkNicheDraft = ref('')
+
+watch(
+  network,
+  (next) => {
+    networkNicheDraft.value = next?.niche ?? ''
+  },
+  { immediate: true },
+)
+
+async function syncNetwork() {
+  if (!activeSiteId.value || !can('seo:write')) return
+  networkSyncBusy.value = true
+  networkError.value = ''
+  try {
+    if (networkNicheDraft.value !== (network.value?.niche ?? '')) {
+      await api.put(`/api/v1/seo/sites/${activeSiteId.value}/settings`, {
+        networkNiche: networkNicheDraft.value.trim(),
+      })
+    }
+    await api.post(`/api/v1/seo/sites/${activeSiteId.value}/network/sync`, {})
+    await refreshNetwork()
+  } catch (caught) {
+    networkError.value =
+      caught instanceof ApiError ? caught.message : 'Could not sync the partner network.'
+  } finally {
+    networkSyncBusy.value = false
+  }
+}
+
+async function setNetworkEnabled(enabled: boolean) {
+  if (!activeSiteId.value || !can('seo:write')) return
+  networkError.value = ''
+  try {
+    await api.put(`/api/v1/seo/sites/${activeSiteId.value}/settings`, {
+      networkEnabled: enabled,
+    })
+    await refreshNetwork()
+  } catch (caught) {
+    networkError.value =
+      caught instanceof ApiError ? caught.message : 'Could not update network settings.'
+  }
+}
 
 const running = ref(false)
 const pageSpeedBusy = ref(false)
@@ -417,6 +479,103 @@ const launchChecklist = computed<ChecklistRow[]>(() => {
               <span class="shrink-0 text-soft">{{ row.clicks }} clk · pos {{ row.position.toFixed(1) }}</span>
             </li>
           </ul>
+        </UiCard>
+
+        <UiCard>
+          <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="text-heading font-semibold text-ink">Partner backlink network</h2>
+              <p class="mt-1 type-caption-12 text-soft">
+                Online platform sites automatically exchange branded partner links
+                (claude-seo quality: capped degree, reciprocal where possible).
+              </p>
+            </div>
+            <UiBadge :tone="network?.active ? 'positive' : 'warning'">
+              {{ network?.active ? 'Live' : 'Not linked' }}
+            </UiBadge>
+          </div>
+
+          <p v-if="networkPending" class="type-caption-12 text-faint">Loading network…</p>
+          <template v-else-if="network">
+            <ul v-if="network.reasons.length" class="mb-3 space-y-1">
+              <li
+                v-for="reason in network.reasons"
+                :key="reason"
+                class="type-caption-12 text-warning"
+              >
+                {{ reason }}
+              </li>
+            </ul>
+
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <UiButton
+                size="sm"
+                variant="ghost"
+                :disabled="!can('seo:write')"
+                @click="setNetworkEnabled(!network.networkEnabled)"
+              >
+                {{ network.networkEnabled ? 'Opt out' : 'Opt in' }}
+              </UiButton>
+              <UiButton
+                size="sm"
+                :loading="networkSyncBusy"
+                :disabled="!can('seo:write')"
+                @click="syncNetwork"
+              >Sync now</UiButton>
+              <span class="type-caption-12 text-faint">
+                {{ network.memberCount }} online ·
+                {{ network.outbound.length }} out ·
+                {{ network.inbound.length }} in
+              </span>
+            </div>
+
+            <label class="mb-3 block">
+              <span class="type-caption-12 text-soft">Niche (matching)</span>
+              <input
+                v-model="networkNicheDraft"
+                type="text"
+                maxlength="80"
+                class="mt-1 w-full rounded-lg border border-line bg-raised px-3 py-2 type-caption-12 text-ink"
+                placeholder="e.g. dental, saas, agency"
+                :disabled="!can('seo:write')"
+              >
+            </label>
+
+            <p v-if="networkError" class="mb-3 type-caption-12 text-danger" role="alert">{{ networkError }}</p>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p class="mb-2 type-caption-12 font-medium text-ink">You link to</p>
+                <ul v-if="network.outbound.length" class="space-y-1">
+                  <li
+                    v-for="link in network.outbound"
+                    :key="link.siteId"
+                    class="truncate type-caption-12 text-soft"
+                  >
+                    <a :href="link.origin" class="text-ink hover:underline" target="_blank" rel="noopener">
+                      {{ link.anchor }}
+                    </a>
+                  </li>
+                </ul>
+                <p v-else class="type-caption-12 text-faint">No outbound partners yet.</p>
+              </div>
+              <div>
+                <p class="mb-2 type-caption-12 font-medium text-ink">Linking to you</p>
+                <ul v-if="network.inbound.length" class="space-y-1">
+                  <li
+                    v-for="link in network.inbound"
+                    :key="link.siteId"
+                    class="truncate type-caption-12 text-soft"
+                  >
+                    <a :href="link.origin" class="text-ink hover:underline" target="_blank" rel="noopener">
+                      {{ link.title }}
+                    </a>
+                  </li>
+                </ul>
+                <p v-else class="type-caption-12 text-faint">No inbound partners yet.</p>
+              </div>
+            </div>
+          </template>
         </UiCard>
       </section>
 

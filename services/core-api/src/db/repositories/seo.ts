@@ -104,6 +104,8 @@ interface SeoSettingsRow {
   indexing_enabled: boolean
   excluded_paths: unknown
   robots_extra: string
+  network_enabled: boolean
+  network_niche: string
   updated_at: Date
 }
 
@@ -114,6 +116,8 @@ function toSettings(row: SeoSettingsRow): SeoSettings {
     indexingEnabled: row.indexing_enabled,
     excludedPaths: readJson<string[]>(row.excluded_paths, []),
     robotsExtra: row.robots_extra,
+    networkEnabled: row.network_enabled ?? true,
+    networkNiche: row.network_niche ?? '',
     updatedAt: row.updated_at,
   })
 }
@@ -125,7 +129,10 @@ function toSettings(row: SeoSettingsRow): SeoSettings {
  */
 export async function getSeoSettings(tx: Tx, tenantId: string, siteId: string): Promise<SeoSettings> {
   const [row] = await tx<SeoSettingsRow[]>`
-    SELECT site_id, business, indexing_enabled, excluded_paths, robots_extra, updated_at
+    SELECT site_id, business, indexing_enabled, excluded_paths, robots_extra,
+           coalesce(network_enabled, true) AS network_enabled,
+           coalesce(network_niche, '') AS network_niche,
+           updated_at
     FROM seo_settings
     WHERE tenant_id = ${tenantId} AND site_id = ${siteId}
     LIMIT 1
@@ -139,6 +146,8 @@ export async function getSeoSettings(tx: Tx, tenantId: string, siteId: string): 
     indexingEnabled: true,
     excludedPaths: [],
     robotsExtra: '',
+    networkEnabled: true,
+    networkNiche: '',
     updatedAt: new Date(),
   })
 }
@@ -152,19 +161,30 @@ export async function upsertSeoSettings(
   const indexingEnabled = input.patch.indexingEnabled ?? current.indexingEnabled
   const excludedPaths = input.patch.excludedPaths ?? current.excludedPaths
   const robotsExtra = input.patch.robotsExtra ?? current.robotsExtra
+  const networkEnabled = input.patch.networkEnabled ?? current.networkEnabled
+  const networkNiche = input.patch.networkNiche ?? current.networkNiche
 
   const [row] = await tx<SeoSettingsRow[]>`
-    INSERT INTO seo_settings (tenant_id, site_id, business, indexing_enabled, excluded_paths, robots_extra)
+    INSERT INTO seo_settings (
+      tenant_id, site_id, business, indexing_enabled, excluded_paths, robots_extra,
+      network_enabled, network_niche
+    )
     VALUES (
       ${input.tenantId}, ${input.siteId}, ${jsonParam(tx, business)},
-      ${indexingEnabled}, ${jsonParam(tx, excludedPaths)}, ${robotsExtra}
+      ${indexingEnabled}, ${jsonParam(tx, excludedPaths)}, ${robotsExtra},
+      ${networkEnabled}, ${networkNiche}
     )
     ON CONFLICT (site_id) DO UPDATE SET
       business         = EXCLUDED.business,
       indexing_enabled = EXCLUDED.indexing_enabled,
       excluded_paths   = EXCLUDED.excluded_paths,
-      robots_extra     = EXCLUDED.robots_extra
-    RETURNING site_id, business, indexing_enabled, excluded_paths, robots_extra, updated_at
+      robots_extra     = EXCLUDED.robots_extra,
+      network_enabled  = EXCLUDED.network_enabled,
+      network_niche    = EXCLUDED.network_niche
+    RETURNING site_id, business, indexing_enabled, excluded_paths, robots_extra,
+              coalesce(network_enabled, true) AS network_enabled,
+              coalesce(network_niche, '') AS network_niche,
+              updated_at
   `
   return toSettings(row!)
 }

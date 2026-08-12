@@ -33,9 +33,11 @@ import {
   buildRobots,
   buildSitemap,
   evaluateContentQuality,
+  getSiteNetworkStatus,
   searchConsole,
   serpGateway,
   siteOrigin,
+  syncSiteNetworkMembership,
 } from '../lib/seo/index.js'
 import { isPageSpeedConfigured, runPageSpeed } from '../lib/seo/pagespeed.js'
 import { parseOrThrow } from '../lib/validate.js'
@@ -176,10 +178,43 @@ const seoRoutes: FastifyPluginAsync = async (app) => {
     const settings = await withTenant(context.tenantId, async (tx) => {
       const site = await findSiteById(tx, context.tenantId, siteId)
       if (!site) throw new NotFoundError('Site')
-      return upsertSeoSettings(tx, { tenantId: context.tenantId, siteId, patch })
+      const next = await upsertSeoSettings(tx, { tenantId: context.tenantId, siteId, patch })
+      // Network opt-in / niche changes re-sync partner edges immediately.
+      await syncSiteNetworkMembership(tx, { tenantId: context.tenantId, siteId })
+      return next
     })
 
     return reply.send(ok(settings))
+  })
+
+  // endregion
+
+  // region Platform partner network (automatic backlinks)
+
+  app.get('/sites/:siteId/network', async (request, reply) => {
+    const context = requireTenant(request, 'seo:read')
+    const { siteId } = parseOrThrow(siteParamsSchema, request.params, 'site id')
+
+    const status = await withTenant(context.tenantId, async (tx) => {
+      const site = await findSiteById(tx, context.tenantId, siteId)
+      if (!site) throw new NotFoundError('Site')
+      return getSiteNetworkStatus(tx, { tenantId: context.tenantId, siteId })
+    })
+
+    return reply.send(ok(status))
+  })
+
+  app.post('/sites/:siteId/network/sync', async (request, reply) => {
+    const context = requireTenant(request, 'seo:write')
+    const { siteId } = parseOrThrow(siteParamsSchema, request.params, 'site id')
+
+    const status = await withTenant(context.tenantId, async (tx) => {
+      const site = await findSiteById(tx, context.tenantId, siteId)
+      if (!site) throw new NotFoundError('Site')
+      return syncSiteNetworkMembership(tx, { tenantId: context.tenantId, siteId })
+    })
+
+    return reply.send(ok(status))
   })
 
   // endregion

@@ -19,6 +19,7 @@ import { findProductByHandle } from '../db/repositories/commerce.js'
 import { listNavigation } from '../db/repositories/navigation.js'
 import { findPublishedChrome, findPublishedPage } from '../db/repositories/pages.js'
 import { getSeoSettings } from '../db/repositories/seo.js'
+import { listOutboundNetworkLinks } from '../db/repositories/seo-network.js'
 import { findSettingsDocument } from '../db/repositories/settings.js'
 import { findSiteById, listSites, resolveSiteByHost } from '../db/repositories/sites.js'
 import {
@@ -28,6 +29,7 @@ import {
   type FeedChannel,
 } from '../lib/commerce/feeds.js'
 import { composePageSections } from '../lib/chrome/compose.js'
+import { networkSectionFromLinks } from '../lib/seo/network-sync.js'
 import { storefrontPublicOrigin } from '../lib/public-url.js'
 import { NotFoundError } from '../lib/errors.js'
 import { ok } from '../lib/response.js'
@@ -126,16 +128,17 @@ const publicRoutes: FastifyPluginAsync = async (app) => {
       const page = await findPublishedPage(tx, resolved.tenantId, resolved.siteId, query.path)
       if (!page) throw new NotFoundError('Page')
 
-      const [navigation, seoSettings, headerChrome, footerChrome] = await Promise.all([
+      const [navigation, seoSettings, headerChrome, footerChrome, networkLinks] = await Promise.all([
         listNavigation(tx, resolved.tenantId, resolved.siteId),
         getSeoSettings(tx, resolved.tenantId, resolved.siteId),
         findPublishedChrome(tx, resolved.tenantId, resolved.siteId, 'header'),
         findPublishedChrome(tx, resolved.tenantId, resolved.siteId, 'footer'),
+        listOutboundNetworkLinks(tx, resolved.siteId),
       ])
 
       const primaryNav = navigation.find((menu) => menu.key === 'primary')?.items ?? []
       const footerNav = navigation.find((menu) => menu.key === 'footer')?.items ?? []
-      const sections = composePageSections({
+      let sections = composePageSections({
         site,
         body: page.sections,
         headerChrome,
@@ -143,6 +146,20 @@ const publicRoutes: FastifyPluginAsync = async (app) => {
         primaryNav,
         footerNav,
       })
+
+      // Automatic platform partner backlinks (claude-seo: branded anchors, capped degree).
+      if (seoSettings.networkEnabled && seoSettings.indexingEnabled) {
+        const networkSection = networkSectionFromLinks(networkLinks)
+        if (networkSection) {
+          const footerIndex = sections.findIndex((section) => section.block.startsWith('footer-'))
+          if (footerIndex >= 0) sections = [
+            ...sections.slice(0, footerIndex),
+            networkSection,
+            ...sections.slice(footerIndex),
+          ]
+          else sections = [...sections, networkSection]
+        }
+      }
 
       return { site, page: { ...page, sections }, navigation, logo: seoSettings.business.logo ?? '' }
     })

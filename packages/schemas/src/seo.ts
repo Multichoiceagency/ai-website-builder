@@ -336,6 +336,13 @@ export const seoSettingsSchema = z.object({
   excludedPaths: z.array(pathSchema).max(200).default([]),
   /** Extra robots.txt directives, appended verbatim. */
   robotsExtra: z.string().max(4000).default(''),
+  /**
+   * Join the platform partner-link network when the site is online
+   * (hostname + published pages + indexing). Default on — opt out here.
+   */
+  networkEnabled: z.boolean().default(true),
+  /** Niche tag for partner matching (claude-seo: prefer relevant referrers). */
+  networkNiche: z.string().trim().max(80).default(''),
   updatedAt: isoTimestampSchema,
 })
 export type SeoSettings = z.infer<typeof seoSettingsSchema>
@@ -346,9 +353,50 @@ export const updateSeoSettingsInputSchema = z
     indexingEnabled: z.boolean(),
     excludedPaths: z.array(pathSchema).max(200),
     robotsExtra: z.string().max(4000),
+    networkEnabled: z.boolean(),
+    networkNiche: z.string().trim().max(80),
   })
   .partial()
 export type UpdateSeoSettingsInput = z.infer<typeof updateSeoSettingsInputSchema>
+
+/** One online platform site participating in automatic partner backlinks. */
+export const seoNetworkMemberSchema = z.object({
+  siteId: uuidSchema,
+  tenantId: uuidSchema,
+  hostname: z.string().min(1).max(253),
+  title: z.string().min(1).max(200),
+  locale: localeSchema,
+  kind: z.string().max(40).default('website'),
+  niche: z.string().max(80).default(''),
+  origin: z.string().url().max(2048),
+  publishedPageCount: z.number().int().min(0),
+})
+export type SeoNetworkMember = z.infer<typeof seoNetworkMemberSchema>
+
+export const seoNetworkLinkSchema = z.object({
+  siteId: uuidSchema,
+  hostname: z.string().min(1).max(253),
+  title: z.string().min(1).max(200),
+  origin: z.string().url().max(2048),
+  niche: z.string().max(80).default(''),
+  /** Anchor text — prefer branded / partial-match (claude-seo backlink quality). */
+  anchor: z.string().min(1).max(120),
+})
+export type SeoNetworkLink = z.infer<typeof seoNetworkLinkSchema>
+
+export const seoNetworkStatusSchema = z.object({
+  eligible: z.boolean(),
+  active: z.boolean(),
+  networkEnabled: z.boolean(),
+  niche: z.string().max(80).default(''),
+  hostname: z.string().nullable(),
+  publishedPageCount: z.number().int().min(0),
+  outbound: z.array(seoNetworkLinkSchema),
+  inbound: z.array(seoNetworkLinkSchema),
+  memberCount: z.number().int().min(0),
+  reasons: z.array(z.string().max(200)).default([]),
+})
+export type SeoNetworkStatus = z.infer<typeof seoNetworkStatusSchema>
 
 // endregion
 

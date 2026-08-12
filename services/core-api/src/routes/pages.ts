@@ -22,6 +22,7 @@ import {
   updatePage,
 } from '../db/repositories/pages.js'
 import { findSiteById } from '../db/repositories/sites.js'
+import { syncSiteNetworkMembership } from '../lib/seo/network-sync.js'
 import { buildEvent, eventBus } from '../lib/event-bus.js'
 import { NotFoundError } from '../lib/errors.js'
 import { ok } from '../lib/response.js'
@@ -136,7 +137,14 @@ const pagesRoutes: FastifyPluginAsync = async (app) => {
         createdBy: context.user.email,
       })
 
-      return publishPage(tx, context.tenantId, pageId)
+      const published = await publishPage(tx, context.tenantId, pageId)
+      if (published) {
+        await syncSiteNetworkMembership(tx, {
+          tenantId: context.tenantId,
+          siteId: published.siteId,
+        })
+      }
+      return published
     })
     if (!page) throw new NotFoundError('Page')
 
@@ -158,7 +166,16 @@ const pagesRoutes: FastifyPluginAsync = async (app) => {
     const context = requireTenant(request, 'page:publish')
     const { pageId } = parseOrThrow(pageParamsSchema, request.params, 'page id')
 
-    const page = await withTenant(context.tenantId, (tx) => unpublishPage(tx, context.tenantId, pageId))
+    const page = await withTenant(context.tenantId, async (tx) => {
+      const unpublished = await unpublishPage(tx, context.tenantId, pageId)
+      if (unpublished) {
+        await syncSiteNetworkMembership(tx, {
+          tenantId: context.tenantId,
+          siteId: unpublished.siteId,
+        })
+      }
+      return unpublished
+    })
     if (!page) throw new NotFoundError('Page')
 
     const event = buildEvent({

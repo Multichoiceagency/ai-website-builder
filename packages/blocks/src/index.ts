@@ -10,7 +10,7 @@
  * through the same `searchBlocks()` query the AI selector uses.
  */
 import { registerBlock, registerBlockFacets } from './registry.js'
-import { footerSimple01, headerLiquidGlass01, headerSimple01 } from './library/layout.js'
+import { footerSimple01, headerLiquidGlass01, headerSimple01, seoNetwork01 } from './library/layout.js'
 import { layoutCanvas01 } from './library/layout-canvas.js'
 import { heroCentered01, heroSplit01 } from './library/hero.js'
 import { contentRichText01, faqAccordion01, featuresGrid01, servicesList01 } from './library/content.js'
@@ -47,6 +47,7 @@ const CORE_BLOCKS = [
   ctaBanner01,
   contactDetails01,
   footerSimple01,
+  seoNetwork01,
 
   // Experience UI (§4). Class B–C: available to pick, kept out of generated
   // sites unless the site's performance ceiling allows them.
@@ -70,6 +71,7 @@ export {
   headerSimple01,
   headerLiquidGlass01,
   footerSimple01,
+  seoNetwork01,
   heroSplit01,
   heroCentered01,
   featuresGrid01,
