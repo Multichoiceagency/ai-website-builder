@@ -35,6 +35,7 @@ const props = withDefaults(
 )
 
 const loaded = ref(false)
+const loadError = ref(false)
 const reportedHeight = ref<number | null>(null)
 const frameEl = ref<HTMLIFrameElement | null>(null)
 
@@ -71,7 +72,21 @@ function pushHostProps() {
   )
 }
 
+async function probeIsland() {
+  loadError.value = false
+  loaded.value = false
+  try {
+    const response = await fetch(src.value, { method: 'GET', cache: 'no-store' })
+    if (!response.ok) {
+      loadError.value = true
+    }
+  } catch {
+    loadError.value = true
+  }
+}
+
 function onFrameLoad() {
+  if (loadError.value) return
   loaded.value = true
   pushHostProps()
 }
@@ -93,6 +108,7 @@ function onMessage(event: MessageEvent) {
 
 onMounted(() => {
   window.addEventListener('message', onMessage)
+  void probeIsland()
 })
 
 onBeforeUnmount(() => {
@@ -104,6 +120,7 @@ watch(
   () => {
     loaded.value = false
     reportedHeight.value = null
+    void probeIsland()
   },
 )
 
@@ -113,13 +130,27 @@ watch(hostContent, () => pushHostProps(), { deep: true })
 <template>
   <div class="relative w-full overflow-hidden bg-black" :style="frameStyle">
     <div
-      v-if="!loaded"
+      v-if="loadError"
+      class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black px-6 text-center"
+      role="alert"
+    >
+      <p class="type-button text-white">Motionsites island missing</p>
+      <p class="type-caption-12 max-w-md text-white/70">
+        Could not load <span class="font-mono text-white/90">{{ src }}</span>.
+        Rebuild islands with
+        <span class="font-mono text-white/90">pnpm --filter @platform/motionsites-islands build</span>
+        (Docker images run this automatically).
+      </p>
+    </div>
+    <div
+      v-else-if="!loaded"
       class="absolute inset-0 flex items-center justify-center bg-black"
       aria-hidden="true"
     >
       <span class="type-caption-12 text-white">Loading {{ title || sectionId }}…</span>
     </div>
     <iframe
+      v-if="!loadError"
       ref="frameEl"
       :src="src"
       :title="title || `MotionSites ${sectionId}`"

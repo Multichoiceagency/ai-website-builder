@@ -7,15 +7,23 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/storefront/package.json apps/storefront/
-RUN pnpm install --frozen-lockfile --filter @platform/storefront...
+# Motionsites islands are gitignored under public/ — build them in-image.
+RUN pnpm install --frozen-lockfile \
+  --filter @platform/storefront... \
+  --filter @platform/motionsites-islands...
 
 FROM deps AS build
 COPY apps/storefront apps/storefront
 COPY tsconfig.base.json ./
-RUN pnpm install --frozen-lockfile --filter @platform/storefront...
+RUN pnpm install --frozen-lockfile \
+  --filter @platform/storefront... \
+  --filter @platform/motionsites-islands...
 ENV NODE_ENV=production
 ENV NUXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter @platform/schemas build \
+# Build React islands into apps/*/public/motionsites/islands before Nuxt so
+# published pages can load MotionSites iframes (otherwise → 404 in Coolify).
+RUN pnpm --filter @platform/motionsites-islands build \
+ && pnpm --filter @platform/schemas build \
  && pnpm --filter @platform/blocks build \
  && pnpm --filter @platform/tracking build \
  && pnpm --filter @platform/storefront build

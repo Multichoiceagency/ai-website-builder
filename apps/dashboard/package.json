@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "predev": "pnpm --filter @platform/templates build",
+    "prebuild": "pnpm --filter @platform/motionsites-islands build",
     "dev": "nuxt dev --port 3000",
     "build": "nuxt build",
     "preview": "nuxt preview",

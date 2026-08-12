@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
@@ -267,9 +268,18 @@ async function markReady(sectionId: string): Promise<void> {
 
 function runIslandBuild(sectionId: string): Promise<void> {
   return new Promise((resolvePromise, reject) => {
-    const script = join(islandsPkgRoot(), 'scripts/build-one.mjs')
+    const root = islandsPkgRoot()
+    const script = join(root, 'scripts/build-one.mjs')
+    if (!existsSync(script)) {
+      reject(
+        new Error(
+          `Motionsites islands package missing at ${root}. Set MOTIONSITES_ISLANDS_DIR or ship @platform/motionsites-islands with the API image.`,
+        ),
+      )
+      return
+    }
     const child = spawn(process.execPath, [script, sectionId], {
-      cwd: islandsPkgRoot(),
+      cwd: root,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
