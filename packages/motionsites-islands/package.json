@@ -19,6 +19,7 @@
     "test": "echo \"@platform/motionsites-islands: covered by build\" && exit 0"
   },
   "dependencies": {
+    "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.12",
     "gsap": "^3.15.0",
     "lenis": "^1.3.26",

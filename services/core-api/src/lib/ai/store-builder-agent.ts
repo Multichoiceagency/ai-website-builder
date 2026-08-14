@@ -185,6 +185,9 @@ Rules:
       userText: input.prompt,
       responseMimeType: 'application/json',
       maxOutputTokens: 4_096,
+      thinking: 'off',
+      timeoutMs: 25_000,
+      maxAttempts: 1,
     })
     if (!result?.text) return null
     const parsed = JSON.parse(result.text) as unknown

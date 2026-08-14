@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { sql } from '../../db/client.js'
 import {
   countEmbeddedChunks,
-  countKnowledgeChunks,
   searchKnowledgeByEmbedding,
   searchKnowledgeLexical,
   upsertKnowledgeChunk,
@@ -42,11 +41,23 @@ const PLATFORM_SEEDS: { path: string; title: string; tags: string[] }[] = [
     title: 'Motion stack Lenis GSAP Vanta React Bits',
     tags: ['lenis', 'gsap', 'vanta', 'react-bits', 'motion', 'scroll'],
   },
+  {
+    path: 'design-skills.md',
+    title: 'Design skills layout canvas typography spacing hover',
+    tags: ['design', 'layout', 'canvas', 'typography', 'spacing', 'hover', 'a11y', 'motion'],
+  },
+  {
+    path: 'logo-size.md',
+    title: 'Logo size',
+    tags: ['logo', 'header', 'size'],
+  },
 ]
 
 export interface SearchKnowledgeOptions {
   tenantId?: string | null
   limit?: number
+  /** Skip Gemini embeddings so generate paths do not wait on a second model call. */
+  lexicalOnly?: boolean
 }
 
 let seedPromise: Promise<void> | null = null
@@ -88,15 +99,14 @@ export async function seedPlatformKnowledge(): Promise<{ seeded: number; obsidia
 }
 
 /**
- * Lightweight ensure: seed once when no platform chunks exist.
- * Safe to call from assist and from API boot (deduped in-process).
+ * Upsert platform seeds on first call this process (deduped).
+ * Always upserts so new seed files land after an API restart even when
+ * older chunks already exist.
  */
 export async function ensurePlatformKnowledgeSeeded(): Promise<void> {
   if (seedPromise) return seedPromise
   seedPromise = (async () => {
     try {
-      const count = await countKnowledgeChunks(sql, { platformOnly: true, source: 'platform' })
-      if (count > 0) return
       await seedPlatformKnowledge()
     } catch {
       // DB may be mid-migrate on boot — assist will retry later.
@@ -188,7 +198,7 @@ export async function searchKnowledge(
   const trimmed = query.trim()
   if (!trimmed) return []
 
-  const embeddedCount = await countEmbeddedChunks(sql)
+  const embeddedCount = options.lexicalOnly ? 0 : await countEmbeddedChunks(sql)
   if (embeddedCount > 0) {
     const vector = await embedQuery(trimmed)
     if (vector) {

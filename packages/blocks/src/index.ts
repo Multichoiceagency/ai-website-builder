@@ -15,7 +15,7 @@ import { layoutCanvas01 } from './library/layout-canvas.js'
 import { heroCentered01, heroSplit01 } from './library/hero.js'
 import { contentRichText01, faqAccordion01, featuresGrid01, servicesList01 } from './library/content.js'
 import { logosStrip01, statsBand01, testimonialsGrid01 } from './library/proof.js'
-import { contactDetails01, ctaBanner01 } from './library/conversion.js'
+import { contactDetails01, contactForm01, ctaBanner01 } from './library/conversion.js'
 import {
   featureSpotlight01,
   heroKinetic01,
@@ -46,6 +46,7 @@ const CORE_BLOCKS = [
   faqAccordion01,
   ctaBanner01,
   contactDetails01,
+  contactForm01,
   footerSimple01,
   seoNetwork01,
 
@@ -84,6 +85,7 @@ export {
   logosStrip01,
   ctaBanner01,
   contactDetails01,
+  contactForm01,
   heroKinetic01,
   showcaseParallax01,
   marqueeStrip01,

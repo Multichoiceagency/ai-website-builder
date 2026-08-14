@@ -8,6 +8,7 @@ import {
   type LayoutNode,
   type Section,
 } from '@platform/schemas'
+import { DESIGN_SKILL_BRIEF, retrieveDesignKnowledge } from './design-skills.js'
 import { geminiApiKey, generateGeminiContent, resolveGeminiModel } from './providers/gemini-client.js'
 
 /**
@@ -35,13 +36,44 @@ type TextTag = 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'span'
 function textNode(content: string, tag: TextTag = 'p'): LayoutNode {
   const node = createLayoutNode('text')
   if (node.type !== 'text') return node
-  return { ...node, content, tag }
+  const styles =
+    tag === 'h1'
+      ? { fontSize: '3rem', fontWeight: '700', letterSpacing: '-0.03em', lineHeight: '1.1', color: '#0f172a' }
+      : tag === 'h2'
+        ? { fontSize: '1.75rem', fontWeight: '600', letterSpacing: '-0.02em', lineHeight: '1.25', color: '#0f172a' }
+        : tag === 'h3'
+          ? { fontSize: '1.125rem', fontWeight: '600', lineHeight: '1.35', color: '#0f172a' }
+          : { fontSize: '1.125rem', lineHeight: '1.65', color: '#334155' }
+  return { ...node, content, tag, styles }
 }
 
 function buttonNode(label: string, href: string): LayoutNode {
   const node = createLayoutNode('button')
   if (node.type !== 'button') return node
-  return { ...node, label, href }
+  return {
+    ...node,
+    label,
+    href,
+    styles: {
+      background: '#0f172a',
+      color: '#ffffff',
+      paddingTop: '12px',
+      paddingRight: '20px',
+      paddingBottom: '12px',
+      paddingLeft: '20px',
+      minHeight: '44px',
+      borderRadius: '0.5rem',
+      fontWeight: '600',
+      cursor: 'pointer',
+      fontSize: '1rem',
+      alignSelf: 'flex-start',
+    },
+    stylesHover: {
+      background: '#1e293b',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 8px 20px rgba(15,23,42,0.18)',
+    },
+  }
 }
 
 function row(...children: LayoutNode[]): LayoutContainerNode {
@@ -182,14 +214,23 @@ export async function draftFreeformSite(input: {
 
   if (geminiApiKey()) {
     try {
+      const knowledge = await retrieveDesignKnowledge(input.prompt)
       const result = await generateGeminiContent({
         model: resolveGeminiModel(),
-        systemInstruction:
+        systemInstruction: [
           'You write short website copy as JSON only. Keys: headline, subhead, cta, about, contact. No markdown.',
+          DESIGN_SKILL_BRIEF,
+          knowledge,
+        ]
+          .filter(Boolean)
+          .join('\n\n')
+          .slice(0, 6_000),
         userText: `Locale: ${locale}. Brand: ${brand}. Brief: ${input.prompt.slice(0, 1200)}`,
         responseMimeType: 'application/json',
         maxOutputTokens: 600,
         thinking: 'off',
+        timeoutMs: 20_000,
+        maxAttempts: 1,
       })
       const parsed = JSON.parse(result.text) as Record<string, string>
       if (parsed.headline) headline = String(parsed.headline).slice(0, 120)

@@ -7,13 +7,18 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { findLayoutNode, parseLayoutPx, type LayoutNode } from '@platform/schemas'
 
-const props = defineProps<{
-  root: LayoutNode
-  selectedNodeId: string | null
-  /** CSS zoom percent (100 = 1×). */
-  zoom: number
-  disabled?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    root: LayoutNode
+    selectedNodeId: string | null
+    /** CSS zoom percent (100 = 1×). */
+    zoom: number
+    disabled?: boolean
+    /** Readdy Select to Edit — hover, edit bar, stacked layers. */
+    selectToEdit?: boolean
+  }>(),
+  { selectToEdit: true },
+)
 
 const emit = defineEmits<{
   select: [id: string]
@@ -24,12 +29,20 @@ const emit = defineEmits<{
   nudge: [id: string, dx: number, dy: number]
   align: [id: string, alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom']
   'bump-z': [id: string, delta: number]
+  'select-parent': [id: string]
+  'prompt-in-place': [text: string]
+  'patch-node': [id: string, patch: Partial<LayoutNode>]
+  'delete-node': [id: string]
+  'pick-image': [id: string]
 }>()
 
 type Handle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | 'move'
 
 const artboardEl = ref<HTMLElement | null>(null)
 const box = ref<{ left: number; top: number; width: number; height: number } | null>(null)
+const hoverBox = ref<{ left: number; top: number; width: number; height: number } | null>(null)
+const stackedMenu = ref<{ x: number; y: number } | null>(null)
+const stackedLayers = ref<{ id: string; type: string }[]>([])
 
 const scale = computed(() => Math.max(0.1, props.zoom / 100))
 
@@ -145,15 +158,74 @@ function onPointerUp() {
   emit('commit-frame', id, frame)
 }
 
-function onArtboardClick(event: MouseEvent) {
+function nodeIdFromEvent(event: MouseEvent): string | null {
   const target = event.target as HTMLElement | null
   const nodeEl = target?.closest?.('[data-node-id]') as HTMLElement | null
-  if (!nodeEl) {
-    emit('select', props.root.id)
+  return nodeEl?.getAttribute('data-node-id') ?? null
+}
+
+function onArtboardClick(event: MouseEvent) {
+  stackedMenu.value = null
+  const id = nodeIdFromEvent(event)
+  emit('select', id || props.root.id)
+}
+
+function onArtboardDblClick(event: MouseEvent) {
+  const id = nodeIdFromEvent(event)
+  if (!id) return
+  emit('select', id)
+}
+
+function onArtboardMove(event: MouseEvent) {
+  if (!props.selectToEdit || !artboardEl.value) {
+    hoverBox.value = null
     return
   }
-  const id = nodeEl.getAttribute('data-node-id')
-  if (id) emit('select', id)
+  const id = nodeIdFromEvent(event)
+  if (!id || id === props.selectedNodeId || id === props.root.id) {
+    hoverBox.value = null
+    return
+  }
+  hoverBox.value = readNodeBox(id)
+}
+
+function onArtboardLeave() {
+  hoverBox.value = null
+}
+
+function onArtboardContext(event: MouseEvent) {
+  if (!props.selectToEdit || !artboardEl.value) return
+  event.preventDefault()
+  const hits = document
+    .elementsFromPoint(event.clientX, event.clientY)
+    .filter((el): el is HTMLElement => el instanceof HTMLElement)
+    .map((el) => el.closest('[data-node-id]'))
+    .filter((el): el is HTMLElement => el instanceof HTMLElement)
+  const seen = new Set<string>()
+  const layers: { id: string; type: string }[] = []
+  for (const el of hits) {
+    const id = el.getAttribute('data-node-id')
+    if (!id || seen.has(id) || id === props.root.id) continue
+    seen.add(id)
+    layers.push({ id, type: el.getAttribute('data-node-type') || 'node' })
+  }
+  if (!layers.length) {
+    stackedMenu.value = null
+    stackedLayers.value = []
+    return
+  }
+  const art = artboardEl.value.getBoundingClientRect()
+  const s = scale.value
+  stackedLayers.value = layers
+  stackedMenu.value = {
+    x: (event.clientX - art.left) / s,
+    y: (event.clientY - art.top) / s,
+  }
+}
+
+function pickStacked(id: string) {
+  stackedMenu.value = null
+  emit('select', id)
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -195,6 +267,8 @@ function onKeyDown(event: KeyboardEvent) {
   } else if ((event.metaKey || event.ctrlKey) && event.key === '[') {
     event.preventDefault()
     emit('bump-z', id, -1)
+  } else if (event.key === 'Escape') {
+    stackedMenu.value = null
   }
 }
 
@@ -252,10 +326,45 @@ void styleHint
   <div
     ref="artboardEl"
     class="design-artboard relative"
+    :class="selectToEdit ? 'cursor-crosshair' : ''"
     tabindex="0"
     @click="onArtboardClick"
+    @dblclick="onArtboardDblClick"
+    @pointermove="onArtboardMove"
+    @pointerleave="onArtboardLeave"
+    @contextmenu="onArtboardContext"
   >
     <slot />
+
+    <div
+      v-if="hoverBox && selectToEdit"
+      class="pointer-events-none absolute z-10"
+      :style="{
+        left: `${hoverBox.left}px`,
+        top: `${hoverBox.top}px`,
+        width: `${hoverBox.width}px`,
+        height: `${hoverBox.height}px`,
+        outline: '1px dashed color-mix(in oklab, var(--color-brand, #0f766e) 55%, transparent)',
+      }"
+    />
+
+    <div
+      v-if="stackedMenu"
+      class="absolute z-40 min-w-[10rem] rounded-lg border border-line bg-paper py-1 shadow-raised"
+      :style="{ left: `${stackedMenu.x}px`, top: `${stackedMenu.y}px` }"
+    >
+      <p class="type-button-10 px-2.5 py-1 text-faint">Stacked layers</p>
+      <button
+        v-for="layer in stackedLayers"
+        :key="layer.id"
+        type="button"
+        class="flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left type-caption-12 text-ink hover:bg-sunken"
+        @click="pickStacked(layer.id)"
+      >
+        <span class="capitalize">{{ layer.type }}</span>
+        <span class="truncate text-faint">{{ layer.id.slice(0, 10) }}</span>
+      </button>
+    </div>
 
     <div
       v-if="box && selectedNodeId && selectedNodeId !== root.id"
@@ -284,6 +393,21 @@ void styleHint
           @pointerdown="onPointerDown(h, $event)"
         />
       </template>
+      <div
+        v-if="selectToEdit && selectedNode && selectedNodeId"
+        class="pointer-events-auto absolute left-0 z-40"
+        :style="{ bottom: '100%', marginBottom: '8px' }"
+      >
+        <LayoutSelectEditBar
+          :node="selectedNode"
+          :disabled="disabled || isLocked"
+          @prompt-in-place="emit('prompt-in-place', $event)"
+          @select-parent="emit('select-parent', selectedNodeId)"
+          @delete="emit('delete-node', selectedNodeId)"
+          @patch="emit('patch-node', selectedNodeId, $event)"
+          @pick-image="emit('pick-image', selectedNodeId)"
+        />
+      </div>
     </div>
   </div>
 </template>

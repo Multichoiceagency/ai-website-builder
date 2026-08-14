@@ -43,8 +43,10 @@ const props = withDefaults(
     } | null
     /** Prefill the composer (e.g. Edit with AI). */
     draftMessage?: string
+    /** Increment to auto-send the current draft (Prompt in Place). */
+    sendNonce?: number
   }>(),
-  { closable: false, freeformMode: false, layoutContext: null, draftMessage: '' },
+  { closable: false, freeformMode: false, layoutContext: null, draftMessage: '', sendNonce: 0 },
 )
 const emit = defineEmits<{
   close: []
@@ -318,6 +320,13 @@ watch(
     }
   },
   { immediate: true },
+)
+
+watch(
+  () => props.sendNonce,
+  (value, previous) => {
+    if (value && value !== previous && draft.value.trim()) void submit()
+  },
 )
 const thinking = ref(false)
 

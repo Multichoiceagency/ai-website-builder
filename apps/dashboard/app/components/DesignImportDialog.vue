@@ -16,6 +16,7 @@ const busy = ref(false)
 const error = ref('')
 const figMessage = ref('')
 const htmlPreview = ref('')
+const sourceUrl = ref('')
 
 async function importHtml(html: string) {
   error.value = ''
@@ -69,6 +70,29 @@ async function onFigFile(event: Event) {
   }
 }
 
+async function importFromUrl() {
+  error.value = ''
+  figMessage.value = ''
+  const url = sourceUrl.value.trim()
+  if (!url) {
+    error.value = 'Paste a website URL first.'
+    return
+  }
+  busy.value = true
+  try {
+    const result = await api.post<{ ok: true; root: LayoutContainerNode }>('/api/v1/ai/design-import', {
+      format: 'url',
+      url,
+    })
+    emit('imported', result.root)
+    open.value = false
+  } catch (caught) {
+    error.value = caught instanceof ApiError ? caught.message : 'Could not read that URL.'
+  } finally {
+    busy.value = false
+  }
+}
+
 async function pasteHtml() {
   error.value = ''
   try {
@@ -77,7 +101,6 @@ async function pasteHtml() {
       error.value = 'Clipboard was empty. Copy from Figma or paste HTML.'
       return
     }
-    // Prefer text/html when available
     let payload = html
     try {
       const items = await navigator.clipboard.read()
@@ -99,11 +122,23 @@ async function pasteHtml() {
 </script>
 
 <template>
-  <UiDialog v-model:open="open" title="Import into Design" description="HTML or Figma clipboard. No Motionsites templates.">
+  <UiDialog v-model:open="open" title="Import into Design" description="HTML, a live URL, or Figma clipboard.">
     <div class="flex flex-col gap-4 p-1">
       <p class="type-caption-12 leading-relaxed text-soft">
         Imports become basic layout nodes (frame, text, image, button) on the artboard.
       </p>
+
+      <div class="flex gap-2">
+        <input
+          v-model="sourceUrl"
+          type="url"
+          class="min-w-0 flex-1 rounded-md border border-line bg-raised px-3 py-2 text-[0.8125rem] text-ink outline-none"
+          placeholder="https://example.com"
+          :disabled="busy"
+          @keydown.enter.prevent="importFromUrl"
+        />
+        <UiButton size="sm" :disabled="busy" @click="importFromUrl">From URL</UiButton>
+      </div>
 
       <div class="flex flex-wrap gap-2">
         <label class="inline-flex cursor-pointer">

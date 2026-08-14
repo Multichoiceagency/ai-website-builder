@@ -149,6 +149,12 @@ function contactPage(): Section[] {
       city: 'Rotterdam',
       hours: 'Maandag–vrijdag 08:00–18:00\nZaterdag 09:00–13:00\nZondag alleen spoed',
     }),
+    createSection('contact-form-01', {
+      heading: 'Stuur een bericht',
+      intro: 'We reageren dezelfde dag.',
+      submitLabel: 'Verstuur',
+      successMessage: 'Bedankt — we nemen snel contact op.',
+    }),
     createSection('footer-simple-01', {
       brand: BUSINESS,
       phone: '010 123 4567',

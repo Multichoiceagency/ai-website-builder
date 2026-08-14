@@ -64,3 +64,33 @@ export const contactDetails01 = defineBlock({
     showMap: bool(true),
   }),
 })
+
+export const contactForm01 = defineBlock({
+  id: 'contact-form-01',
+  name: 'Contact — lead form',
+  description:
+    'Name, e-mail, message and consent. Submissions become CRM leads on the published site.',
+  category: 'contact',
+  capabilities: ['contact', 'form', 'leads'],
+  industries: ['*'],
+  style: ['clean', 'trustworthy'],
+  performanceClass: 'A',
+  scores: { performance: 98, accessibility: 98, mobile: 98 },
+  defaultMotion: { preset: 'fade-up' },
+  fields: [
+    field.text('heading', 'Heading'),
+    field.textarea('intro', 'Intro text'),
+    field.text('submitLabel', 'Submit label'),
+    field.text('successMessage', 'Success message'),
+    field.boolean('showPhone', 'Ask for a phone number'),
+    field.boolean('requireConsent', 'Require consent'),
+  ],
+  schema: z.object({
+    heading: text('Send a message'),
+    intro: text('Tell us what you need. We reply the same day.'),
+    submitLabel: text('Send'),
+    successMessage: text('Thanks — we will get back to you shortly.'),
+    showPhone: bool(true),
+    requireConsent: bool(true),
+  }),
+})

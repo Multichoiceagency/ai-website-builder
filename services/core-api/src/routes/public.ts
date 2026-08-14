@@ -22,6 +22,7 @@ import { getSeoSettings } from '../db/repositories/seo.js'
 import { listOutboundNetworkLinks } from '../db/repositories/seo-network.js'
 import { findSettingsDocument } from '../db/repositories/settings.js'
 import { findSiteById, listSites, resolveSiteByHost } from '../db/repositories/sites.js'
+import { resolveCmsEntry } from '../lib/cms/resolve.js'
 import {
   buildFeed,
   feedChannelMeta,
@@ -185,6 +186,31 @@ const publicRoutes: FastifyPluginAsync = async (app) => {
     // that purges, so a stale edge copy is bounded by the purge, not the TTL.
     reply.header('cache-control', 'public, max-age=30, stale-while-revalidate=300')
     return reply.send(ok(payload))
+  })
+
+  app.get('/cms', async (request, reply) => {
+    const query = parseOrThrow(
+      z.object({
+        host: z.string().min(1).max(253),
+        provider: z.enum(['platform', 'frappe', 'wordpress']).default('platform'),
+        collection: z.string().min(1).max(80),
+        slug: z.string().min(1).max(120),
+      }),
+      request.query ?? {},
+      'public cms',
+    )
+    const hostname = normalizePublicHost(query.host)
+    const resolved = await withoutTenant((tx) => resolveSiteByHost(tx, hostname))
+    if (!resolved) throw new NotFoundError('Site for this hostname')
+    const entry = await resolveCmsEntry({
+      tenantId: resolved.tenantId,
+      siteId: resolved.siteId,
+      provider: query.provider,
+      collection: query.collection,
+      slug: query.slug,
+    })
+    reply.header('cache-control', 'public, max-age=15, stale-while-revalidate=60')
+    return reply.send(ok({ entry }))
   })
 
   /**

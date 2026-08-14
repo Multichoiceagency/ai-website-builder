@@ -88,6 +88,7 @@ export const HEADING_LEVEL_AWARE_BLOCKS = [
   'cta-banner-01',
   'testimonials-grid-01',
   'contact-details-01',
+  'contact-form-01',
   'feature-spotlight-01',
   'showcase-parallax-01',
 ] as const

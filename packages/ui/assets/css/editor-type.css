@@ -190,6 +190,16 @@
   font-size: var(--text-12);
   font-weight: 400;
   line-height: var(--leading-body-12);
+  scrollbar-width: none;
+}
+
+.editor-chrome::-webkit-scrollbar,
+[data-editor-scroll]::-webkit-scrollbar {
+  display: none;
+}
+
+[data-editor-scroll] {
+  scrollbar-width: none;
 }
 
 .editor-chrome label,

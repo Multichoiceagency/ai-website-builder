@@ -89,6 +89,21 @@ describe('generateDesignRoot', () => {
     layoutCanvasPropsSchema.parse({ root: result.root })
     expect((result.root.children?.length ?? 0) > 0).toBe(true)
     expect(JSON.stringify(result.root)).not.toMatch(/scroll-video|motion-section|header-/)
+    if (result.model === 'design-heuristic') {
+      const button = (result.root.children ?? []).find((node) => node.type === 'button')
+      expect(button?.stylesHover?.background).toBeTruthy()
+      expect(button?.styles?.minHeight).toBe('44px')
+    }
+  })
+})
+
+describe('design skills brief', () => {
+  it('encodes spacing, hit targets, hover, and motion rules', async () => {
+    const { DESIGN_SKILL_BRIEF } = await import('../src/lib/ai/design-skills.js')
+    expect(DESIGN_SKILL_BRIEF).toMatch(/44px/)
+    expect(DESIGN_SKILL_BRIEF).toMatch(/stylesHover/)
+    expect(DESIGN_SKILL_BRIEF).toMatch(/Lenis/)
+    expect(DESIGN_SKILL_BRIEF).not.toMatch(/Motionsites islands/)
   })
 })
 

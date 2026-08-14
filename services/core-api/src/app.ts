@@ -11,6 +11,7 @@ import trackingRoutes from './routes/tracking.js'
 import analyticsRoutes from './routes/analytics.js'
 import seoRoutes from './routes/seo.js'
 import commerceRoutes from './routes/commerce.js'
+import cmsRoutes from './routes/cms.js'
 import contentRoutes from './routes/content.js'
 import crmRoutes from './routes/crm.js'
 import adsRoutes from './routes/ads.js'
@@ -113,6 +114,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(sectionAiRoutes, { prefix: '/api/v1' })
 
   await app.register(contentRoutes, { prefix: '/api/v1/content' })
+  await app.register(cmsRoutes, { prefix: '/api/v1' })
 
   // Stock search / import — vendor adapters only (ADR-0006).
   await app.register(stockRoutes, { prefix: '/api/v1/stock' })

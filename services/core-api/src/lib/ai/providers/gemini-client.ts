@@ -41,6 +41,12 @@ export interface GeminiGenerateInput {
    */
   thinking?: 'off' | 'minimal' | 'default'
   timeoutMs?: number
+  /**
+   * Transient 429/503/500 and empty MAX_TOKENS retries. Default 3.
+   * Product generate paths should pass 1 so a hung model cannot pin the UI
+   * for ~timeoutMs × 3.
+   */
+  maxAttempts?: number
 }
 
 export interface GeminiGenerateResult {
@@ -170,6 +176,7 @@ export async function generateGeminiContent(input: GeminiGenerateInput): Promise
   const model = resolveGeminiModel(input.model)
   const thinking = thinkingConfigFor(model, input.thinking)
   const timeoutMs = input.timeoutMs ?? 60_000
+  const maxAttempts = Math.max(1, Math.min(input.maxAttempts ?? MAX_ATTEMPTS, 5))
 
   const generationConfig: Record<string, unknown> = {
     maxOutputTokens: input.maxOutputTokens ?? 8192,
@@ -202,7 +209,7 @@ export async function generateGeminiContent(input: GeminiGenerateInput): Promise
 
   let lastError: Error | null = null
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
 
@@ -220,7 +227,7 @@ export async function generateGeminiContent(input: GeminiGenerateInput): Promise
       if (!response.ok) {
         const detail = await readGeminiErrorMessage(response)
         const err = new Error(authFailureHint(response.status, detail))
-        if (RETRYABLE.has(response.status) && attempt < MAX_ATTEMPTS - 1) {
+        if (RETRYABLE.has(response.status) && attempt < maxAttempts - 1) {
           await sleep(retryAfterMs(response, attempt))
           lastError = err
           continue
@@ -236,7 +243,7 @@ export async function generateGeminiContent(input: GeminiGenerateInput): Promise
         .join('')
         .trim()
 
-      if (!text && finishReason === 'MAX_TOKENS' && attempt < MAX_ATTEMPTS - 1) {
+      if (!text && finishReason === 'MAX_TOKENS' && attempt < maxAttempts - 1) {
         generationConfig.maxOutputTokens = Math.min(
           ((generationConfig.maxOutputTokens as number) || 8192) * 2,
           32_768,
@@ -268,7 +275,7 @@ export async function generateGeminiContent(input: GeminiGenerateInput): Promise
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         lastError = new Error(`Gemini request timed out after ${timeoutMs}ms.`)
-        if (attempt < MAX_ATTEMPTS - 1) {
+        if (attempt < maxAttempts - 1) {
           await sleep(retryAfterMs(new Response(null, { status: 503 }), attempt))
           continue
         }

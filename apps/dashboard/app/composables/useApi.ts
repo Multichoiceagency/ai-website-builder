@@ -34,6 +34,7 @@ export function useApi() {
       method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
       body?: unknown
       query?: Record<string, string | number | undefined>
+      timeoutMs?: number
     } = {},
   ): Promise<T> {
     const headers: Record<string, string> = {}
@@ -54,6 +55,7 @@ export function useApi() {
         body,
         query: options.query,
         headers,
+        timeout: options.timeoutMs,
         // The session lives in an httpOnly cookie; it is never readable here.
         credentials: 'include',
       })
@@ -80,7 +82,8 @@ export function useApi() {
     request,
     get: <T>(path: string, query?: Record<string, string | number | undefined>) =>
       request<T>(path, { query }),
-    post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
+    post: <T>(path: string, body?: unknown, requestOptions?: { timeoutMs?: number }) =>
+      request<T>(path, { method: 'POST', body, timeoutMs: requestOptions?.timeoutMs }),
     patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
     put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
     del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),

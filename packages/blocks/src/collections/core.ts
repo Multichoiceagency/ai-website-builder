@@ -26,6 +26,7 @@ export const CORE_BLOCK_TAGS: Record<string, string[]> = {
   'faq-accordion-01': ['faq', 'accordion', 'schema.org', 'interactive'],
   'cta-banner-01': ['cta', 'conversion', 'lightweight'],
   'contact-details-01': ['contact', 'hours', 'local', 'schema.org'],
+  'contact-form-01': ['contact', 'form', 'leads', 'essential'],
   'hero-kinetic-01': ['hero', 'animated-typography', 'motion'],
   'showcase-parallax-01': ['parallax', 'scroll', 'image'],
   'marquee-strip-01': ['marquee', 'loop', 'motion'],

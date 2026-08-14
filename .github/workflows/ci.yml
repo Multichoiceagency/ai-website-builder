@@ -21,7 +21,7 @@ jobs:
     # rather than being written into this file — see docs/LOCAL-DEVELOPMENT.md.
     services:
       postgres:
-        image: postgres:17-alpine
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_DB: platform
           POSTGRES_USER: postgres

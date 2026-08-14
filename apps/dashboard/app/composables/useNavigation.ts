@@ -7,6 +7,7 @@ import {
   Briefcase,
   Building2,
   CreditCard,
+  Database,
   FileText,
   Filter,
   FlaskConical,
@@ -88,6 +89,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Make website', to: '/website/new', icon: Plus, permission: 'site:write' },
       { label: 'Pages', to: '/website/pages', icon: FileText, permission: 'page:read' },
+      { label: 'CMS', to: '/website/cms', icon: Database, permission: 'page:read' },
       { label: 'Top bar', to: '/website/header', icon: PanelTop, permission: 'page:write' },
       { label: 'Footer', to: '/website/footer', icon: PanelBottom, permission: 'page:write' },
       { label: 'Blog', to: '/website/blog', icon: LayoutTemplate, permission: 'page:read' },

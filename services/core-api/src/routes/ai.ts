@@ -5,6 +5,7 @@ import { assistWithMessage } from '../lib/ai/assist.js'
 import { htmlToLayoutRoot } from '../lib/ai/design-import.js'
 import { generateDesignRoot } from '../lib/ai/design-generate.js'
 import { optimizeDesignRoot } from '../lib/ai/design-optimize.js'
+import { fetchDocument, BlockedUrlError } from '../lib/discovery/fetch.js'
 import { loadAdminRegistry } from '../lib/ai/admin-template-registry.js'
 import { generateAdminTemplate } from '../lib/ai/generate-admin-template.js'
 import { generateComponent } from '../lib/ai/generate-component.js'
@@ -69,10 +70,12 @@ const adminTemplateBodySchema = z.object({
 })
 
 const designImportBodySchema = z.object({
-  format: z.enum(['html', 'fig']),
+  format: z.enum(['html', 'fig', 'url']),
   html: z.string().max(400_000).optional(),
   /** Present for .fig uploads — v1 returns guidance only. */
   filename: z.string().max(300).optional(),
+  /** Public https URL to recreate as a layout-canvas tree. */
+  url: z.string().max(2048).optional(),
 })
 
 const designOptimizeBodySchema = z.object({
@@ -156,6 +159,30 @@ const aiRoutes: FastifyPluginAsync = async (app) => {
           hint: 'Preferred: select layers in Figma → Copy → Paste in Design mode, or Import HTML.',
         }),
       )
+    }
+
+    if (input.format === 'url') {
+      if (!input.url?.trim()) {
+        throw new AppError(400, 'invalid_body', 'Provide url for format "url".')
+      }
+      try {
+        const page = await fetchDocument(input.url)
+        if (!page?.body?.trim()) {
+          throw new AppError(422, 'design_import_failed', 'Could not read HTML from that URL.')
+        }
+        const root = htmlToLayoutRoot(page.body)
+        return reply.send(ok({ ok: true as const, root }))
+      } catch (error) {
+        if (error instanceof AppError) throw error
+        if (error instanceof BlockedUrlError) {
+          throw new AppError(400, 'blocked_url', error.message)
+        }
+        throw new AppError(
+          400,
+          'design_import_failed',
+          error instanceof Error ? error.message : 'Could not import that URL.',
+        )
+      }
     }
 
     if (!input.html?.trim()) {

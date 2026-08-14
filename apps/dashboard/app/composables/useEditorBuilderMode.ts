@@ -1,40 +1,24 @@
 /**
- * Editor layout mode:
- * - classic — layers + canvas + properties
- * - interactive — Lovable-style assistant + live preview (may insert registry blocks)
- * - ai — AI Freeform: assistant + canvas; only layout-canvas trees (no component marketplace)
- * - design — Figma-style artboard: layers + absolute canvas + properties (no registry)
- *
- * Persisted per browser so the next open remembers the choice.
+ * Single visual studio: Lovable-style assistant + Figma artboard.
+ * Legacy mode keys in localStorage are ignored.
  */
-export type EditorBuilderMode = 'classic' | 'interactive' | 'ai' | 'design'
+export type EditorBuilderMode = 'studio'
 
 const STORAGE_KEY = 'editor:builder-mode'
 
-function readStoredMode(): EditorBuilderMode {
-  if (!import.meta.client) return 'classic'
-  const stored = localStorage.getItem(STORAGE_KEY)
-  return stored === 'interactive' ||
-    stored === 'classic' ||
-    stored === 'ai' ||
-    stored === 'design'
-    ? stored
-    : 'classic'
-}
-
 export function useEditorBuilderMode() {
-  const mode = useState<EditorBuilderMode>('editor-builder-mode', readStoredMode)
+  const mode = useState<EditorBuilderMode>('editor-builder-mode', () => 'studio')
 
-  watch(mode, (next) => {
-    if (import.meta.client) localStorage.setItem(STORAGE_KEY, next)
-  })
+  if (import.meta.client) {
+    localStorage.setItem(STORAGE_KEY, 'studio')
+  }
 
-  function setMode(next: EditorBuilderMode) {
-    mode.value = next
+  function setMode(_next: EditorBuilderMode) {
+    mode.value = 'studio'
   }
 
   function toggleMode() {
-    mode.value = mode.value === 'interactive' ? 'classic' : 'interactive'
+    mode.value = 'studio'
   }
 
   return { mode, setMode, toggleMode }

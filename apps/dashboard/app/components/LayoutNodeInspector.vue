@@ -10,6 +10,7 @@ import {
   LAYOUT_JUSTIFY,
   LAYOUT_OVERFLOW,
   LAYOUT_TEXT_TRANSFORM,
+  type LayoutCustomScript,
   type LayoutNode,
 } from '@platform/schemas'
 import { ChevronRight, Sparkles } from '@lucide/vue'
@@ -28,8 +29,9 @@ const props = withDefaults(
     showAiEdit?: boolean
     /** Design = denser Figma/Frappe chrome; classic = bordered cards. */
     variant?: 'classic' | 'design'
+    customScripts?: LayoutCustomScript[]
   }>(),
-  { disabled: false, showAiEdit: false, variant: 'classic' },
+  { disabled: false, showAiEdit: false, variant: 'classic', customScripts: () => [] },
 )
 
 const emit = defineEmits<{
@@ -37,6 +39,7 @@ const emit = defineEmits<{
   'update-styles': [styles: Record<string, unknown>]
   'update-hover-styles': [styles: Record<string, unknown>]
   'edit-with-ai': []
+  'update-scripts': [scripts: LayoutCustomScript[]]
 }>()
 
 const isDesign = computed(() => props.variant === 'design')
@@ -521,6 +524,22 @@ const nodeTypeLabel = computed(() => {
         >
           Container — add children in Structure
         </p>
+
+        <LayoutNodeDataBind
+          v-if="isText || isImage || isButton"
+          class="border-t border-line pt-3"
+          :bind="'bind' in node ? node.bind : undefined"
+          :disabled="disabled"
+          @update="patchContent({ bind: $event } as Partial<LayoutNode>)"
+        />
+
+        <LayoutCanvasScripts
+          v-if="isContainer && node.id === 'root'"
+          class="border-t border-line pt-3"
+          :scripts="customScripts"
+          :disabled="disabled"
+          @update="emit('update-scripts', $event)"
+        />
 
         <div class="grid grid-cols-2 gap-3">
           <UiField v-slot="{ id }" label="Visibility">

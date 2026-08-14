@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { aiGateway } from '../generation/index.js'
 import { buildAssistCatalogueContext, type CatalogueHit } from './catalogue-context.js'
+import { DESIGN_SKILL_BRIEF } from './design-skills.js'
 import {
   ensurePlatformKnowledgeSeeded,
   formatKnowledgeForPrompt,
@@ -192,7 +193,9 @@ Hard rules:
 - When a selected node is provided in context, prefer patchLayoutNode or replaceLayoutSubtree
   for that nodeId; use replaceLayoutRoot only when asked to redesign the whole artboard.
 - Be concise. If they ask to build a whole multi-page site, tell them to use Make website with AI Freeform
-  (/website/new?mode=ai).`
+  (/website/new?mode=ai).
+- Apply product design skills: 8px spacing rhythm, 44px hit targets, strong type hierarchy, contrast,
+  stylesHover on every button, Lenis/GSAP already on the host (CSS hover/transform only — no Motionsites ids).`
 
 function assistSystemPrompt(freeformMode: boolean): string {
   if (freeformMode) {
@@ -263,6 +266,7 @@ export async function assistWithMessage(
     const knowledgeHits = await searchKnowledge(message, {
       tenantId: options.tenantId,
       limit: 5,
+      lexicalOnly: freeformMode,
     })
     knowledgeBlock = formatKnowledgeForPrompt(knowledgeHits)
   } catch {
@@ -321,6 +325,7 @@ export async function assistWithMessage(
   if (!llm) return null
 
   const parts = [assistSystemPrompt(freeformMode)]
+  if (freeformMode) parts.push(DESIGN_SKILL_BRIEF)
   if (knowledgeBlock) parts.push(knowledgeBlock)
   if (layoutContextBlock) parts.push(layoutContextBlock)
   if (digest) {
@@ -331,7 +336,7 @@ export async function assistWithMessage(
   const userText = [
     message.slice(0, 1_000),
     layoutContextBlock ? layoutContextBlock.slice(0, 2_500) : '',
-    knowledgeBlock && !freeformMode ? knowledgeBlock.slice(0, 1_500) : '',
+    knowledgeBlock ? knowledgeBlock.slice(0, 1_500) : '',
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -386,7 +391,7 @@ async function assistViaGemini(
   const result = await generateGeminiContent({
     model,
     systemInstruction: system,
-    userText: message.slice(0, 1_000),
+    userText: message.slice(0, 4_000),
     responseMimeType: 'application/json',
     responseSchema: {
       type: 'OBJECT',
@@ -415,6 +420,7 @@ async function assistViaGemini(
     maxOutputTokens: 4_096,
     thinking: 'off',
     timeoutMs: 30_000,
+    maxAttempts: 1,
   })
 
   const parsed = parseAssistModelText(result.text)

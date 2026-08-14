@@ -4,6 +4,7 @@ import {
   LAYOUT_CANVAS_BLOCK_ID,
   isLayoutCanvasBlock,
   layoutCanvasPropsSchema,
+  resolveLayoutBind,
   walkLayoutNodes,
 } from '@platform/schemas'
 import { createSection, getBlock, resolveRenderProps } from '../index.js'
@@ -64,5 +65,31 @@ describe('layout-canvas-01', () => {
     const ids: string[] = []
     walkLayoutNodes(tree.root, (node) => ids.push(node.id))
     expect(ids).toEqual(['root', 'row', 't1', 'b1'])
+  })
+
+  it('keeps customScripts empty by default and accepts https src', () => {
+    const parsed = layoutCanvasPropsSchema.parse({})
+    expect(parsed.customScripts).toEqual([])
+    const withScript = layoutCanvasPropsSchema.parse({
+      customScripts: [{ id: 's1', src: 'https://cdn.example.com/x.js' }],
+    })
+    expect(withScript.customScripts).toHaveLength(1)
+    expect(() =>
+      layoutCanvasPropsSchema.parse({
+        customScripts: [{ id: 's1', src: 'http://insecure.example/x.js' }],
+      }),
+    ).toThrow()
+  })
+
+  it('resolves CMS and URL binds without storing payloads', () => {
+    expect(
+      resolveLayoutBind({ source: 'url', queryKey: 'headline' }, { query: { headline: 'Hello' } }),
+    ).toBe('Hello')
+    expect(
+      resolveLayoutBind(
+        { source: 'cms', path: 'fields.hero' },
+        { cms: { fields: { hero: 'From CMS' } } },
+      ),
+    ).toBe('From CMS')
   })
 })

@@ -32,6 +32,7 @@ export const PLATFORM_SETTINGS_KEYS = [
   'onboarding-funnel',
   'notifications',
   'ai',
+  'cms',
   'data-retention',
   'whatsapp',
 ] as const
@@ -243,6 +244,21 @@ export const AI_AUTONOMY_CAPABILITIES = [
 ] as const
 export const aiAutonomyCapabilitySchema = z.enum(AI_AUTONOMY_CAPABILITIES)
 export type AiAutonomyCapability = z.infer<typeof aiAutonomyCapabilitySchema>
+
+export const cmsSettingsSchema = z.object({
+  platformEnabled: z.boolean().default(true),
+  frappeEnabled: z.boolean().default(false),
+  frappeBaseUrl: z.string().max(300).default(''),
+  frappeDoctype: z.string().max(120).default('Blog Post'),
+  wordpressEnabled: z.boolean().default(false),
+  wordpressBaseUrl: z.string().max(300).default(''),
+  wordpressPostType: z.string().max(80).default('posts'),
+})
+export type CmsSettings = z.infer<typeof cmsSettingsSchema>
+
+/** Encrypted; never part of the settings JSON document. Frappe value is `api_key:api_secret`. */
+export const CMS_SECRET_FIELDS = ['frappeApiKey', 'wordpressApiKey'] as const
+export const cmsSecretFieldSchema = z.enum(CMS_SECRET_FIELDS)
 
 export const aiSettingsSchema = z.object({
   /** Empty means "whatever the gateway picks for this plan". */
@@ -744,6 +760,7 @@ export const SETTINGS_REGISTRY: readonly SettingsDefinition[] = Object.freeze([
   },
   { scope: 'platform', key: 'notifications', schema: notificationSettingsSchema, minimumPlan: null, label: 'Notifications' },
   { scope: 'platform', key: 'ai', schema: aiSettingsSchema, minimumPlan: null, label: 'AI' },
+  { scope: 'platform', key: 'cms', schema: cmsSettingsSchema, minimumPlan: null, label: 'CMS' },
   { scope: 'platform', key: 'data-retention', schema: dataRetentionSettingsSchema, minimumPlan: null, label: 'Data & privacy' },
   { scope: 'platform', key: 'whatsapp', schema: whatsappSettingsSchema, minimumPlan: null, label: 'WhatsApp' },
   { scope: 'commerce', key: 'engine', schema: commerceEngineSettingsSchema, minimumPlan: null, label: 'Commerce connection' },

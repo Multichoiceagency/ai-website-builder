@@ -3,14 +3,15 @@
  * Recursive painter for layout-canvas nodes.
  * Maps typed node styles → CSS (Frappe-like Style/Spacing/Typography/Hover).
  */
-import { computed, inject } from 'vue'
-import type {
-  LayoutButtonStyles,
-  LayoutContainerStyles,
-  LayoutHoverStyles,
-  LayoutImageStyles,
-  LayoutNode,
-  LayoutTextStyles,
+import { computed, inject, unref, type ComputedRef } from 'vue'
+import {
+  resolveLayoutBind,
+  type LayoutButtonStyles,
+  type LayoutContainerStyles,
+  type LayoutHoverStyles,
+  type LayoutImageStyles,
+  type LayoutNode,
+  type LayoutTextStyles,
 } from '@platform/schemas'
 
 const props = withDefaults(
@@ -26,8 +27,59 @@ defineOptions({ name: 'BlockLayoutCanvasNode' })
 
 /** Provided by EditorCanvas so storefront/preview stay chrome-free. */
 const layoutCanvasEditing = inject<boolean>('layoutCanvasEditing', false)
+const bindContext = inject<
+  ComputedRef<{ query?: Record<string, string | undefined>; cms?: unknown }> | {
+    query?: Record<string, string | undefined>
+    cms?: unknown
+  }
+>('layoutBindContext', { query: {}, cms: undefined })
 
 const emptyChrome = computed(() => props.showEmptyChrome || layoutCanvasEditing === true)
+
+function nodeBind() {
+  return props.node.type === 'container' ? undefined : props.node.bind
+}
+
+const resolvedBind = computed(() => resolveLayoutBind(nodeBind(), unref(bindContext)))
+
+const textContent = computed(() => {
+  if (props.node.type !== 'text') return ''
+  const bind = nodeBind()
+  if (bind && bind.path !== 'href' && bind.path !== 'src' && bind.path !== 'alt') {
+    return resolvedBind.value ?? props.node.content ?? ''
+  }
+  return props.node.content ?? ''
+})
+
+const imageSrc = computed(() => {
+  if (props.node.type !== 'image') return ''
+  const bind = nodeBind()
+  if (bind && bind.path !== 'alt' && bind.path !== 'href') {
+    return resolvedBind.value ?? props.node.src ?? ''
+  }
+  return props.node.src ?? ''
+})
+
+const imageAlt = computed(() => {
+  if (props.node.type !== 'image') return ''
+  const bind = nodeBind()
+  if (bind?.path === 'alt') return resolvedBind.value ?? props.node.alt ?? ''
+  return props.node.alt ?? ''
+})
+
+const buttonLabel = computed(() => {
+  if (props.node.type !== 'button') return ''
+  const bind = nodeBind()
+  if (bind && bind.path !== 'href') return resolvedBind.value ?? props.node.label ?? 'Button'
+  return props.node.label || 'Button'
+})
+
+const buttonHref = computed(() => {
+  if (props.node.type !== 'button') return '#'
+  const bind = nodeBind()
+  if (bind?.path === 'href') return resolvedBind.value ?? props.node.href ?? '#'
+  return props.node.href || '#'
+})
 
 const isEmptyContainer = computed(
   () => props.node.type === 'container' && !(props.node.children?.length),
@@ -241,17 +293,17 @@ const buttonStyle = computed(() => {
     :data-node-type="node.type"
     :style="textStyle"
   >
-    {{ node.content }}
+    {{ textContent }}
   </component>
 
   <img
-    v-else-if="node.type === 'image' && node.src"
+    v-else-if="node.type === 'image' && imageSrc"
     class="layout-canvas-node layout-canvas-node--image"
     :class="{ 'layout-canvas-node--hoverable': hasHover }"
     :data-node-id="node.id"
     :data-node-type="node.type"
-    :src="node.src"
-    :alt="node.alt || ''"
+    :src="imageSrc"
+    :alt="imageAlt"
     :style="imageStyle"
   />
 
@@ -261,10 +313,10 @@ const buttonStyle = computed(() => {
     :class="{ 'layout-canvas-node--hoverable': hasHover }"
     :data-node-id="node.id"
     :data-node-type="node.type"
-    :href="node.href || '#'"
+    :href="buttonHref"
     :style="buttonStyle"
   >
-    {{ node.label || 'Button' }}
+    {{ buttonLabel }}
   </a>
 </template>
 

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { layoutBindSchema, layoutCustomScriptSchema, type LayoutBind } from './cms-bind.js'
 
 /**
  * Nestable layout tree for `layout-canvas-01` (ADR-0003).
@@ -164,6 +165,7 @@ export interface LayoutTextNode {
   tag?: 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'span'
   styles?: LayoutTextStyles
   stylesHover?: LayoutHoverStyles
+  bind?: LayoutBind
 }
 
 export interface LayoutImageNode {
@@ -173,6 +175,7 @@ export interface LayoutImageNode {
   alt?: string
   styles?: LayoutImageStyles
   stylesHover?: LayoutHoverStyles
+  bind?: LayoutBind
 }
 
 export interface LayoutButtonNode {
@@ -182,6 +185,7 @@ export interface LayoutButtonNode {
   href?: string
   styles?: LayoutButtonStyles
   stylesHover?: LayoutHoverStyles
+  bind?: LayoutBind
 }
 
 export const layoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
@@ -200,6 +204,7 @@ export const layoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
       tag: z.enum(['p', 'h1', 'h2', 'h3', 'h4', 'span']).default('p'),
       styles: layoutTextStylesSchema.optional(),
       stylesHover: layoutHoverStylesSchema.optional(),
+      bind: layoutBindSchema.optional(),
     }),
     z.object({
       id: z.string().min(1).max(64),
@@ -208,6 +213,7 @@ export const layoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
       alt: z.string().max(400).default(''),
       styles: layoutImageStylesSchema.optional(),
       stylesHover: layoutHoverStylesSchema.optional(),
+      bind: layoutBindSchema.optional(),
     }),
     z.object({
       id: z.string().min(1).max(64),
@@ -216,6 +222,7 @@ export const layoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
       href: z.string().max(2048).default('#'),
       styles: layoutButtonStylesSchema.optional(),
       stylesHover: layoutHoverStylesSchema.optional(),
+      bind: layoutBindSchema.optional(),
     }),
   ]),
 )
@@ -278,6 +285,7 @@ export function parseLayoutPx(value: string | undefined | null): number | null {
 
 export const layoutCanvasPropsSchema = z.object({
   root: layoutNodeSchema.default(DEFAULT_LAYOUT_CANVAS_ROOT),
+  customScripts: z.array(layoutCustomScriptSchema).max(8).default([]),
 })
 export type LayoutCanvasProps = z.infer<typeof layoutCanvasPropsSchema>
 
@@ -656,4 +664,16 @@ export function duplicateLayoutNode(
   const original = location.parent.children![location.index]!
   const copy = reissueIds(original)
   return { root: insertLayoutNode(root, location.parent.id, copy, location.index + 1), newId: copy.id }
+}
+
+/** First CMS bind in the tree — used to fetch one entry for the canvas. */
+export function findLayoutCmsBind(root: LayoutNode): LayoutBind | undefined {
+  let found: LayoutBind | undefined
+  walkLayoutNodes(root, (node) => {
+    if (found) return
+    if (node.type !== 'container' && node.bind?.source === 'cms' && node.bind.collection) {
+      found = node.bind
+    }
+  })
+  return found
 }

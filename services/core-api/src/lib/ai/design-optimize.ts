@@ -6,6 +6,7 @@ import {
   type LayoutContainerNode,
   type LayoutNode,
 } from '@platform/schemas'
+import { DESIGN_SKILL_BRIEF, retrieveDesignKnowledge } from './design-skills.js'
 import { geminiApiKey, generateGeminiContent, resolveGeminiModel } from './providers/gemini-client.js'
 
 function stripToJson(raw: string): unknown {
@@ -75,9 +76,12 @@ export async function optimizeDesignRoot(input: {
   }
 
   const model = resolveGeminiModel()
-  const result = await generateGeminiContent({
-    model,
-    systemInstruction: `You optimize freeform website layout trees for a design canvas.
+  const knowledge = await retrieveDesignKnowledge(instruction)
+
+  try {
+    const result = await generateGeminiContent({
+      model,
+      systemInstruction: `You optimize freeform website layout trees for a design canvas.
 Return ONLY JSON: {"root":{...}} matching the input shape.
 Node types: container | text | image | button. Preserve all node ids when possible.
 Allowed style keys include position, left, top, width, height, zIndex, flex, colors, typography,
@@ -85,18 +89,25 @@ borders, boxShadow, overflow, rotate, fontFamily, textTransform, stylesHover.
 NEVER invent Motionsites, registry block ids, or React components.
 Improve spacing, visual hierarchy, and accessibility (alt text) per the instruction.
 Use rich styles when helpful: paddingTop/Right/Bottom/Left, margin*, borderWidth/Style/Color,
-borderRadius, boxShadow, overflow, fontFamily, textTransform, letterSpacing, rotate, stylesHover.`,
-    userText: JSON.stringify({
-      instruction,
-      root: input.root,
-    }).slice(0, 28_000),
-    responseMimeType: 'application/json',
-    maxOutputTokens: 8_192,
-    thinking: 'off',
-    timeoutMs: 60_000,
-  })
+borderRadius, boxShadow, overflow, fontFamily, textTransform, letterSpacing, rotate, stylesHover.
+${DESIGN_SKILL_BRIEF}
+${knowledge ? `\n${knowledge}` : ''}`,
+      userText: JSON.stringify({
+        instruction,
+        root: input.root,
+      }).slice(0, 28_000),
+      responseMimeType: 'application/json',
+      maxOutputTokens: 8_192,
+      thinking: 'off',
+      timeoutMs: 22_000,
+      maxAttempts: 1,
+    })
 
-  const parsed = stripToJson(result.text) as { root?: unknown }
-  const validated = layoutCanvasPropsSchema.parse({ root: parsed.root ?? parsed })
-  return { root: validated.root as LayoutContainerNode, model: `google:${model}` }
+    const parsed = stripToJson(result.text) as { root?: unknown }
+    const validated = layoutCanvasPropsSchema.parse({ root: parsed.root ?? parsed })
+    return { root: validated.root as LayoutContainerNode, model: `google:${model}` }
+  } catch (error) {
+    console.warn('design optimize fell back to heuristic:', error)
+    return { root: lightOptimize(input.root, instruction), model: 'design-heuristic' }
+  }
 }

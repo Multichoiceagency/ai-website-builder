@@ -72,6 +72,8 @@ const LEGACY_PREFIX_EXCEPTIONS = new Set([
   'feature-spotlight-01',
   // Nestable empty canvas — picker / InsertPanel only; id is layout-* not content-*.
   'layout-canvas-01',
+  // Partner backlink band — category footer, id predates the footer- prefix rule.
+  'seo-network-01',
 ])
 
 describe('collections', () => {

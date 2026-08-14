@@ -1,0 +1,22 @@
+# Optional Frappe CMS for local development.
+#
+# This file is NOT started by `pnpm infra:up`. The product talks to Frappe over
+# REST (`Authorization: token api_key:api_secret` → GET /api/resource/{doctype}/{name}).
+#
+# Disposable Docker site (official frappe_docker, port 8080):
+#   git clone https://github.com/frappe/frappe_docker.git
+#   cd frappe_docker
+#   docker compose -f pwd.yml up -d
+#   docker compose -f pwd.yml logs -f create-site
+# Then Settings → CMS → Frappe base URL = http://localhost:8080
+#
+# Frappe bench (development, port 8000):
+#   bench start
+# Then Settings → CMS → Frappe base URL = http://localhost:8000
+#
+# Clean up the disposable stack:
+#   docker compose -f pwd.yml down -v
+#
+name: platform-frappe-dev
+
+services: {}

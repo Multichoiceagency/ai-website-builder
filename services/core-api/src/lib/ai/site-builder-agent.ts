@@ -92,6 +92,9 @@ No HTML. Match the brief language (${input.locale}).`
       userText: input.prompt,
       responseMimeType: 'application/json',
       maxOutputTokens: 2_048,
+      thinking: 'off',
+      timeoutMs: 25_000,
+      maxAttempts: 1,
     })
     if (!result?.text) return null
     const parsed = JSON.parse(result.text) as Record<string, unknown>

@@ -88,51 +88,80 @@ function scoreRecord(record: MemoryRecord, query: string): number {
   return score
 }
 
-/** Seed procedural + semantic baseline if the store is empty. */
+const ALLOWED_PACKAGES_MEMORY =
+  'Allowed Motionsites codegen packages: react, lucide-react, framer-motion, gsap, lenis, three, vanta, react-bits, embla-carousel-react. No routing. No external CSS libraries. Output must start with /*DEPENDENCIES:{"packages":[...]} */.'
+
+function upsertMemory(
+  records: MemoryRecord[],
+  seed: Omit<MemoryRecord, 'id' | 'createdAt' | 'embeddingModel'> & { embeddingModel?: string },
+): { records: MemoryRecord[]; changed: boolean } {
+  const index = records.findIndex((entry) => entry.key === seed.key)
+  if (index >= 0) {
+    const existing = records[index]!
+    if (existing.content === seed.content && existing.kind === seed.kind) {
+      return { records, changed: false }
+    }
+    const next = [...records]
+    next[index] = {
+      ...existing,
+      kind: seed.kind,
+      content: seed.content,
+      tags: seed.tags,
+      embeddingModel: seed.embeddingModel ?? EMBEDDING_MODEL,
+    }
+    return { records: next, changed: true }
+  }
+  return {
+    records: [
+      ...records,
+      {
+        id: crypto.randomUUID(),
+        kind: seed.kind,
+        key: seed.key,
+        content: seed.content,
+        tags: seed.tags,
+        createdAt: new Date().toISOString(),
+        embeddingModel: seed.embeddingModel ?? EMBEDDING_MODEL,
+      },
+    ],
+    changed: true,
+  }
+}
+
+/** Seed procedural + semantic baseline; refresh allowlist/prompt if the store is stale. */
 export async function ensureBaselineMemories(): Promise<void> {
-  const records = await loadStore()
-  const byKey = new Set(records.map((entry) => entry.key))
-  const next = [...records]
+  let records = await loadStore()
+  let changed = false
 
-  if (!byKey.has('procedural:motionsites-codegen-engine')) {
-    next.push({
-      id: crypto.randomUUID(),
-      kind: 'procedural',
-      key: 'procedural:motionsites-codegen-engine',
-      content: MOTIONSITES_CODEGEN_SYSTEM_PROMPT,
-      tags: ['codegen', 'react', 'motionsites', 'procedural'],
-      createdAt: new Date().toISOString(),
-      embeddingModel: EMBEDDING_MODEL,
-    })
-  }
+  const procedural = upsertMemory(records, {
+    kind: 'procedural',
+    key: 'procedural:motionsites-codegen-engine',
+    content: MOTIONSITES_CODEGEN_SYSTEM_PROMPT,
+    tags: ['codegen', 'react', 'motionsites', 'procedural'],
+  })
+  records = procedural.records
+  changed = changed || procedural.changed
 
-  if (!byKey.has('semantic:allowed-packages')) {
-    next.push({
-      id: crypto.randomUUID(),
-      kind: 'semantic',
-      key: 'semantic:allowed-packages',
-      content:
-        'Allowed Motionsites codegen packages: react, lucide-react, framer-motion, gsap, lenis, three, vanta, react-bits. No routing. No external CSS libraries. Output must start with /*DEPENDENCIES:{"packages":[...]} */.',
-      tags: ['packages', 'allowlist', 'semantic'],
-      createdAt: new Date().toISOString(),
-      embeddingModel: EMBEDDING_MODEL,
-    })
-  }
+  const packages = upsertMemory(records, {
+    kind: 'semantic',
+    key: 'semantic:allowed-packages',
+    content: ALLOWED_PACKAGES_MEMORY,
+    tags: ['packages', 'allowlist', 'semantic'],
+  })
+  records = packages.records
+  changed = changed || packages.changed
 
-  if (!byKey.has('semantic:adr-0003')) {
-    next.push({
-      id: crypto.randomUUID(),
-      kind: 'semantic',
-      key: 'semantic:adr-0003',
-      content:
-        'ADR-0003: generated React source is for Motionsites islands only. Never store component source, markup, or CDN URLs as CMS page content. Pages hold block ids + props.',
-      tags: ['adr-0003', 'islands', 'semantic'],
-      createdAt: new Date().toISOString(),
-      embeddingModel: EMBEDDING_MODEL,
-    })
-  }
+  const adr = upsertMemory(records, {
+    kind: 'semantic',
+    key: 'semantic:adr-0003',
+    content:
+      'ADR-0003: generated React source is for Motionsites islands only. Never store component source, markup, or CDN URLs as CMS page content. Pages hold block ids + props.',
+    tags: ['adr-0003', 'islands', 'semantic'],
+  })
+  records = adr.records
+  changed = changed || adr.changed
 
-  if (next.length !== records.length) await saveStore(next)
+  if (changed) await saveStore(records)
 }
 
 export async function remember(input: {

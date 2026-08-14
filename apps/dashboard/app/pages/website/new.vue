@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { GenerationResult, Page, Site, StoreBuildPlan, StoreBuildResult } from '@platform/schemas'
-import { Globe, ShoppingBag, Sparkles } from '@lucide/vue'
+import { Globe, ImagePlus, ShoppingBag, Sparkles } from '@lucide/vue'
 
 /**
  * Lovable-style create — one page, one question, one action.
@@ -31,6 +31,10 @@ const building = ref(false)
 const buildingStartedAt = ref(0)
 const showSlowHint = ref(false)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
+const sourceUrl = ref('')
+const screenshotUrl = ref('')
+const screenshotName = ref('')
+const { upload: uploadMedia, busy: screenshotBusy } = useMediaUpload()
 
 const isMac = computed(() => {
   if (!import.meta.client) return true
@@ -49,6 +53,10 @@ const t = computed(() => {
       langHelp: 'Language of your site',
       placeholderWebsite: 'Example: A bakery in Amsterdam. Fresh bread, cakes, contact form…',
       placeholderShop: 'Example: I sell handmade candles. Soft look, euro prices…',
+      fromUrl: 'Or recreate a site from a URL',
+      fromUrlPh: 'https://example.com',
+      fromShot: 'Or a screenshot',
+      fromShotBusy: 'Uploading screenshot…',
       needMore: 'Write a bit more about your idea (a short sentence is enough).',
       buildWebsite: 'Make my website',
       buildShop: 'Make my webshop',
@@ -85,8 +93,12 @@ const t = computed(() => {
     webshop: 'Webshop',
     kindHelp: 'Website = informatie. Webshop = producten verkopen.',
     langHelp: 'Taal van je website',
-    placeholderWebsite: 'Voorbeeld: Bakkerij in Amsterdam. Vers brood, taarten, contactformulier…',
-    placeholderShop: 'Voorbeeld: Ik verkoop handgemaakte kaarsen. Rustige look, prijzen in euro…',
+      placeholderWebsite: 'Voorbeeld: Bakkerij in Amsterdam. Vers brood, taarten, contactformulier…',
+      placeholderShop: 'Voorbeeld: Ik verkoop handgemaakte kaarsen. Rustige look, prijzen in euro…',
+      fromUrl: 'Of maak na van een website-URL',
+      fromUrlPh: 'https://voorbeeld.nl',
+      fromShot: 'Of een screenshot',
+      fromShotBusy: 'Screenshot uploaden…',
     needMore: 'Schrijf nog een zin over je idee (een korte zin is genoeg).',
     buildWebsite: 'Maak mijn website',
     buildShop: 'Maak mijn webshop',
@@ -193,7 +205,12 @@ function guessName(text: string): string {
   return kind.value === 'webshop' ? (language.value === 'nl' ? 'Mijn webshop' : 'My shop') : language.value === 'nl' ? 'Mijn website' : 'My website'
 }
 
-const canBuild = computed(() => prompt.value.trim().length >= 8)
+const canBuild = computed(
+  () =>
+    prompt.value.trim().length >= 8 ||
+    /^https?:\/\//i.test(sourceUrl.value.trim()) ||
+    Boolean(screenshotUrl.value),
+)
 const canBlank = computed(() => blankName.value.trim().length >= 1)
 const buildLabel = computed(() => (kind.value === 'webshop' ? t.value.buildShop : t.value.buildWebsite))
 const placeholder = computed(() =>
@@ -251,14 +268,39 @@ watch(
   () => route.query.website,
   (value) => {
     if (typeof value === 'string' && value.trim()) {
-      const url = value.trim()
-      prompt.value = prompt.value.trim()
-        ? `${prompt.value.trim()}\n\nWebsite: ${url}`
-        : `Build a website based on ${url}`
+      sourceUrl.value = value.trim()
+      if (!prompt.value.trim()) prompt.value = `Build a website based on ${value.trim()}`
     }
   },
   { immediate: true },
 )
+
+function composePrompt(): string {
+  let text = prompt.value.trim()
+  const url = sourceUrl.value.trim()
+  if (url) {
+    text = text ? `${text}\n\nWebsite: ${url}` : `Build a website based on ${url}`
+  }
+  if (screenshotUrl.value) {
+    text = `${text}\n\nRecreate this screenshot as closely as possible: ${screenshotUrl.value}`
+  }
+  return text.trim().slice(0, 4000)
+}
+
+async function onScreenshot(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  error.value = ''
+  const [asset] = await uploadMedia([file], { folder: 'create' })
+  if (!asset?.url) {
+    error.value = t.value.errGeneric
+    return
+  }
+  screenshotUrl.value = asset.url
+  screenshotName.value = file.name
+}
 
 let slowTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -341,7 +383,11 @@ async function build() {
     showSlowHint.value = true
   }, 10_000)
 
-  const text = prompt.value.trim()
+  const text = composePrompt()
+  if (text.length < 8) {
+    error.value = t.value.errShort
+    return
+  }
   const name = guessName(text)
   const phases = kind.value === 'webshop' ? t.value.phasesShop : t.value.phasesWebsite
   phase.value = phases[0]!
@@ -366,6 +412,7 @@ async function build() {
           updateHome: true,
           publish: true,
         },
+        { timeoutMs: 90_000 },
       )
       const homeId = response.result.pageIds.at(-1)
       phase.value = t.value.openingShop
@@ -378,14 +425,18 @@ async function build() {
       return
     }
 
-    const created = await api.post<GenerationResult>('/api/v1/onboarding/generate-from-prompt', {
-      prompt: text,
-      locale: language.value,
-      style: 'auto',
-      publish: false,
-      siteName: name,
-      freeform: freeformAi.value,
-    })
+    const created = await api.post<GenerationResult>(
+      '/api/v1/onboarding/generate-from-prompt',
+      {
+        prompt: text,
+        locale: language.value,
+        style: 'auto',
+        publish: false,
+        siteName: name,
+        freeform: freeformAi.value,
+      },
+      { timeoutMs: 90_000 },
+    )
     activeSiteId.value = created.siteId
     phase.value = t.value.openingWebsite
     try {
@@ -602,6 +653,24 @@ function onKeydown(event: KeyboardEvent) {
           </div>
         </div>
         <p class="px-3 pb-2 text-[0.9375rem] text-soft">{{ t.kindHelp }}</p>
+
+        <div class="flex flex-col gap-2 px-3 pb-3">
+          <label class="block">
+            <span class="mb-1 block text-[0.8125rem] font-medium text-soft">{{ t.fromUrl }}</span>
+            <input
+              v-model="sourceUrl"
+              type="url"
+              class="w-full rounded-xl border border-line bg-sunken/40 px-3 py-2.5 text-[1rem] text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
+              :placeholder="t.fromUrlPh"
+            />
+          </label>
+          <label class="inline-flex cursor-pointer items-center gap-2 text-[0.9375rem] font-medium text-ink">
+            <input type="file" accept="image/*" class="sr-only" @change="onScreenshot" />
+            <ImagePlus class="h-4 w-4" aria-hidden="true" />
+            <span>{{ screenshotName || t.fromShot }}</span>
+            <span v-if="screenshotBusy" class="text-soft">{{ t.fromShotBusy }}</span>
+          </label>
+        </div>
 
         <p v-if="!canBuild" class="px-3 pb-2 text-[0.9375rem] text-soft">{{ t.needMore }}</p>
 

@@ -24,6 +24,7 @@ const groups = computed(() => [
     label: 'Platform',
     items: [
       { label: 'Integrations', to: '/settings/integrations' },
+      { label: 'CMS', to: '/settings/cms' },
       { label: 'AI', to: '/settings/ai' },
       { label: 'Onboarding', to: '/settings/onboarding' },
       { label: 'Notifications', to: '/settings/notifications' },

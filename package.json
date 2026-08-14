@@ -20,7 +20,7 @@
     "nango:bootstrap": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/nango-bootstrap.mjs",
     "db:migrate": "pnpm --filter @platform/core-api migrate",
     "db:seed": "pnpm --filter @platform/core-api seed",
-    "setup": "pnpm install && pnpm infra:up && node scripts/wait-for-postgres.mjs && pnpm build && pnpm db:migrate && pnpm db:seed",
+    "setup": "pnpm install && pnpm infra:up && node --env-file-if-exists=.env scripts/wait-for-postgres.mjs && pnpm build && pnpm db:migrate && pnpm db:seed",
     "db:reset": "pnpm --filter @platform/core-api reset && pnpm db:migrate && pnpm db:seed",
     "scrape:shadcn-io-templates": "node scripts/scrape-shadcn-io-templates.mjs",
     "scrape:shadcnspace": "node scripts/scrape-shadcnspace.mjs"

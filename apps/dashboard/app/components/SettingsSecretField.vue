@@ -33,7 +33,7 @@ const error = ref('')
 
 const configured = computed(() => Boolean(props.state?.configured))
 const basePath = computed(() =>
-  `/api/v1/settings/${props.scope === 'commerce' ? 'commerce/' : ''}${props.sectionKey}/secrets`,
+  `/api/v1/settings/${props.scope}/${props.sectionKey}/secrets`,
 )
 
 async function submit() {

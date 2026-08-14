@@ -206,7 +206,8 @@ export class GeminiCopyProvider implements AiProvider {
       responseSchema: request.responseSchema,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       thinking: 'off',
-      timeoutMs: 60_000,
+      timeoutMs: 25_000,
+      maxAttempts: 1,
     })
     return result.raw
   }

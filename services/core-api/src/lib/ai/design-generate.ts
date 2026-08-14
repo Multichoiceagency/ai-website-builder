@@ -12,6 +12,7 @@ import {
   type LayoutContainerNode,
   type LayoutNode,
 } from '@platform/schemas'
+import { DESIGN_SKILL_BRIEF, retrieveDesignKnowledge } from './design-skills.js'
 import { geminiApiKey, generateGeminiContent, resolveGeminiModel } from './providers/gemini-client.js'
 
 function stripToJson(raw: string): unknown {
@@ -48,15 +49,16 @@ function heuristicArtboard(prompt: string): LayoutContainerNode {
   title.content = prompt.trim().slice(0, 80) || 'New design'
   title.tag = 'h1'
   title.styles = {
-    fontSize: '2.5rem',
+    fontSize: '3rem',
     fontWeight: '700',
     color: '#0f172a',
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.03em',
+    lineHeight: '1.1',
   }
   const subtitle = createLayoutNode('text')
   if (subtitle.type !== 'text') throw new Error('expected text')
   subtitle.content = 'Generated layout — edit styles in the inspector or refine with AI.'
-  subtitle.styles = { fontSize: '1.125rem', color: '#475569', lineHeight: '1.6' }
+  subtitle.styles = { fontSize: '1.125rem', color: '#334155', lineHeight: '1.65' }
   const cta = createLayoutNode('button')
   if (cta.type !== 'button') throw new Error('expected button')
   cta.label = 'Get started'
@@ -64,15 +66,21 @@ function heuristicArtboard(prompt: string): LayoutContainerNode {
   cta.styles = {
     background: '#0f172a',
     color: '#fff',
-    paddingTop: '0.75rem',
-    paddingRight: '1.25rem',
-    paddingBottom: '0.75rem',
-    paddingLeft: '1.25rem',
+    paddingTop: '12px',
+    paddingRight: '20px',
+    paddingBottom: '12px',
+    paddingLeft: '20px',
+    minHeight: '44px',
     borderRadius: '0.5rem',
     fontWeight: '600',
     cursor: 'pointer',
+    fontSize: '1rem',
   }
-  cta.stylesHover = { background: '#1e293b', transform: 'translateY(-1px)' }
+  cta.stylesHover = {
+    background: '#1e293b',
+    transform: 'translateY(-1px)',
+    boxShadow: '0 8px 20px rgba(15,23,42,0.18)',
+  }
 
   root = insertLayoutNode(root, root.id, title) as LayoutContainerNode
   root = insertLayoutNode(root, root.id, subtitle) as LayoutContainerNode
@@ -148,30 +156,40 @@ export async function generateDesignRoot(input: {
 
   const model = resolveGeminiModel()
   const artboardId = input.currentRoot?.id ?? newLayoutNodeId()
+  const knowledge = await retrieveDesignKnowledge(prompt)
 
-  const result = await generateGeminiContent({
-    model,
-    systemInstruction: `You generate freeform website layout trees for a Design artboard.
+  try {
+    const result = await generateGeminiContent({
+      model,
+      systemInstruction: `You generate freeform website layout trees for a Design artboard.
 Return ONLY JSON: {"root":{...}} where root.type is "container".
 Node types ONLY: container | text | image | button.
 Root id must be "${artboardId}". Generate fresh unique ids for children.
 NEVER invent Motionsites, registry block ids, React, or HTML strings as nodes.
 Build a polished single-viewport composition matching the prompt.
-${STYLE_VOCAB}`,
-    userText: JSON.stringify({
-      prompt,
-      hint: input.currentRoot
-        ? { previousRootId: input.currentRoot.id, childCount: (input.currentRoot as LayoutContainerNode).children?.length }
-        : undefined,
-    }).slice(0, 12_000),
-    responseMimeType: 'application/json',
-    maxOutputTokens: 8_192,
-    thinking: 'off',
-    timeoutMs: 90_000,
-  })
+${DESIGN_SKILL_BRIEF}
 
-  const parsed = stripToJson(result.text) as { root?: unknown }
-  const validated = layoutCanvasPropsSchema.parse({ root: parsed.root ?? parsed })
-  const root = { ...validated.root, id: artboardId } as LayoutContainerNode
-  return { root: layoutCanvasPropsSchema.parse({ root }).root as LayoutContainerNode, model: `google:${model}` }
+${STYLE_VOCAB}
+${knowledge ? `\n${knowledge}` : ''}`,
+      userText: JSON.stringify({
+        prompt,
+        hint: input.currentRoot
+          ? { previousRootId: input.currentRoot.id, childCount: (input.currentRoot as LayoutContainerNode).children?.length }
+          : undefined,
+      }).slice(0, 12_000),
+      responseMimeType: 'application/json',
+      maxOutputTokens: 8_192,
+      thinking: 'off',
+      timeoutMs: 28_000,
+      maxAttempts: 1,
+    })
+
+    const parsed = stripToJson(result.text) as { root?: unknown }
+    const validated = layoutCanvasPropsSchema.parse({ root: parsed.root ?? parsed })
+    const root = { ...validated.root, id: artboardId } as LayoutContainerNode
+    return { root: layoutCanvasPropsSchema.parse({ root }).root as LayoutContainerNode, model: `google:${model}` }
+  } catch (error) {
+    console.warn('design generate fell back to heuristic:', error)
+    return { root: heuristicArtboard(prompt), model: 'design-heuristic' }
+  }
 }

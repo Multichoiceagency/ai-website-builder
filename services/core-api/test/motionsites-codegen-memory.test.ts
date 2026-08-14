@@ -34,6 +34,20 @@ export default function Hero() {
     expect(result.errors).toEqual([])
   })
 
+  it('allows embla-carousel-react in DEPENDENCIES', () => {
+    const source = `/*DEPENDENCIES:{"packages": ["embla-carousel-react"]} */
+import useEmblaCarousel from 'embla-carousel-react'
+export default function Slider() {
+  const [ref] = useEmblaCarousel({ loop: true })
+  return <div ref={ref} />
+}
+`
+    const result = validateCodegenOutput(source)
+    expect(result.ok).toBe(true)
+    expect(result.packages).toEqual(['embla-carousel-react'])
+    expect(result.errors).toEqual([])
+  })
+
   it('rejects markdown fences and disallowed packages', () => {
     const source = `/*DEPENDENCIES:{"packages": ["react-router"]} */
 \`\`\`jsx
@@ -64,5 +78,37 @@ describe('agent memory retrieval', () => {
     expect(working.procedural.join(' ')).toMatch(/single-file/)
     expect(working.semantic.length).toBeGreaterThan(0)
     expect(working.episodic.some((entry) => /Nexum/i.test(entry))).toBe(true)
+  })
+
+  it('overwrites a stale semantic:allowed-packages record', async () => {
+    const dir = `/tmp/platform-agent-memory-stale-${Date.now()}`
+    process.env.AGENT_MEMORY_DIR = dir
+    const { mkdir, writeFile, readFile } = await import('node:fs/promises')
+    const { join } = await import('node:path')
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'motionsites-memory.json'),
+      JSON.stringify({
+        version: 1,
+        records: [
+          {
+            id: 'stale-packages',
+            kind: 'semantic',
+            key: 'semantic:allowed-packages',
+            content: 'Allowed Motionsites codegen packages: react, lucide-react. No embla.',
+            tags: ['packages', 'allowlist', 'semantic'],
+            createdAt: '2020-01-01T00:00:00.000Z',
+            embeddingModel: 'lexical-v1',
+          },
+        ],
+      }),
+    )
+    await ensureBaselineMemories()
+    const stored = JSON.parse(await readFile(join(dir, 'motionsites-memory.json'), 'utf8')) as {
+      records: { key: string; content: string }[]
+    }
+    const packages = stored.records.find((entry) => entry.key === 'semantic:allowed-packages')
+    expect(packages?.content).toMatch(/embla-carousel-react/)
+    expect(packages?.content).not.toMatch(/No embla/)
   })
 })

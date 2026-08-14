@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { createSection, getBlock, listBlockMetadata } from '@platform/blocks'
 import {
   brandFromIslandId,
@@ -12,11 +12,13 @@ import {
   createDesignArtboardRoot,
   createLayoutNode,
   insertLayoutNode,
+  findLayoutNodeParent,
   isLayoutCanvasBlock,
   layoutCanvasPropsSchema,
   layoutNodeSchema,
   setLayoutNodeFrame,
   type LayoutContainerNode,
+  type LayoutCustomScript,
   type LayoutNode,
   type LayoutNodeType,
   type Page,
@@ -28,15 +30,14 @@ import {
   type TemplateMotionType,
   type Theme,
 } from '@platform/schemas'
-import { ArrowLeft, Monitor, PanelLeft, PanelRight, Redo2, Smartphone, Sparkles, Tablet, Undo2 } from '@lucide/vue'
+import { ArrowLeft, Monitor, MousePointer2, PanelLeft, PanelRight, Redo2, Smartphone, Tablet, Undo2 } from '@lucide/vue'
 
 /**
- * The canvas editor.
+ * The visual studio.
  *
- * Layers on the left, the live page in the middle, Agent and Style on the
- * right. The canvas renders the *real* blocks through the shared Nuxt layer, so
- * editing a field updates the actual page immediately — there is no preview
- * approximation to drift out of sync with the thing being published.
+ * Lovable-style assistant on the left, Figma artboard in the middle, inspector
+ * on the right. The canvas renders the *real* layout-canvas blocks through the
+ * shared Nuxt layer — editing a field updates the published page document.
  */
 definePageMeta({ layout: 'editor' })
 
@@ -85,22 +86,19 @@ const leftOpen = ref(true)
 const rightOpen = ref(true)
 const device = ref<'desktop' | 'tablet' | 'mobile'>('desktop')
 const zoom = ref(70)
+const selectToEdit = ref(true)
 
-/** Classic layers/properties editor vs Lovable-style assistant + live preview. */
-const { mode: builderMode, setMode: setBuilderMode } = useEditorBuilderMode()
-const interactive = computed(() => builderMode.value === 'interactive')
-const aiFreeform = computed(() => builderMode.value === 'ai')
-const designMode = computed(() => builderMode.value === 'design')
-/** Assistant-led layouts (interactive or AI Freeform). */
-const assistantLed = computed(() => interactive.value || aiFreeform.value)
-/** Freeform-only modes — no registry Insert marketplace. */
-const freeformOnly = computed(() => aiFreeform.value || designMode.value)
+/** Single studio: assistant + artboard + inspector. */
+const designMode = computed(() => true)
+const freeformOnly = computed(() => true)
+const aiFreeform = computed(() => false)
+const assistantLed = computed(() => false)
 
 /** Panel widths + open state persist per browser. */
 const leftWidth = ref(256)
 const rightWidth = ref(336)
-/** Wider assistant column when interactive builder is on. */
-const interactiveAssistantWidth = ref(400)
+/** Assistant column (Lovable-style chat). */
+const interactiveAssistantWidth = ref(360)
 
 onMounted(() => {
   const stored = localStorage.getItem('editor:panels')
@@ -144,40 +142,20 @@ watch(
   },
 )
 
-watch(builderMode, (next) => {
-  if (next === 'interactive' || next === 'ai') {
-    leftOpen.value = true
-    rightOpen.value = Boolean(selectedId.value)
-    rightTab.value = selectedId.value ? 'style' : 'agent'
-  } else if (next === 'design') {
+watch(
+  () => data.value,
+  (value) => {
+    if (!value || !can('page:write')) return
     leftOpen.value = true
     leftTab.value = 'layers'
     rightOpen.value = true
     rightTab.value = 'style'
     nextTick(() => {
-      if (!data.value) return
-      if (can('page:write')) {
-        const root = ensureDesignArtboard()
-        if (root && !layoutCanvas.selectedNodeId.value) {
-          layoutCanvas.selectedNodeId.value = root.id
-        }
-      } else {
-        const first = sections.value.find((section) => isLayoutCanvasBlock(section.block))
-        if (first) selectedId.value = first.id
+      const root = ensureDesignArtboard()
+      if (root && !layoutCanvas.selectedNodeId.value) {
+        layoutCanvas.selectedNodeId.value = root.id
       }
     })
-  } else {
-    leftOpen.value = true
-    rightOpen.value = true
-    rightTab.value = 'style'
-  }
-}, { immediate: true })
-
-watch(
-  () => route.query.mode,
-  (value) => {
-    if (value === 'ai') setBuilderMode('ai')
-    if (value === 'design') setBuilderMode('design')
   },
   { immediate: true },
 )
@@ -246,6 +224,17 @@ const selectedLayoutNodeId = computed(() => layoutCanvas.selectedNodeId.value)
 const isSelectedLayoutCanvas = computed(
   () => Boolean(selected.value && isLayoutCanvasBlock(selected.value.block)),
 )
+const selectedLayoutScripts = computed(
+  () =>
+    ((selected.value?.props as { customScripts?: LayoutCustomScript[] } | undefined)?.customScripts ??
+      []) as LayoutCustomScript[],
+)
+
+provide(
+  'layoutCmsSiteId',
+  computed(() => data.value?.site.id ?? ''),
+)
+provide('layoutCmsTenantId', useActiveTenantId())
 
 watch(
   selected,
@@ -349,6 +338,10 @@ function bumpSelectedZ(delta: number) {
 }
 
 const assistDraftMessage = ref('')
+const assistSendNonce = ref(0)
+const imageFileInput = ref<HTMLInputElement | null>(null)
+const pendingImageNodeId = ref<string | null>(null)
+const mediaUpload = useMediaUpload()
 const assistLayoutContext = computed(() => {
   if (!freeformOnly.value || !selected.value || !isLayoutCanvasBlock(selected.value.block)) return null
   return {
@@ -361,13 +354,63 @@ const assistLayoutContext = computed(() => {
 function onEditLayoutNodeWithAi() {
   const node = layoutSelectedNode.value
   if (!node) return
-  rightTab.value = 'agent'
-  rightOpen.value = true
+  leftOpen.value = true
   const text = `Modify the selected ${node.type} node (${node.id}): improve visual hierarchy, spacing, and hover styles while keeping its purpose.`
   assistDraftMessage.value = ''
   nextTick(() => {
     assistDraftMessage.value = text
   })
+}
+
+async function onPromptInPlace(text: string) {
+  const node = layoutSelectedNode.value
+  if (!node) return
+  leftOpen.value = true
+  assistDraftMessage.value = ''
+  await nextTick()
+  assistDraftMessage.value = `On the selected ${node.type} (${node.id}): ${text}`
+  await nextTick()
+  assistSendNonce.value += 1
+}
+
+function onSelectParent(id: string) {
+  const root = layoutRoot.value
+  if (!root) return
+  const loc = findLayoutNodeParent(root, id)
+  if (loc) onSelectLayoutNode(loc.parent.id)
+}
+
+function onCanvasPatch(id: string, patch: Partial<LayoutNode>) {
+  const root = layoutRoot.value
+  if (!root) return
+  layoutCanvas.selectedNodeId.value = id
+  applyLayoutResult(layoutCanvas.patchNode(root, id, patch))
+}
+
+function onPickImage(id: string) {
+  pendingImageNodeId.value = id
+  imageFileInput.value?.click()
+}
+
+async function onImageFileChosen(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  const id = pendingImageNodeId.value
+  pendingImageNodeId.value = null
+  if (!file || !id) return
+  const [asset] = await mediaUpload.upload([file], { folder: 'design' })
+  if (asset?.url) onCanvasPatch(id, { src: asset.url })
+}
+
+async function onRevisionRestored() {
+  await refresh()
+  message.value = 'Restored a previous version.'
+}
+
+function onCustomScripts(scripts: LayoutCustomScript[]) {
+  if (!selected.value || !isLayoutCanvasBlock(selected.value.block)) return
+  updateSelectedProps({ ...selected.value.props, customScripts: scripts })
 }
 
 function onAssistLayoutAction(
@@ -875,6 +918,7 @@ async function optimizeDesignWithAi() {
         root,
         instruction: 'Improve spacing, hierarchy, and readability while keeping absolute frames.',
       },
+      { timeoutMs: 35_000 },
     )
     applyLayoutResult({ root: result.root, selectedNodeId: result.root.id })
     message.value = `Optimized (${result.model}).`
@@ -900,6 +944,7 @@ async function generateDesignWithAi() {
     const result = await api.post<{ root: LayoutContainerNode; model: string }>(
       '/api/v1/ai/design-generate',
       { prompt, root: root ?? undefined },
+      { timeoutMs: 40_000 },
     )
     applyLayoutResult({ root: result.root, selectedNodeId: result.root.id })
     message.value = `Generated (${result.model}).`
@@ -1168,6 +1213,12 @@ function onKeydown(event: KeyboardEvent) {
   }
 
   if (typing) return
+
+  if (event.altKey && event.key.toLowerCase() === 's') {
+    event.preventDefault()
+    selectToEdit.value = !selectToEdit.value
+    return
+  }
 
   // Alt+arrow reorders the selection: the keyboard equal of dragging it on the
   // canvas, so direct manipulation is never the only way to rearrange a page.
@@ -1596,6 +1647,7 @@ const DEVICES = [
   { id: 'tablet', label: 'Tablet', icon: Tablet },
   { id: 'mobile', label: 'Mobile', icon: Smartphone },
 ] as const
+const ICON_STROKE = 1.75
 
 function togglePropertiesPanel() {
   rightOpen.value = !rightOpen.value
@@ -1668,58 +1720,14 @@ function selectFromPanel(id: string) {
         <p class="type-button-10 truncate text-faint">{{ data.site.name }} · {{ data.page.path }}</p>
       </div>
 
-      <div class="ml-4 flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
-        <button
-          type="button"
-          class="type-button-12 rounded-md px-2.5 py-1.5 transition-colors"
-          :class="builderMode === 'classic' ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
-          :aria-pressed="builderMode === 'classic'"
-          title="Classic editor — layers, canvas, properties"
-          @click="setBuilderMode('classic')"
-        >Editor</button>
-        <button
-          type="button"
-          class="type-button-12 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 transition-colors"
-          :class="builderMode === 'interactive' ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
-          :aria-pressed="builderMode === 'interactive'"
-          title="Interactive builder — AI assistant + live preview"
-          @click="setBuilderMode('interactive')"
-        >
-          <Sparkles class="h-3.5 w-3.5" :stroke-width="ICON_STROKE" aria-hidden="true" />
-          Interactive
-        </button>
-        <button
-          type="button"
-          class="type-button-12 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 transition-colors"
-          :class="builderMode === 'ai' ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
-          :aria-pressed="builderMode === 'ai'"
-          title="AI Freeform — assistant + layout canvas only (no component marketplace)"
-          @click="setBuilderMode('ai')"
-        >
-          <Sparkles class="h-3.5 w-3.5" :stroke-width="ICON_STROKE" aria-hidden="true" />
-          AI Freeform
-        </button>
-        <button
-          type="button"
-          class="type-button-12 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 transition-colors"
-          :class="builderMode === 'design' ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
-          :aria-pressed="builderMode === 'design'"
-          title="Design — Figma-style artboard (absolute layout canvas)"
-          @click="setBuilderMode('design')"
-        >
-          Design
-        </button>
-      </div>
-
       <div class="flex items-center gap-0.5 rounded-lg bg-sunken p-0.5">
         <button
-          v-if="!assistantLed"
           type="button"
           class="grid h-7 w-8 place-items-center rounded-md transition-colors"
           :class="leftOpen ? 'bg-raised text-ink shadow-card' : 'text-faint hover:text-ink'"
-          aria-label="Toggle layers panel"
+          aria-label="Toggle assistant"
           :aria-pressed="leftOpen"
-          title="Layers"
+          title="Assistant"
           @click="leftOpen = !leftOpen"
         >
           <PanelLeft class="h-4 w-4" :stroke-width="ICON_STROKE" aria-hidden="true" />
@@ -1753,6 +1761,17 @@ function selectFromPanel(id: string) {
       </div>
 
       <div class="flex items-center gap-0.5">
+        <button
+          type="button"
+          class="grid h-7 w-7 place-items-center rounded-md transition-colors"
+          :class="selectToEdit ? 'bg-raised text-ink shadow-card' : 'text-faint hover:bg-sunken hover:text-ink'"
+          title="Select to Edit (⌥S)"
+          aria-label="Select to Edit"
+          :aria-pressed="selectToEdit"
+          @click="selectToEdit = !selectToEdit"
+        >
+          <MousePointer2 class="h-4 w-4" :stroke-width="ICON_STROKE" aria-hidden="true" />
+        </button>
         <button
           type="button"
           class="grid h-7 w-7 place-items-center rounded-md text-faint transition-colors hover:bg-sunken hover:text-ink disabled:opacity-30"
@@ -1805,6 +1824,12 @@ function selectFromPanel(id: string) {
            the page, not to the layer list they used to sit under. Guarded by
            the parent `v-if="data"` and always passed seo/sections (never
            undefined on first paint — seo defaults to `{ noIndex: false }`). -->
+      <PageRevisionsPopover
+        v-if="data"
+        :page-id="data.page.id"
+        :disabled="!can('page:write')"
+        @restored="onRevisionRestored"
+      />
       <PageSettingsPopover
         v-if="data"
         :page="data.page"
@@ -1845,8 +1870,32 @@ function selectFromPanel(id: string) {
     </header>
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
-      <!-- Design: layers + artboard + properties (no registry) -->
-      <template v-if="designMode">
+      <template>
+        <aside
+          v-if="leftOpen"
+          class="editor-chrome flex min-h-0 shrink-0 flex-col border-r border-line bg-paper"
+          :style="{ width: `${interactiveAssistantWidth}px` }"
+        >
+          <AssistantPanel
+            :freeform-mode="true"
+            :layout-context="assistLayoutContext"
+            :draft-message="assistDraftMessage"
+            :send-nonce="assistSendNonce"
+            @insert-catalogue="onInsertCatalogue"
+            @theme-updated="applyThemeLocal"
+            @insert-layout-canvas="ensureDesignArtboard()"
+            @layout-action="onAssistLayoutAction"
+          />
+        </aside>
+        <EditorResizer
+          v-if="leftOpen"
+          v-model="interactiveAssistantWidth"
+          side="left"
+          :min="280"
+          :max="520"
+          label="Resize the assistant panel"
+        />
+
         <aside
           class="editor-chrome flex min-h-0 w-[280px] shrink-0 flex-col border-r border-line bg-paper"
         >
@@ -1937,11 +1986,17 @@ function selectFromPanel(id: string) {
             :selected-node-id="selectedLayoutNodeId"
             :zoom="zoom"
             :disabled="!can('page:write')"
+            :select-to-edit="selectToEdit"
             @select="onSelectLayoutNode"
             @commit-frame="onDesignCommitFrame"
             @nudge="onDesignNudge"
             @align="onDesignAlign"
             @bump-z="onDesignBumpZ"
+            @select-parent="onSelectParent"
+            @prompt-in-place="onPromptInPlace"
+            @patch-node="onCanvasPatch"
+            @delete-node="onLayoutRemoveNode"
+            @pick-image="onPickImage"
           >
             <EditorCanvas
               :sections="designSections"
@@ -1966,13 +2021,20 @@ function selectFromPanel(id: string) {
               @open-insert="ensureDesignArtboard()"
             />
           </DesignCanvasOverlay>
+          <input
+            ref="imageFileInput"
+            type="file"
+            accept="image/*"
+            class="sr-only"
+            @change="onImageFileChosen"
+          />
           <div
             v-else
             class="flex min-h-[20rem] flex-col items-center justify-center gap-3 p-8 text-center"
           >
             <p class="type-button text-ink">Start a Design artboard</p>
             <p class="type-caption-12 max-w-sm text-soft">
-              Insert Frame, Text, Image, or Button — or Generate with AI. Classic page sections stay in Editor mode.
+              Insert Frame, Text, Image, or Button — or describe the page in the assistant.
             </p>
             <div class="flex flex-wrap justify-center gap-2">
               <UiButton size="sm" :disabled="!can('page:write')" @click="addDesignPreset('frame')">Add Frame</UiButton>
@@ -2005,10 +2067,12 @@ function selectFromPanel(id: string) {
                 :disabled="!can('page:write')"
                 :site-id="data.site.id"
                 :show-ai-edit="true"
+                :custom-scripts="selectedLayoutScripts"
                 @update="onLayoutNodePatch"
                 @update-styles="onLayoutNodeStyles"
                 @update-hover-styles="onLayoutNodeHoverStyles"
                 @edit-with-ai="onEditLayoutNodeWithAi"
+                @update-scripts="onCustomScripts"
               />
             </template>
             <SiteDesignRail
@@ -2047,433 +2111,6 @@ function selectFromPanel(id: string) {
         </div>
       </template>
 
-      <!-- Assistant-led: Interactive or AI Freeform -->
-      <template v-else-if="assistantLed">
-        <aside
-          class="editor-chrome flex min-h-0 shrink-0 flex-col border-r border-line bg-paper"
-          :style="{ width: `${interactiveAssistantWidth}px` }"
-        >
-          <AssistantPanel
-            :freeform-mode="aiFreeform"
-            :layout-context="assistLayoutContext"
-            :draft-message="assistDraftMessage"
-            @insert-catalogue="onInsertCatalogue"
-            @theme-updated="applyThemeLocal"
-            @insert-layout-canvas="insertEmptyLayoutCanvas"
-            @layout-action="onAssistLayoutAction"
-          />
-        </aside>
-
-        <EditorResizer
-          v-model="interactiveAssistantWidth"
-          side="left"
-          :min="300"
-          :max="560"
-          label="Resize the assistant panel"
-        />
-
-        <!-- AI Freeform: Structure rail when a layout-canvas is selected -->
-        <aside
-          v-if="aiFreeform && isSelectedLayoutCanvas && layoutRoot"
-          class="editor-chrome flex min-h-0 w-[240px] shrink-0 flex-col border-r border-line bg-paper"
-        >
-          <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-            <span class="type-button-12 text-ink">Structure</span>
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto p-2">
-            <EditorLayoutStructure
-              :root="layoutRoot"
-              :selected-node-id="selectedLayoutNodeId"
-              :can-write="can('page:write')"
-              @select-node="onSelectLayoutNode"
-              @add-child="onLayoutAddChild"
-              @duplicate="onLayoutDuplicateNode"
-              @remove="onLayoutRemoveNode"
-              @move="onLayoutMoveNode"
-            />
-          </div>
-        </aside>
-
-        <div data-editor-scroll class="relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas">
-          <InsertPanel
-            v-if="!aiFreeform"
-            v-model:open="picking"
-            :max-performance-class="data.site.theme.maxPerformanceClass"
-            :theme="data.site.theme"
-            :can-write="can('page:write')"
-            :site-id="data.site.id"
-            :page-id="data.page.id"
-            @insert="insertBlockIds"
-            @insert-sections="(sections) => { insertSections(sections); picking = false }"
-            @generate-motion="onGenerateMotion"
-            @rebuild-ai="onRebuildAi"
-          />
-
-          <p
-            v-if="message || errorMessage"
-            class="type-button-12 absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg px-3 py-1.5 shadow-raised"
-            :class="errorMessage ? 'bg-danger-soft text-danger' : 'bg-positive-soft text-positive'"
-            role="status"
-          >
-            {{ errorMessage || message }}
-          </p>
-
-          <div class="pointer-events-none absolute left-3 top-3 z-10 flex gap-2">
-            <UiButton
-              v-if="can('page:write') && !aiFreeform"
-              class="pointer-events-auto"
-              size="sm"
-              variant="ghost"
-              @click="picking = true"
-            >+ Add</UiButton>
-            <UiButton
-              v-if="can('page:write') && aiFreeform"
-              class="pointer-events-auto"
-              size="sm"
-              variant="ghost"
-              @click="insertEmptyLayoutCanvas"
-            >+ Empty section</UiButton>
-          </div>
-
-          <EditorCanvas
-            :sections="sections"
-            :theme="data.site.theme"
-            :selected-id="selectedId"
-            :selected-node-id="selectedLayoutNodeId"
-            :device="device"
-            :zoom="zoom"
-            :can-write="can('page:write')"
-            :generating-ids="generatingIds"
-            :brand-logo="brandLogo"
-            @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
-            @select-node="onSelectLayoutNode"
-            @reorder="reorder"
-            @move-up="move($event, -1)"
-            @move-down="move($event, 1)"
-            @duplicate="duplicate"
-            @remove="remove"
-            @ask-ai="askAi"
-            @library-drop="onLibraryDrop"
-            @open-insert="aiFreeform ? insertEmptyLayoutCanvas() : (picking = true)"
-          />
-        </div>
-
-        <EditorResizer
-          v-if="rightOpen"
-          v-model="rightWidth"
-          side="right"
-          :min="260"
-          :max="560"
-          label="Resize the properties panel"
-        />
-
-        <aside
-          v-if="rightOpen"
-          class="editor-chrome flex min-h-0 shrink-0 flex-col border-l border-line bg-paper"
-          :style="{ width: `${rightWidth}px` }"
-        >
-          <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-            <span class="type-button-12 text-ink">Properties</span>
-            <button
-              type="button"
-              class="type-button-10 rounded-md px-2 py-1 text-faint hover:bg-sunken hover:text-ink"
-              aria-label="Close properties"
-              @click="rightOpen = false"
-            >Close</button>
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto p-4">
-            <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
-              <div v-if="!aiFreeform" class="mb-4 border-b border-line pb-3">
-                <h2 class="type-button text-ink">{{ selectedBlock?.name ?? 'Empty section' }}</h2>
-                <p class="type-caption-12 mt-1 leading-relaxed text-soft">Edit the selected layout node.</p>
-              </div>
-              <LayoutNodeInspector
-                :variant="aiFreeform ? 'design' : 'classic'"
-                :node="layoutSelectedNode"
-                :disabled="!can('page:write')"
-                :site-id="data.site.id"
-                :show-ai-edit="aiFreeform"
-                @update="onLayoutNodePatch"
-                @update-styles="onLayoutNodeStyles"
-                @update-hover-styles="onLayoutNodeHoverStyles"
-                @edit-with-ai="onEditLayoutNodeWithAi"
-              />
-            </template>
-            <template v-else-if="selected && selectedBlock && !aiFreeform">
-              <div class="mb-4 border-b border-line pb-3">
-                <h2 class="type-button text-ink">{{ selectedBlock.name }}</h2>
-                <p class="type-caption-12 mt-1 leading-relaxed text-soft">{{ selectedBlock.description }}</p>
-              </div>
-              <div class="mb-4 flex gap-0.5 rounded-lg bg-sunken p-0.5">
-                <button
-                  v-for="tab in ([
-                    { id: 'content' as const, label: 'Content' },
-                    { id: 'design' as const, label: 'Design' },
-                  ])"
-                  :key="tab.id"
-                  type="button"
-                  class="type-button-12 flex-1 rounded-md py-1.5 transition-colors"
-                  :class="styleTab === tab.id ? 'bg-raised text-ink shadow-card' : 'text-soft hover:text-ink'"
-                  :aria-pressed="styleTab === tab.id"
-                  @click="styleTab = tab.id"
-                >{{ tab.label }}</button>
-              </div>
-              <SectionForm
-                v-if="styleTab === 'content'"
-                :section="selected"
-                :block="selectedBlock"
-                :pages="data.siblings"
-                :site-id="data.page.siteId"
-                @update="updateSelectedProps"
-              />
-              <SectionProperties v-else :section="selected" @update="updateSelectedSection" />
-            </template>
-            <SiteDesignRail
-              v-else
-              :theme="data.site.theme"
-              :disabled="!can('page:write')"
-              @update:theme="patchSiteTheme"
-            />
-          </div>
-        </aside>
-      </template>
-
-      <!-- Classic: rail + panel / canvas / properties ----------------------- -->
-      <template v-else>
-      <!-- Left: icon rail (always visible) + the active panel --------------- -->
-      <EditorLeftRail :active="leftTab" :open="leftOpen" @select="onRailSelect" />
-
-      <aside
-        v-if="leftOpen"
-        class="editor-chrome flex min-h-0 shrink-0 flex-col bg-paper"
-        :style="{ width: `${leftWidth}px` }"
-      >
-        <EditorBlocksPanel
-          v-if="leftTab === 'blocks'"
-          :can-write="can('page:write')"
-          :max-performance-class="data.site.theme.maxPerformanceClass"
-          @insert="addBlock"
-          @open-library="picking = true"
-        />
-
-        <!-- Structure mounts under Layers when a layout-canvas section is selected. -->
-        <EditorLayersPanel
-          v-else-if="leftTab === 'layers'"
-          :sections="sections"
-          :selected-id="selectedId"
-          :generating-ids="generatingIds"
-          :can-write="can('page:write')"
-          :structure-root="layoutRoot"
-          :selected-node-id="selectedLayoutNodeId"
-          @select="selectFromPanel"
-          @reorder="reorder"
-          @move="move"
-          @duplicate="duplicate"
-          @remove="remove"
-          @add="picking = true"
-          @select-node="onSelectLayoutNode"
-          @add-child="onLayoutAddChild"
-          @duplicate-node="onLayoutDuplicateNode"
-          @remove-node="onLayoutRemoveNode"
-          @move-node="onLayoutMoveNode"
-        />
-
-        <EditorPagesPanel
-          v-else-if="leftTab === 'pages'"
-          :siblings="data.siblings"
-          :current-id="data.page.id"
-        />
-
-        <AssetsPanel
-          v-else
-          :selection="selected ? [selected] : []"
-          :can-write="can('page:write')"
-          :theme="data.site.theme"
-          :max-performance-class="data.site.theme.maxPerformanceClass"
-          @insert="insertSections"
-          @changed="message = $event"
-        />
-      </aside>
-
-      <EditorResizer
-        v-if="leftOpen"
-        v-model="leftWidth"
-        side="left"
-        :min="200"
-        :max="480"
-        label="Resize the layers panel"
-      />
-
-      <!-- Canvas ----------------------------------------------------------- -->
-      <!-- `data-editor-scroll` marks the scroll parent the canvas auto-scrolls
-           while a section is being dragged towards the edge. -->
-      <div data-editor-scroll class="relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas">
-        <!-- Hosted here, not at the editor root: the panel is `absolute`, so it
-             anchors to the canvas column rather than to the viewport. -->
-        <InsertPanel
-          v-model:open="picking"
-          :max-performance-class="data.site.theme.maxPerformanceClass"
-          :theme="data.site.theme"
-          :can-write="can('page:write')"
-          :site-id="data.site.id"
-          :page-id="data.page.id"
-          @insert="insertBlockIds"
-          @insert-sections="(sections) => { insertSections(sections); picking = false }"
-          @generate-motion="onGenerateMotion"
-          @rebuild-ai="onRebuildAi"
-        />
-
-        <p
-          v-if="message || errorMessage"
-          class="type-button-12 absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg px-3 py-1.5 shadow-raised"
-          :class="errorMessage ? 'bg-danger-soft text-danger' : 'bg-positive-soft text-positive'"
-          role="status"
-        >
-          {{ errorMessage || message }}
-        </p>
-
-        <EditorCanvas
-          :sections="sections"
-          :theme="data.site.theme"
-          :selected-id="selectedId"
-          :selected-node-id="selectedLayoutNodeId"
-          :device="device"
-          :zoom="zoom"
-          :can-write="can('page:write')"
-          :generating-ids="generatingIds"
-          :brand-logo="brandLogo"
-          @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
-          @select-node="onSelectLayoutNode"
-          @reorder="reorder"
-          @move-up="move($event, -1)"
-          @move-down="move($event, 1)"
-          @duplicate="duplicate"
-          @remove="remove"
-          @ask-ai="askAi"
-          @library-drop="onLibraryDrop"
-          @open-insert="picking = true"
-        />
-      </div>
-
-      <EditorResizer
-        v-if="rightOpen"
-        v-model="rightWidth"
-        side="right"
-        :min="260"
-        :max="560"
-        label="Resize the properties panel"
-      />
-
-      <!-- Right: agent / style --------------------------------------------- -->
-      <aside
-        v-if="rightOpen"
-        class="editor-chrome flex min-h-0 shrink-0 flex-col bg-paper"
-        :style="{ width: `${rightWidth}px` }"
-      >
-        <div class="flex shrink-0 gap-0.5 border-b border-line px-2 py-2" role="tablist">
-          <button
-            v-for="tab in (['agent', 'style'] as const)"
-            :key="tab"
-            role="tab"
-            :aria-selected="rightTab === tab"
-            class="type-button-12 rounded-md px-2.5 py-1.5 capitalize transition-colors"
-            :class="rightTab === tab ? 'bg-sunken text-ink' : 'text-soft hover:text-ink'"
-            @click="rightTab = tab"
-          >{{ tab }}</button>
-        </div>
-
-        <div v-if="rightTab === 'style'" class="min-h-0 flex-1 overflow-y-auto p-4">
-          <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
-            <div v-if="!freeformOnly" class="mb-4 border-b border-line pb-3">
-              <h2 class="type-button text-ink">{{ selectedBlock?.name ?? 'Empty section' }}</h2>
-              <p class="type-caption-12 mt-1 leading-relaxed text-soft">Edit the selected layout node.</p>
-            </div>
-            <LayoutNodeInspector
-              :variant="freeformOnly ? 'design' : 'classic'"
-              :node="layoutSelectedNode"
-              :disabled="!can('page:write')"
-              :site-id="data.site.id"
-              :show-ai-edit="freeformOnly"
-              @update="onLayoutNodePatch"
-              @update-styles="onLayoutNodeStyles"
-              @update-hover-styles="onLayoutNodeHoverStyles"
-              @edit-with-ai="onEditLayoutNodeWithAi"
-            />
-          </template>
-          <template v-else-if="selected && selectedBlock">
-            <div class="mb-4 border-b border-line pb-3">
-              <div class="flex items-start justify-between gap-2">
-                <h2 class="type-button text-ink">{{ selectedBlock.name }}</h2>
-                <div class="flex shrink-0 items-center gap-1">
-                  <UiBadge :tone="selectedBlock.performanceClass === 'A' ? 'positive' : selectedBlock.performanceClass === 'B' ? 'neutral' : 'warning'">
-                    {{ selectedBlock.performanceClass }}
-                  </UiBadge>
-                  <button
-                    v-if="can('page:write')"
-                    type="button"
-                    class="type-button-10 rounded-md border border-line px-2 py-1 text-soft transition-colors hover:border-brand hover:text-brand disabled:opacity-40"
-                    :disabled="selectedIndex < 0"
-                    title="Duplicate section (⌘D)"
-                    aria-label="Duplicate this section"
-                    @click="selectedIndex >= 0 && duplicate(selectedIndex)"
-                  >Duplicate</button>
-                  <button
-                    v-if="can('page:write')"
-                    type="button"
-                    class="type-button-10 rounded-md border border-line px-2 py-1 text-soft transition-colors hover:border-brand hover:bg-brand-soft hover:text-brand disabled:opacity-40"
-                    :disabled="selectedIndex < 0"
-                    title="Ask AI"
-                    aria-label="Ask AI to edit this section"
-                    @click="selectedIndex >= 0 && askAi(selectedIndex)"
-                  >Ask AI</button>
-                </div>
-              </div>
-              <p class="type-caption-12 mt-1 leading-relaxed text-soft">{{ selectedBlock.description }}</p>
-            </div>
-
-            <div class="mb-4 flex gap-0.5 rounded-lg bg-sunken p-0.5">
-              <button
-                v-for="tab in ([
-                  { id: 'content' as const, label: 'Content' },
-                  { id: 'design' as const, label: 'Design' },
-                ])"
-                :key="tab.id"
-                type="button"
-                class="type-button-12 flex-1 rounded-md py-1.5 transition-colors"
-                :class="styleTab === tab.id ? 'bg-raised text-ink shadow-card' : 'text-soft hover:text-ink'"
-                :aria-pressed="styleTab === tab.id"
-                @click="styleTab = tab.id"
-              >{{ tab.label }}</button>
-            </div>
-
-            <SectionForm
-              v-if="styleTab === 'content'"
-              :section="selected"
-              :block="selectedBlock"
-              :pages="data.siblings"
-              :site-id="data.page.siteId"
-              @update="updateSelectedProps"
-            />
-            <SectionProperties v-else :section="selected" @update="updateSelectedSection" />
-          </template>
-
-          <SiteDesignRail
-            v-else
-            :theme="data.site.theme"
-            :disabled="!can('page:write')"
-            @update:theme="patchSiteTheme"
-          />
-        </div>
-
-        <div v-else class="min-h-0 flex-1 overflow-hidden">
-          <AssistantPanel
-            @insert-catalogue="onInsertCatalogue"
-            @theme-updated="applyThemeLocal"
-            @insert-layout-canvas="insertEmptyLayoutCanvas"
-          />
-        </div>
-      </aside>
-      </template>
     </div>
 
 
