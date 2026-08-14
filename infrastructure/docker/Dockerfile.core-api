@@ -10,7 +10,9 @@ COPY packages/blocks/package.json packages/blocks/
 COPY packages/permissions/package.json packages/permissions/
 COPY packages/templates/package.json packages/templates/
 COPY services/core-api/package.json services/core-api/
-RUN pnpm install --frozen-lockfile --filter @platform/core-api...
+# Coolify injects NODE_ENV=production into every stage (build-arg). That skips
+# TypeScript (devDependencies) and breaks `tsc`.
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false --filter @platform/core-api...
 
 FROM deps AS build
 COPY packages/schemas packages/schemas
@@ -20,7 +22,7 @@ COPY packages/templates packages/templates
 COPY services/core-api services/core-api
 # Workspace package tsconfigs extend the monorepo base.
 COPY tsconfig.base.json ./
-RUN pnpm install --frozen-lockfile --filter @platform/core-api...
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false --filter @platform/core-api...
 RUN pnpm --filter @platform/schemas build \
  && pnpm --filter @platform/blocks build \
  && pnpm --filter @platform/permissions build \

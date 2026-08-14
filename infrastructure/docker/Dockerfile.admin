@@ -7,12 +7,14 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/admin/package.json apps/admin/
-RUN pnpm install --frozen-lockfile --filter @platform/admin...
+# Coolify injects NODE_ENV=production into every stage (build-arg). That skips
+# TypeScript (devDependencies) and breaks `tsc` / Nuxt builds.
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false --filter @platform/admin...
 
 FROM deps AS build
 COPY apps/admin apps/admin
 COPY tsconfig.base.json ./
-RUN pnpm install --frozen-lockfile --filter @platform/admin...
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false --filter @platform/admin...
 ENV NODE_ENV=production
 ENV NUXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @platform/schemas build \

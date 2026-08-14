@@ -8,14 +8,16 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.js
 COPY packages ./packages
 COPY apps/storefront/package.json apps/storefront/
 # Motionsites islands are gitignored under public/ — build them in-image.
-RUN pnpm install --frozen-lockfile \
+# Coolify injects NODE_ENV=production into every stage (build-arg). That skips
+# TypeScript/Vite (devDependencies) and breaks `tsc` / island / Nuxt builds.
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false \
   --filter @platform/storefront... \
   --filter @platform/motionsites-islands...
 
 FROM deps AS build
 COPY apps/storefront apps/storefront
 COPY tsconfig.base.json ./
-RUN pnpm install --frozen-lockfile \
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false \
   --filter @platform/storefront... \
   --filter @platform/motionsites-islands...
 ENV NODE_ENV=production

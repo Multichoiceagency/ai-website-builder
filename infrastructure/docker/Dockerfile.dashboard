@@ -10,7 +10,9 @@ COPY apps/dashboard/package.json apps/dashboard/
 # Motionsites islands are gitignored under public/ — build them in-image (see
 # @platform/motionsites-islands). Dashboard does not depend on that package, so
 # install it explicitly alongside the app filter.
-RUN pnpm install --frozen-lockfile \
+# Coolify injects NODE_ENV=production into every stage (build-arg). That skips
+# TypeScript/Vite (devDependencies) and breaks `tsc` / island / Nuxt builds.
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false \
   --filter @platform/dashboard... \
   --filter @platform/motionsites-islands...
 
@@ -18,7 +20,7 @@ FROM deps AS build
 COPY apps/dashboard apps/dashboard
 COPY tsconfig.base.json ./
 # Re-link workspace deps — source COPY must not leave a broken apps/*/node_modules.
-RUN pnpm install --frozen-lockfile \
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false \
   --filter @platform/dashboard... \
   --filter @platform/motionsites-islands...
 ENV NODE_ENV=production

@@ -2021,13 +2021,6 @@ function selectFromPanel(id: string) {
               @open-insert="ensureDesignArtboard()"
             />
           </DesignCanvasOverlay>
-          <input
-            ref="imageFileInput"
-            type="file"
-            accept="image/*"
-            class="sr-only"
-            @change="onImageFileChosen"
-          />
           <div
             v-else
             class="flex min-h-[20rem] flex-col items-center justify-center gap-3 p-8 text-center"
@@ -2044,6 +2037,13 @@ function selectFromPanel(id: string) {
               </UiButton>
             </div>
           </div>
+          <input
+            ref="imageFileInput"
+            type="file"
+            accept="image/*"
+            class="sr-only"
+            @change="onImageFileChosen"
+          />
         </div>
 
         <aside
