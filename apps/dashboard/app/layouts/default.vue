@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, resolveComponent, watch } from 'vue'
 import type { Site } from '@platform/schemas'
 import {
   ChevronLeft,
@@ -98,6 +98,12 @@ const subNav = computed(() =>
 const isActiveSection = (id: string) => section.value?.id === id
 const isActiveItem = (to: string) => route.path === to || route.path.startsWith(`${to}/`)
 
+/** One row style for every nav entry, so a tweak lands in one place. */
+const rowClass = (active: boolean) => [
+  'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[0.8125rem] font-medium no-underline transition-colors',
+  active ? 'bg-black/5 text-ink' : 'text-soft hover:bg-black/[0.04] hover:text-ink',
+]
+
 const { data: sites } = await useAsyncData('shell:sites', () => api.get<Site[]>('/api/v1/sites'), {
   default: () => [] as Site[],
 })
@@ -118,6 +124,19 @@ const previewUrl = computed(() =>
     path: '/',
   }),
 )
+
+/** Pinned entries above the module list; `action` opens an overlay, `to` navigates. */
+const quickActions = computed(() => [
+  { label: 'Dashboard', icon: Sparkles, to: '/', active: route.path === '/' },
+  { label: 'Search', icon: Search, action: () => (commandOpen.value = true), kbd: '⌘K', active: false },
+  {
+    label: 'Templates',
+    icon: LayoutTemplate,
+    to: '/website/templates',
+    active: isActiveItem('/website/templates'),
+  },
+  { label: 'Connectors', icon: Plug, action: () => (connectorsOpen.value = true), active: false },
+])
 
 const moduleSections = computed(() =>
   NAV_SECTIONS.filter((entry) => !['home', 'ai', 'apps', 'settings'].includes(entry.id)),
@@ -233,122 +252,69 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         </button>
       </div>
 
-      <nav class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2.5 py-3" aria-label="Primary">
+      <nav class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-2.5 py-3" aria-label="Primary">
         <div class="space-y-0.5">
-          <NuxtLink
-            to="/"
-            class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-[0.8125rem] font-medium no-underline transition-colors"
-            :class="[
-              sidebarCollapsed ? 'justify-center px-0' : '',
-              route.path === '/' ? 'bg-black/5 text-ink' : 'text-soft hover:bg-black/[0.04] hover:text-ink',
-            ]"
-            title="Dashboard"
+          <component
+            v-for="action in quickActions"
+            :is="action.to ? resolveComponent('NuxtLink') : 'button'"
+            :key="action.label"
+            :to="action.to"
+            :type="action.to ? undefined : 'button'"
+            :class="[rowClass(action.active), sidebarCollapsed ? 'justify-center px-0' : '']"
+            :title="action.kbd ? `${action.label} (${action.kbd})` : action.label"
+            @click="action.action?.()"
           >
-            <Sparkles class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
-            <span v-if="!sidebarCollapsed">Dashboard</span>
-          </NuxtLink>
-          <button
-            type="button"
-            class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[0.8125rem] font-medium text-soft transition-colors hover:bg-black/[0.04] hover:text-ink"
-            :class="sidebarCollapsed ? 'justify-center px-0' : ''"
-            title="Search (⌘K)"
-            @click="commandOpen = true"
-          >
-            <Search class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
-            <span v-if="!sidebarCollapsed" class="flex flex-1 items-center justify-between">
-              Search
-              <kbd class="rounded-md border border-black/10 bg-white/70 px-1.5 py-0.5 text-[0.625rem] text-faint">⌘K</kbd>
+            <component :is="action.icon" class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
+            <span v-if="!sidebarCollapsed" class="flex min-w-0 flex-1 items-center justify-between gap-2">
+              <span class="truncate">{{ action.label }}</span>
+              <kbd
+                v-if="action.kbd"
+                class="shrink-0 rounded-md border border-black/10 bg-white/70 px-1.5 py-0.5 text-[0.625rem] text-faint"
+              >
+                {{ action.kbd }}
+              </kbd>
             </span>
-          </button>
+          </component>
+        </div>
+
+        <select
+          v-if="!sidebarCollapsed && (sites?.length ?? 0) > 0"
+          :value="activeSiteId ?? ''"
+          class="h-9 w-full rounded-xl border border-black/8 bg-white/70 px-2.5 text-[0.8125rem] text-ink outline-none"
+          aria-label="Active website"
+          @change="onSiteChange"
+        >
+          <option v-for="site in sites" :key="site.id" :value="site.id">{{ site.name }}</option>
+        </select>
+
+        <div class="space-y-0.5 border-t border-black/5 pt-3">
           <NuxtLink
-            to="/website/templates"
-            class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-[0.8125rem] font-medium no-underline transition-colors"
-            :class="[
-              sidebarCollapsed ? 'justify-center px-0' : '',
-              isActiveItem('/website/templates') ? 'bg-black/5 text-ink' : 'text-soft hover:bg-black/[0.04] hover:text-ink',
-            ]"
-            title="Templates"
+            v-for="item in moduleSections"
+            :key="item.id"
+            :to="item.to"
+            :class="[rowClass(isActiveSection(item.id)), sidebarCollapsed ? 'justify-center px-0' : '']"
+            :title="item.label"
           >
-            <LayoutTemplate class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
-            <span v-if="!sidebarCollapsed">Templates</span>
+            <component :is="item.icon" class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
+            <span v-if="!sidebarCollapsed" class="truncate">{{ item.label }}</span>
           </NuxtLink>
-          <button
-            type="button"
-            class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[0.8125rem] font-medium text-soft transition-colors hover:bg-black/[0.04] hover:text-ink"
-            :class="sidebarCollapsed ? 'justify-center px-0' : ''"
-            title="Connectors"
-            @click="connectorsOpen = true"
-          >
-            <Plug class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
-            <span v-if="!sidebarCollapsed">Connectors</span>
-          </button>
         </div>
 
-        <div v-if="!sidebarCollapsed && (sites?.length ?? 0) > 0">
-          <p class="mb-1.5 px-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-faint">Sites</p>
-          <select
-            :value="activeSiteId ?? ''"
-            class="mb-1 h-9 w-full rounded-xl border border-black/8 bg-white/70 px-2.5 text-[0.8125rem] text-ink outline-none"
-            aria-label="Active website"
-            @change="onSiteChange"
-          >
-            <option v-for="site in sites" :key="site.id" :value="site.id">{{ site.name }}</option>
-          </select>
-        </div>
-
-        <div v-if="subNav.length">
-          <p
-            v-if="!sidebarCollapsed"
-            class="mb-1.5 px-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-faint"
-          >
+        <!-- Collapsed shows modules only: a rail of near-identical page icons is unreadable. -->
+        <div v-if="!sidebarCollapsed && subNav.length" class="space-y-0.5 border-t border-black/5 pt-3">
+          <p class="mb-1 px-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-faint">
             {{ section?.label }}
           </p>
-          <div class="space-y-0.5">
-            <NuxtLink
-              v-for="item in subNav"
-              :key="`${item.label}-${item.to}`"
-              :to="item.to"
-              class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-[0.8125rem] font-medium no-underline transition-colors"
-              :class="[
-                sidebarCollapsed ? 'justify-center px-0' : '',
-                isActiveItem(item.to)
-                  ? 'bg-black/5 text-ink'
-                  : 'text-soft hover:bg-black/[0.04] hover:text-ink',
-              ]"
-              :title="item.label"
-            >
-              <component :is="item.icon" class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
-              <span v-if="!sidebarCollapsed" class="min-w-0 flex-1 truncate">{{ item.label }}</span>
-              <span v-if="!sidebarCollapsed && item.phase" class="shrink-0 text-[0.625rem] text-faint">soon</span>
-            </NuxtLink>
-          </div>
-        </div>
-
-        <div>
-          <p
-            v-if="!sidebarCollapsed"
-            class="mb-1.5 px-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-faint"
+          <NuxtLink
+            v-for="item in subNav"
+            :key="`${item.label}-${item.to}`"
+            :to="item.to"
+            :class="rowClass(isActiveItem(item.to))"
+            :title="item.label"
           >
-            Modules
-          </p>
-          <div class="space-y-0.5">
-            <NuxtLink
-              v-for="item in moduleSections"
-              :key="item.id"
-              :to="item.to"
-              class="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-[0.8125rem] font-medium no-underline transition-colors"
-              :class="[
-                sidebarCollapsed ? 'justify-center px-0' : '',
-                isActiveSection(item.id)
-                  ? 'bg-black/5 text-ink'
-                  : 'text-soft hover:bg-black/[0.04] hover:text-ink',
-              ]"
-              :title="item.label"
-            >
-              <component :is="item.icon" class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
-              <span v-if="!sidebarCollapsed" class="truncate">{{ item.label }}</span>
-            </NuxtLink>
-          </div>
+            <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+            <span v-if="item.phase" class="shrink-0 text-[0.625rem] text-faint">soon</span>
+          </NuxtLink>
         </div>
       </nav>
 
