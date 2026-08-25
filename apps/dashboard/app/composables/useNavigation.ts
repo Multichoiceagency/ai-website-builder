@@ -5,11 +5,9 @@ import {
   BarChart3,
   Boxes,
   Briefcase,
-  Building2,
   CreditCard,
   Database,
   FileText,
-  Filter,
   FlaskConical,
   FolderKanban,
   Gift,
@@ -21,7 +19,6 @@ import {
   Link2,
   ListOrdered,
   Mail,
-  Megaphone,
   MessageCircle,
   Navigation,
   Package,
@@ -42,7 +39,6 @@ import {
   Truck,
   Users,
   Warehouse,
-  Workflow,
   Zap,
 } from '@lucide/vue'
 
@@ -68,6 +64,8 @@ export interface NavSection {
   icon: Component
   to: string
   items: NavItem[]
+  /** Set on sections with no children, which have no item to carry the gate. */
+  permission?: Permission
   phase?: number
 }
 
@@ -134,8 +132,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Contacts', to: '/crm/contacts', icon: Users, permission: 'crm:read' },
       { label: 'Support desk', to: '/crm/support', icon: MessageCircle, permission: 'crm:read' },
       { label: 'WhatsApp agents', to: '/crm/whatsapp-agents', icon: MessageCircle, permission: 'crm:read' },
-      { label: 'Companies', to: '/crm/companies', icon: Building2, permission: 'crm:read', phase: 6 },
-      { label: 'Tasks', to: '/crm/tasks', icon: ListOrdered, permission: 'crm:read', phase: 6 },
     ],
   },
   {
@@ -148,9 +144,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Live View', to: '/analytics/live', icon: Activity, permission: 'analytics:read' },
       { label: 'Google Analytics', to: '/analytics/google', icon: Globe, permission: 'analytics:read' },
       { label: 'Attribution', to: '/analytics/attribution', icon: Link2, permission: 'analytics:read' },
-      { label: 'Funnels', to: '/analytics/funnels', icon: Filter, permission: 'analytics:read', phase: 4 },
-      { label: 'Commerce', to: '/analytics/commerce', icon: ShoppingBag, permission: 'analytics:read', phase: 5 },
-      { label: 'Ads', to: '/analytics/ads', icon: Megaphone, permission: 'analytics:read', phase: 6 },
       { label: 'Tracking', to: '/analytics/tracking', icon: Activity, permission: 'tracking:read' },
     ],
   },
@@ -159,18 +152,16 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Automations',
     to: '/automations',
     icon: Zap,
-    items: [
-      { label: 'Workflows', to: '/automations', icon: Workflow, permission: 'automation:read' },
-    ],
+    permission: 'automation:read',
+    items: [],
   },
   {
     id: 'experiments',
     label: 'Experiments',
     to: '/experiments',
     icon: FlaskConical,
-    items: [
-      { label: 'Tests', to: '/experiments', icon: FlaskConical, permission: 'experiment:read' },
-    ],
+    permission: 'experiment:read',
+    items: [],
   },
   {
     id: 'ai',

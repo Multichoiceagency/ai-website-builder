@@ -139,7 +139,11 @@ const quickActions = computed(() => [
 ])
 
 const moduleSections = computed(() =>
-  NAV_SECTIONS.filter((entry) => !['home', 'ai', 'apps', 'settings'].includes(entry.id)),
+  NAV_SECTIONS.filter(
+    (entry) =>
+      !['home', 'ai', 'apps', 'settings'].includes(entry.id) &&
+      (!entry.permission || can(entry.permission)),
+  ),
 )
 
 function onSiteChange(event: Event) {
