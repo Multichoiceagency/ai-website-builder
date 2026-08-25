@@ -9,7 +9,7 @@ import type {
   SeoAudit,
   Site,
 } from '@platform/schemas'
-import { Globe, Search, ShoppingBag, Sparkles, TrendingUp } from '@lucide/vue'
+import { Globe, Search, ShoppingBag, Sparkles } from '@lucide/vue'
 
 /**
  * Home — command centre.
@@ -135,29 +135,6 @@ const setupCards = computed((): SetupCard[] => {
       cta: 'Open domains',
       icon: Globe,
       tone: 'warning',
-    })
-  }
-
-  const seo = data.value?.seo
-  if (sites.length && seo && (seo.issueCounts.critical > 0 || seo.score < 70)) {
-    cards.push({
-      id: 'seo',
-      title: 'Improve SEO',
-      description: `Score ${seo.score}/100 · ${seo.issueCounts.critical} critical issue${seo.issueCounts.critical === 1 ? '' : 's'}.`,
-      to: '/growth/seo',
-      cta: 'Review SEO',
-      icon: TrendingUp,
-      tone: seo.issueCounts.critical > 0 ? 'warning' : 'neutral',
-    })
-  } else if (sites.length && !seo) {
-    cards.push({
-      id: 'seo',
-      title: 'Run an SEO audit',
-      description: 'Check titles, headings and indexability for this site.',
-      to: '/growth/seo',
-      cta: 'Open SEO',
-      icon: TrendingUp,
-      tone: 'neutral',
     })
   }
 

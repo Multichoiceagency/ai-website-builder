@@ -127,7 +127,7 @@ async function continueWithGoogle() {
         <p class="mt-1.5 text-sm text-soft">
           {{
             mode === 'login'
-              ? 'Manage websites, commerce and growth in one place.'
+              ? 'Manage websites and commerce in one place.'
               : 'One account can own multiple websites. Sign up with Google asks for Business Profile, Search Console, Analytics, Ads and Gmail so the workspace is ready — rename anytime in Settings.'
           }}
         </p>
