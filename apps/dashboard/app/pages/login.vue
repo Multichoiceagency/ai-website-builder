@@ -8,11 +8,14 @@ const api = useApi()
 const session = useSession()
 const tenantId = useActiveTenantId()
 
-const mode = ref<'login' | 'register'>('login')
+// multichoiceagency.nl hands a visitor over here straight from their preview:
+// ?mode=register so they land on sign-up rather than a sign-in form they have
+// no account for, and ?business= so the workspace is already named.
+const mode = ref<'login' | 'register'>(route.query.mode === 'register' ? 'register' : 'login')
 const email = ref('')
 const password = ref('')
 const name = ref('')
-const organizationName = ref('')
+const organizationName = ref(typeof route.query.business === 'string' ? route.query.business : '')
 const error = ref('')
 const busy = ref(false)
 const googleBusy = ref(false)
@@ -35,6 +38,20 @@ onMounted(() => {
     error.value = `Google sign-in failed (${status}).`
   }
 })
+
+/**
+ * Only same-origin paths: a caller-supplied redirect is an open redirect
+ * otherwise, and "//evil.example" is a protocol-relative absolute URL.
+ */
+function requestedRedirect(): string | null {
+  const value = route.query.redirect
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return null
+  return value
+}
+
+function nextAfterAuth(): string {
+  return requestedRedirect() ?? (mode.value === 'register' ? '/website/new?mode=ai' : '/')
+}
 
 async function submit() {
   error.value = ''
@@ -61,15 +78,7 @@ async function submit() {
     // Full navigation so the session cookie is applied and middleware can
     // loadSession() cleanly — client-only navigateTo kept losing the race
     // with a stale service worker / in-memory session wipe.
-    const next =
-      mode.value === 'register'
-        ? '/website/new?mode=ai'
-        : typeof route.query.redirect === 'string' &&
-            route.query.redirect.startsWith('/') &&
-            !route.query.redirect.startsWith('//')
-          ? route.query.redirect
-          : '/'
-    await navigateTo(next, { external: true })
+    await navigateTo(nextAfterAuth(), { external: true })
   } catch (caught) {
     error.value = caught instanceof ApiError ? caught.message : 'Something went wrong.'
   } finally {
@@ -81,12 +90,7 @@ async function continueWithGoogle() {
   error.value = ''
   googleBusy.value = true
   try {
-    const redirectTo =
-      mode.value === 'register'
-        ? '/website/new?mode=ai'
-        : typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
-          ? route.query.redirect
-          : '/'
+    const redirectTo = nextAfterAuth()
 
     const payload: {
       mode: 'login' | 'register'
