@@ -70,7 +70,7 @@ const activeIndex = computed(() => {
     <header class="mb-8 flex items-center justify-between gap-4">
       <div class="flex items-center gap-3">
         <div class="h-9 w-9 rounded-lg bg-brand" aria-hidden="true" />
-        <span class="text-[0.8125rem] font-semibold tracking-[-0.02em] text-ink">Platform</span>
+        <span class="text-[0.8125rem] font-semibold tracking-[-0.02em] text-ink">MultichoiceCMS</span>
       </div>
       <NuxtLink
         to="/"

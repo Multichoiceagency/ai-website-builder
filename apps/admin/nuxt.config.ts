@@ -17,6 +17,6 @@ export default defineNuxtConfig({
       dashboardUrl: process.env.DASHBOARD_URL ?? 'http://localhost:3000',
     },
   },
-  app: { head: { title: 'Platform Admin', meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }] } },
+  app: { head: { title: 'MultichoiceCMS Admin', meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }] } },
   typescript: { strict: true },
 })

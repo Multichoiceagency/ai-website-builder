@@ -129,7 +129,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
             <p v-if="planLabel" class="mt-1">
               <UiBadge tone="brand">{{ planLabel }}</UiBadge>
             </p>
-            <p v-if="!hidePlatformBranding" class="mt-1 text-[0.6875rem] text-faint">Platform</p>
+            <p v-if="!hidePlatformBranding" class="mt-1 text-[0.6875rem] text-faint">MultichoiceCMS</p>
           </div>
           <NuxtLink
             to="/settings"

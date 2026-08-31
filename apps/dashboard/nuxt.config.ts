@@ -35,7 +35,7 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'Platform',
+      title: 'MultichoiceCMS',
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'theme-color', content: '#111827' },
@@ -51,8 +51,8 @@ export default defineNuxtConfig({
   },
 
   pwa: platformPwaConfig({
-    name: 'Platform',
-    shortName: 'Platform',
+    name: 'MultichoiceCMS',
+    shortName: 'MultichoiceCMS',
     description: 'Build and manage websites, shops, and growth — installable and offline-ready.',
     themeColor: '#111827',
     backgroundColor: '#f3f1ec',
