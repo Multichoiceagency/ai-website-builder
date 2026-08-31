@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { LOCALES, LOCALE_LABELS, useLocale } from '../composables/useLocale'
 
 definePageMeta({ layout: 'blank' })
 
 const route = useRoute()
+const { locale, setLocale, t } = useLocale()
 const api = useApi()
 const session = useSession()
 const tenantId = useActiveTenantId()
@@ -124,15 +126,15 @@ async function continueWithGoogle() {
   <div class="grid min-h-screen place-items-center px-5 py-12">
     <div class="w-full max-w-sm">
       <div class="mb-8">
-        <div class="mb-5 h-9 w-9 rounded-lg bg-brand" aria-hidden="true" />
+        <img src="/brand/mark.svg" alt="MultichoiceCMS" class="mb-5 h-9 w-9 text-brand" />
         <h1 class="text-title font-semibold tracking-[-0.03em] text-ink">
-          {{ mode === 'login' ? 'Sign in' : 'Create your workspace' }}
+          {{ mode === 'login' ? t('auth.signIn.title') : t('auth.register.title') }}
         </h1>
         <p class="mt-1.5 text-sm text-soft">
           {{
             mode === 'login'
-              ? 'Manage websites and commerce in one place.'
-              : 'One account can own multiple websites. Sign up with Google asks for Business Profile, Search Console, Analytics, Ads and Gmail so the workspace is ready — rename anytime in Settings.'
+              ? t('auth.signIn.blurb')
+              : t('auth.register.blurb')
           }}
         </p>
       </div>
@@ -171,7 +173,7 @@ async function continueWithGoogle() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            {{ mode === 'login' ? 'Continue with Google' : 'Sign up with Google' }}
+            {{ mode === 'login' ? t('auth.google.signIn') : t('auth.google.signUp') }}
           </UiButton>
 
           <div class="flex items-center gap-3 text-[0.75rem] uppercase tracking-wide text-soft">
@@ -182,13 +184,13 @@ async function continueWithGoogle() {
 
           <form class="flex flex-col gap-4" @submit.prevent="submit">
             <template v-if="mode === 'register'">
-              <UiField v-slot="{ id }" label="Your name" required>
+              <UiField v-slot="{ id }" :label="t('auth.field.name')" required>
                 <UiInput :id="id" v-model="name" autocomplete="name" placeholder="Jane de Vries" />
               </UiField>
               <UiField
                 v-slot="{ id, describedBy }"
-                label="Company name"
-                help="Optional. You can rename the workspace later in Settings."
+                :label="t('auth.field.company')"
+                :help="t('auth.field.companyHint')"
               >
                 <UiInput
                   :id="id"
@@ -200,7 +202,7 @@ async function continueWithGoogle() {
               </UiField>
             </template>
 
-            <UiField v-slot="{ id }" label="E-mail" required>
+            <UiField v-slot="{ id }" :label="t('auth.field.email')" required>
               <UiInput
                 :id="id"
                 v-model="email"
@@ -212,8 +214,8 @@ async function continueWithGoogle() {
 
             <UiField
               v-slot="{ id, describedBy }"
-              label="Password"
-              :help="mode === 'register' ? 'At least 12 characters. Length beats symbols.' : ''"
+              :label="t('auth.field.password')"
+              :help="mode === 'register' ? t('auth.field.passwordHint') : ''"
               required
             >
               <UiInput
@@ -234,14 +236,14 @@ async function continueWithGoogle() {
             </p>
 
             <UiButton type="submit" variant="primary" size="lg" :loading="busy" :disabled="googleBusy" arrow>
-              {{ mode === 'login' ? 'Sign in' : 'Create workspace' }}
+              {{ mode === 'login' ? t('auth.submit.signIn') : t('auth.submit.register') }}
             </UiButton>
           </form>
         </div>
       </UiCard>
 
       <p class="mt-5 text-center text-[0.8125rem] text-soft">
-        {{ mode === 'login' ? 'No account yet?' : 'Already have an account?' }}
+        {{ mode === 'login' ? t('auth.switch.toRegister') : t('auth.switch.toSignIn') }}
         <button
           type="button"
           class="font-semibold text-brand hover:underline"
@@ -250,8 +252,20 @@ async function continueWithGoogle() {
             error = ''
           "
         >
-          {{ mode === 'login' ? 'Create one' : 'Sign in' }}
+          {{ mode === 'login' ? t('auth.switch.createOne') : t('auth.switch.signIn') }}
         </button>
+      </p>
+
+      <p class="mt-6 flex items-center justify-center gap-2 text-[0.75rem] text-faint">
+        <label for="locale-select" class="sr-only">{{ t('auth.language') }}</label>
+        <select
+          id="locale-select"
+          class="cursor-pointer rounded-md border border-line bg-transparent px-2 py-1 text-[0.75rem]"
+          :value="locale"
+          @change="setLocale(($event.target as HTMLSelectElement).value as never)"
+        >
+          <option v-for="code in LOCALES" :key="code" :value="code">{{ LOCALE_LABELS[code] }}</option>
+        </select>
       </p>
     </div>
   </div>
