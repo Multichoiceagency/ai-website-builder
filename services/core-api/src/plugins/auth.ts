@@ -4,6 +4,7 @@ import { resolvePermissions } from '@platform/permissions'
 import type { Actor, Membership, Permission, Plan, Role, User } from '@platform/schemas'
 import { env, isProduction } from '../config/env.js'
 import { withoutTenant } from '../db/client.js'
+import { findValidApiKey, readPresentedKey, touchApiKey } from '../db/repositories/api-keys.js'
 import { findValidSession } from '../db/repositories/sessions.js'
 import { listMembershipsForUser } from '../db/repositories/tenants.js'
 import { findUserById } from '../db/repositories/users.js'
@@ -30,14 +31,29 @@ export interface TenantContext {
   actor: Actor
 }
 
+/**
+ * A verified machine caller. Carries the member who issued the key, so the key's
+ * rights can never exceed theirs.
+ */
+export interface ApiKeyContext {
+  keyId: string
+  keyName: string
+  tenantId: string
+  scopes: string[]
+  user: User
+  membership: Membership
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
     auth: AuthContext | null
+    apiKey: ApiKeyContext | null
   }
 }
 
 const authPlugin: FastifyPluginAsync = async (app) => {
   app.decorateRequest('auth', null)
+  app.decorateRequest('apiKey', null)
 
   // Resolve the session for every request. Roles and revocation therefore take
   // effect on the next request, which is the point of server-side sessions
@@ -64,6 +80,33 @@ const authPlugin: FastifyPluginAsync = async (app) => {
 
     request.auth = context
   })
+
+  // Keys are resolved separately from sessions: a request carries one or the
+  // other, and a stale cookie must not shadow a valid key.
+  app.addHook('onRequest', async (request) => {
+    if (request.auth) return
+    const presented = readPresentedKey(request.headers as Record<string, unknown>)
+    if (!presented) return
+
+    const context = await withoutTenant(async (tx) => {
+      const key = await findValidApiKey(tx, presented)
+      if (!key) return null
+
+      const user = await findUserById(tx, key.issuedBy)
+      if (!user) return null
+
+      // The issuer's membership is re-read per request, so losing access to the
+      // workspace disables their keys at the same moment it disables them.
+      const memberships = await listMembershipsForUser(tx, user.id)
+      const membership = memberships.find((candidate) => candidate.tenantId === key.tenantId)
+      if (!membership) return null
+
+      await touchApiKey(tx, key.id).catch(() => {})
+      return { keyId: key.id, keyName: key.name, tenantId: key.tenantId, scopes: key.scopes, user, membership }
+    })
+
+    request.apiKey = context
+  })
 }
 
 export default fp(authPlugin, { name: 'auth' })
@@ -88,6 +131,31 @@ export function clearSessionCookie(reply: { clearCookie: (n: string, o: object) 
   })
 }
 
+/**
+ * A key's rights are the intersection of its scopes and the issuing member's
+ * role. Narrowing only: a scope the member does not hold grants nothing.
+ */
+function tenantFromApiKey(key: ApiKeyContext, permission: Permission): TenantContext {
+  const rolePermissions = resolvePermissions(key.membership.role)
+  const granted = rolePermissions.filter((candidate) => key.scopes.includes(candidate))
+
+  if (!granted.includes(permission)) {
+    throw new ForbiddenError(`This API key does not carry the ${permission} scope.`)
+  }
+
+  return {
+    tenantId: key.tenantId,
+    role: key.membership.role,
+    plan: key.membership.plan,
+    permissions: granted,
+    user: key.user,
+    // `app` acting `onBehalfOfUserId` is what the actor schema already models
+    // for a non-human caller a person set up; an audit line therefore names both
+    // the key and the member who issued it.
+    actor: { type: 'app', id: key.keyId, label: key.keyName, onBehalfOfUserId: key.user.id },
+  }
+}
+
 export function requireUser(request: FastifyRequest): AuthContext {
   if (!request.auth) throw new UnauthorizedError()
   return request.auth
@@ -102,6 +170,9 @@ export function requireUser(request: FastifyRequest): AuthContext {
  * the API does not confirm the existence of other tenants.
  */
 export function requireTenant(request: FastifyRequest, permission: Permission): TenantContext {
+  const key = request.apiKey
+  if (key) return tenantFromApiKey(key, permission)
+
   const auth = requireUser(request)
 
   const requested =

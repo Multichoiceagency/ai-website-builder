@@ -26,6 +26,7 @@ import blocksRoutes from './routes/blocks.js'
 import onboardingRoutes from './routes/onboarding.js'
 import pagesRoutes from './routes/pages.js'
 import publicRoutes from './routes/public.js'
+import apiKeyRoutes from './routes/api-keys.js'
 import settingsRoutes from './routes/settings.js'
 import sectionAiRoutes from './routes/section-ai.js'
 import sitesRoutes from './routes/sites.js'
@@ -147,6 +148,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(integrationsRoutes, { prefix: '/api/v1/integrations' })
 
   await app.register(settingsRoutes, { prefix: '/api/v1/settings' })
+  await app.register(apiKeyRoutes, { prefix: '/api/v1/api-keys' })
   await app.register(feedbackRoutes, { prefix: '/api/v1/feedback' })
 
   await app.register(publicRoutes, { prefix: '/public/v1' })
