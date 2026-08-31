@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import type { Site } from '@platform/schemas'
-import { ExternalLink, Loader2, RotateCcw, Send } from '@lucide/vue'
+import { ExternalLink, Laptop, Loader2, Monitor, RotateCcw, Send, Smartphone, Tablet } from '@lucide/vue'
 import { useLocale } from '../composables/useLocale'
 
 /**
@@ -103,6 +103,29 @@ function timeOf(value: Date): string {
 }
 
 const tab = ref<'site' | 'agent'>('agent')
+
+/**
+ * Device widths for the preview frame.
+ *
+ * The iframe narrows and the page inside is left alone, so what shows at 390px
+ * is the site's own mobile layout rather than a scaled-down desktop render.
+ * These are the widths the owner's customers actually arrive on.
+ */
+const VIEWPORTS = [
+  { id: 'mobile', label: 'Telefoon', width: 390, icon: Smartphone },
+  { id: 'tablet', label: 'Tablet', width: 834, icon: Tablet },
+  { id: 'laptop', label: 'Laptop', width: 1280, icon: Laptop },
+  { id: 'desktop', label: 'Desktop', width: 0, icon: Monitor },
+] as const
+
+type ViewportId = (typeof VIEWPORTS)[number]['id']
+const viewport = ref<ViewportId>('desktop')
+
+/** Desktop is width 0: fill the pane rather than pin it to an arbitrary number. */
+const frameStyle = computed(() => {
+  const chosen = VIEWPORTS.find((entry) => entry.id === viewport.value)
+  return chosen?.width ? { width: `min(100%, ${chosen.width}px)`, marginInline: 'auto' } : {}
+})
 </script>
 
 <template>
@@ -119,6 +142,20 @@ const tab = ref<'site' | 'agent'>('agent')
     <section class="agent__site" :data-active="tab === 'site'">
       <header class="agent__site-bar">
         <span class="agent__site-name">{{ site?.name ?? t('agent.site.none') }}</span>
+        <div class="agent__devices" role="group" :aria-label="t('agent.site.viewport')">
+          <button
+            v-for="entry in VIEWPORTS"
+            :key="entry.id"
+            type="button"
+            :aria-pressed="viewport === entry.id"
+            :title="entry.width ? `${entry.label} — ${entry.width}px` : entry.label"
+            @click="viewport = entry.id"
+          >
+            <component :is="entry.icon" :size="15" aria-hidden="true" />
+            <span class="agent__sr">{{ entry.label }}</span>
+          </button>
+        </div>
+
         <a
           v-if="previewUrl"
           :href="previewUrl"
@@ -137,6 +174,7 @@ const tab = ref<'site' | 'agent'>('agent')
         :src="previewUrl"
         :title="t('agent.site.frameTitle')"
         class="agent__frame"
+        :style="frameStyle"
         loading="lazy"
       />
       <UiEmptyState
@@ -257,6 +295,35 @@ const tab = ref<'site' | 'agent'>('agent')
 .agent__site-name {
   font-weight: 600;
   font-size: var(--text-14, 0.875rem);
+}
+.agent__devices {
+  display: flex;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+.agent__devices button {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  color: var(--ink-faint);
+}
+.agent__devices button:hover {
+  background: var(--paper-sunken);
+  color: var(--ink);
+}
+.agent__devices button[aria-pressed='true'] {
+  background: var(--paper-sunken);
+  color: var(--ink);
+}
+.agent__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .agent__site-link {
   display: inline-flex;

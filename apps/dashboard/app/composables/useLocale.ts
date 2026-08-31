@@ -98,6 +98,7 @@ const MESSAGES: Messages = {
     de: 'Sobald eine Domain verbunden ist, erscheint deine Website hier.',
     fr: 'D\u00e8s qu\u2019un domaine est connect\u00e9, votre site appara\u00eet ici.',
   },
+  'agent.site.viewport': { en: 'Screen size', nl: 'Schermformaat', de: 'Bildschirmgr\u00f6\u00dfe', fr: '\u00c9cran' },
   'agent.ask.label': { en: 'What needs changing?', nl: 'Wat moet er anders?', de: 'Was soll ge\u00e4ndert werden?', fr: 'Que faut-il changer ?' },
   'agent.ask.placeholder': {
     en: 'The summer offer has ended \u2014 take it off the site',
