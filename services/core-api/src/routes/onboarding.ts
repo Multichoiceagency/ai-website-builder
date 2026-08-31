@@ -1,3 +1,4 @@
+import { sectionsFromBrief } from '../lib/ai/brief-blocks.js'
 import type { FastifyPluginAsync } from 'fastify'
 import { limitsForPlan } from '@platform/permissions'
 import {
@@ -272,6 +273,15 @@ async function executeFreeformSiteGeneration(
     navigation: draft.navigation,
   }
 
+  // The brief picks real blocks where it can. Falls back to the canvas above
+  // when the model returns nothing usable, so a page always exists.
+  const chosen = await sectionsFromBrief({
+    prompt: input.prompt,
+    brand: draft.siteName,
+    locale: draft.locale,
+  })
+  const sectionsByPath = new Map(chosen.map((page) => [page.path, page.sections]))
+
   const { themeSchema } = await import('@platform/schemas')
   // The brief's own palette wins. This used to be the only palette: teal on
   // near-white for every prompt, however the brief described itself.
@@ -328,7 +338,7 @@ async function executeFreeformSiteGeneration(
           description: page.description,
           noIndex: false,
         },
-        sections: sectionsFromFreeformRoot(page.root),
+        sections: sectionsByPath.get(page.path) ?? sectionsFromFreeformRoot(page.root),
       })
       if (input.publish) await publishPage(tx, context.tenantId, created.id)
       pageIds.push(created.id)
