@@ -16,3 +16,4 @@ Status is one of `accepted`, `superseded by NNNN`, `deprecated`.
 | [0009](./0009-auth-sessions.md)                | Opaque server-side sessions in httpOnly cookies  | accepted |
 | [0010](./0010-nuxt-layers-for-ui.md)           | UI and block renderers ship as Nuxt layers       | accepted |
 | [0011](./0011-ai-gateway-metering.md)          | Persist AI gateway token/cost usage per tenant   | accepted |
+| [0012](./0012-model-authored-code-sections.md) | Model-authored code sections, sandboxed          | accepted |

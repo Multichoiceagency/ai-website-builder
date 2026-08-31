@@ -39,9 +39,13 @@ performance classes (ADR-0003) means the agent selects and fills blocks and can
 never emit markup, so every change it makes is small, diffable, previewable and
 reversible by construction.
 
-**No Divi, no WordPress.** The block registry is the CMS (ADR-0003); nothing
-generates into someone else's page builder. Confirmed 2026-08-31 as the settled
-direction, against the Webtify-style pipeline that emits Divi shortcodes.
+**No Divi, no WordPress.** Nothing generates into someone else's page builder.
+
+**Registry first, code sections where it cannot reach.** ADR-0003 refused
+model-authored source; ADR-0012 allows it for sections the registry has no block
+for, sandboxed in the existing MotionSites island mechanism. Reversed 2026-08-31
+by the product owner, with the costs recorded in ADR-0012 — one of which,
+unreviewable diffs, has no mitigation and is accepted as-is.
 
 **Design stays editable after the fact, through Figma.** The intent is that a
 site's design can be reworked in Figma and come back into the registry. Today

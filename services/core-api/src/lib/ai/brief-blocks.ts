@@ -1,5 +1,6 @@
 import { createSection, listBlockMetadata } from '@platform/blocks'
 import type { Section } from '@platform/schemas'
+import { generateLiveIsland } from './generate-live-island.js'
 import { geminiApiKey, generateGeminiContent, resolveGeminiModel } from './providers/gemini-client.js'
 
 /**
@@ -11,10 +12,19 @@ import { geminiApiKey, generateGeminiContent, resolveGeminiModel } from './provi
  * stacked paragraphs as any other brief. The registry it never touched already
  * holds eleven heroes, a video scrubber, a mask reveal and a marquee.
  *
- * ADR-0003 holds: the model picks ids from the catalogue and fills props, and
- * `createSection` validates both against the block's own schema. It cannot
- * invent a block, and it cannot emit markup.
+ * The model picks ids from the catalogue and fills props, and `createSection`
+ * validates both against the block's own schema.
+ *
+ * Where the catalogue has nothing that fits, it may ask for a code section
+ * instead (ADR-0012). That becomes a sandboxed MotionSites island — built, not
+ * written into the page document, which still stores only `{ block, props }`.
+ * Capped hard: each island is a Vite build, and a brief that answers "code" to
+ * everything would take minutes and ship a site with no measured performance
+ * anywhere in it.
  */
+
+/** Each island costs a build. Two is enough for the sections a registry misses. */
+const MAX_CODE_SECTIONS = 2
 
 /** Enough of the catalogue to choose from, small enough to send. */
 function catalogue(maxClass: 'A' | 'B' | 'C' | 'D' = 'B'): string {
@@ -54,6 +64,10 @@ export async function sectionsFromBrief(input: {
         'You lay out a website by choosing blocks from a fixed catalogue.',
         'Answer with JSON only: {"pages":[{"path":"/","sections":[{"block":"<id>","props":{}}]}]}.',
         'Use only ids from the catalogue. Never invent an id or a prop key.',
+        'When nothing in the catalogue can express a section the brief asks',
+        'for, answer that one section as {"block":"code","brief":"<what to',
+        'build, in full>"} instead. Use it sparingly and never for a section a',
+        'catalogue block already fits.',
         'Fill props with copy written for this brief, in the brief\'s language.',
         'Order sections the way the brief orders them. 4 to 8 per page.',
         'Prefer blocks whose description matches what the brief asks for —',
@@ -71,15 +85,41 @@ export async function sectionsFromBrief(input: {
     })
 
     const parsed = JSON.parse(result.text) as {
-      pages?: { path?: string; sections?: { block?: string; props?: Record<string, unknown> }[] }[]
+      pages?: {
+        path?: string
+        sections?: { block?: string; props?: Record<string, unknown>; brief?: string }[]
+      }[]
     }
 
     const pages: BriefPage[] = []
+    let codeSections = 0
     for (const page of parsed.pages ?? []) {
       const path = typeof page.path === 'string' && page.path.startsWith('/') ? page.path : '/'
       const sections: Section[] = []
       for (const entry of page.sections ?? []) {
         if (!entry?.block) continue
+
+        if (entry.block === 'code') {
+          if (codeSections >= MAX_CODE_SECTIONS) continue
+          const brief = typeof entry.brief === 'string' ? entry.brief.trim() : ''
+          if (!brief) continue
+          codeSections += 1
+          const island = await generateLiveIsland({
+            brief,
+            title: `${input.brand} ${path === '/' ? 'home' : path.replace(/\//g, ' ')}`.trim(),
+          }).catch(() => null)
+          // A build that fails drops the section rather than the page; the
+          // brief asked for something, and half of it is worse than the rest.
+          if (island?.ok) {
+            try {
+              sections.push(createSection('motion-section-01', { sectionId: island.sectionId }))
+            } catch {
+              // The island built but the block refused it — treat as a failure.
+            }
+          }
+          continue
+        }
+
         try {
           sections.push(createSection(entry.block, entry.props ?? {}))
         } catch {

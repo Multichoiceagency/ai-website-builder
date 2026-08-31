@@ -1,6 +1,6 @@
 # ADR-0003 — CMS stores block IDs + props, never generated code
 
-**Status:** accepted
+**Status:** accepted, superseded in part by [ADR-0012](./0012-model-authored-code-sections.md)
 
 ## Context
 
