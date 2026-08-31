@@ -273,11 +273,14 @@ async function executeFreeformSiteGeneration(
   }
 
   const { themeSchema } = await import('@platform/schemas')
+  // The brief's own palette wins. This used to be the only palette: teal on
+  // near-white for every prompt, however the brief described itself.
   const theme = themeSchema.parse({
     colorPrimary: '#0f766e',
     colorAccent: '#ea580c',
     colorSurfaceAlt: '#f8fafc',
     radius: 'lg',
+    ...(draft.theme ?? {}),
   })
 
   const result = await withTenant(context.tenantId, async (tx) => {
