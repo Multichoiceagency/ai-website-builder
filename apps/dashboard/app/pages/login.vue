@@ -126,7 +126,7 @@ async function continueWithGoogle() {
   <div class="grid min-h-screen place-items-center px-5 py-12">
     <div class="w-full max-w-sm">
       <div class="mb-8">
-        <img src="/brand/mark.svg" alt="MultichoiceCMS" class="mb-5 h-9 w-9 text-brand" />
+        <img src="/brand/mark.svg" alt="MultichoiceCMS" class="mb-5 h-9 w-9" width="36" height="36" />
         <h1 class="text-title font-semibold tracking-[-0.03em] text-ink">
           {{ mode === 'login' ? t('auth.signIn.title') : t('auth.register.title') }}
         </h1>
@@ -178,7 +178,7 @@ async function continueWithGoogle() {
 
           <div class="flex items-center gap-3 text-[0.75rem] uppercase tracking-wide text-soft">
             <span class="h-px flex-1 bg-border" aria-hidden="true" />
-            or
+            {{ t('auth.or') }}
             <span class="h-px flex-1 bg-border" aria-hidden="true" />
           </div>
 
