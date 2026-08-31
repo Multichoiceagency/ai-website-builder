@@ -90,7 +90,10 @@ const selectToEdit = ref(true)
 
 /** Single studio: assistant + artboard + inspector. */
 const designMode = computed(() => true)
-const freeformOnly = computed(() => true)
+// Off since the generator writes registry sections again (commit 58ece31):
+// with this true the editor filtered them all out and showed a blank artboard
+// over a page that had content.
+const freeformOnly = computed(() => false)
 const aiFreeform = computed(() => false)
 const assistantLed = computed(() => false)
 
@@ -146,11 +149,17 @@ watch(
   () => data.value,
   (value) => {
     if (!value || !can('page:write')) return
+    // Always-open also honours ?mode=ai from /website/new: a freshly
+    // generated page lands with the assistant waiting.
     leftOpen.value = true
     leftTab.value = 'layers'
     rightOpen.value = true
     rightTab.value = 'style'
     nextTick(() => {
+      // Only a page with nothing on it gets a starter artboard. A generated
+      // page arrives with registry sections, and prepending an empty artboard
+      // buried them under a blank frame and dirtied the page on open.
+      if (sections.value.length > 0) return
       const root = ensureDesignArtboard()
       if (root && !layoutCanvas.selectedNodeId.value) {
         layoutCanvas.selectedNodeId.value = root.id
@@ -1999,7 +2008,7 @@ function selectFromPanel(id: string) {
             @pick-image="onPickImage"
           >
             <EditorCanvas
-              :sections="designSections"
+              :sections="sections"
               :theme="data.site.theme"
               :selected-id="selectedId"
               :selected-node-id="selectedLayoutNodeId"
@@ -2073,6 +2082,19 @@ function selectFromPanel(id: string) {
                 @update-hover-styles="onLayoutNodeHoverStyles"
                 @edit-with-ai="onEditLayoutNodeWithAi"
                 @update-scripts="onCustomScripts"
+              />
+            </template>
+            <!-- A registry section edits through its block's own field
+                 definitions; the node inspector has nothing to show for it. -->
+            <template v-else-if="selected && !isSelectedLayoutCanvas && selectedBlock">
+              <SectionProperties :section="selected" @update="updateSelectedSection" />
+              <SectionForm
+                class="mt-3"
+                :section="selected"
+                :block="selectedBlock"
+                :pages="data.siblings ?? []"
+                :site-id="data.site.id"
+                @update="updateSelectedProps"
               />
             </template>
             <SiteDesignRail
