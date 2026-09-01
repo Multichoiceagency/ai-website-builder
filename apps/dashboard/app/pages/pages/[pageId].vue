@@ -31,6 +31,7 @@ import {
   type Theme,
 } from '@platform/schemas'
 import { ArrowLeft, Monitor, MousePointer2, PanelLeft, PanelRight, Redo2, Smartphone, Tablet, Undo2 } from '@lucide/vue'
+import { applySectionsThrough } from '../../utils/assistantSections'
 
 /**
  * The visual studio.
@@ -191,6 +192,12 @@ function mutate(next: Section[]) {
  */
 function amend(next: Section[]) {
   sections.value = next
+}
+
+function applyAssistantSections(
+  transform: (input: Section[]) => Section[],
+): { applied: boolean } {
+  return applySectionsThrough(sections.value, transform, mutate)
 }
 
 watch(
@@ -1887,6 +1894,7 @@ function selectFromPanel(id: string) {
         >
           <AssistantPanel
             :freeform-mode="true"
+            :apply-sections="applyAssistantSections"
             :layout-context="assistLayoutContext"
             :draft-message="assistDraftMessage"
             :send-nonce="assistSendNonce"

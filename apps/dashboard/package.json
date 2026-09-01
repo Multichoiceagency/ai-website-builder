@@ -11,7 +11,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
-    "test": "echo \"@platform/dashboard: covered by API tests in Phase 1\" && exit 0"
+    "test": "vitest run"
   },
   "dependencies": {
     "@headlessui/vue": "^1.7.23",
@@ -43,7 +43,10 @@
   "devDependencies": {
     "@types/three": "^0.185.4",
     "@vite-pwa/nuxt": "^1.1.1",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^15.11.7",
     "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
     "vue-tsc": "^2.2.0"
   }
 }
