@@ -108,10 +108,12 @@ workspace.
 - Product name: **MultichoiceCMS** (renamed from "Platform", 2026-08-31).
 - White-label is a shipped capability: tenants set their own name, logo,
   favicon, colours and fonts, and can hide platform branding.
-- **The interface plays the category standard straight.** Chosen deliberately
-  on 2026-08-31 over a distinctive visual world. The bar is **Shopify admin**:
-  many capabilities that never overwhelm an owner with no prior knowledge. No
-  irony, no smuggled quirk — conventions embraced.
+- **The interface speaks the builder grammar of Lovable and Framer.** Decided
+  by the product owner on 2026-09-01, reversing the 2026-08-31 commitment to
+  the Shopify-admin category standard. Dark chrome by default, chat-led
+  building, a freeform canvas with floating panels. The known cost: the
+  owner often reads this on a phone in daylight, so a light theme stays one
+  explicit choice away and is never removed.
 - Interface language is multilingual without an i18n framework — no route
   prefixes; the choice is detected, remembered per device and switchable on
   screen. Dutch, English, German, French.

@@ -726,8 +726,8 @@ async function submit() {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-[#fafafa]" aria-label="AI assistant">
-    <header class="flex items-center justify-between border-b border-black/5 px-4 py-3">
+  <div class="flex h-full min-h-0 flex-col bg-paper" aria-label="AI assistant">
+    <header class="flex items-center justify-between border-b border-line px-4 py-3">
       <div class="flex items-center gap-2">
         <span class="grid h-6 w-6 place-items-center rounded-md bg-ink text-paper" aria-hidden="true">
           <Sparkles class="h-3.5 w-3.5" :stroke-width="1.75" />
@@ -738,7 +738,7 @@ async function submit() {
       <button
         v-if="closable"
         type="button"
-        class="grid h-7 w-7 place-items-center rounded-md text-faint transition-colors hover:bg-black/5 hover:text-ink"
+        class="grid h-7 w-7 place-items-center rounded-md text-faint transition-colors hover:bg-white/5 hover:text-ink"
         aria-label="Hide assistant"
         @click="emit('close')"
       >
@@ -778,7 +778,7 @@ async function submit() {
           <div
             v-if="message.text"
             class="max-w-[18rem] rounded-2xl px-3.5 py-2 text-[0.8125rem] leading-relaxed whitespace-pre-line"
-            :class="message.role === 'user' ? 'bg-[#ececec] text-ink' : 'bg-transparent px-0 text-ink'"
+            :class="message.role === 'user' ? 'bg-sunken text-ink' : 'bg-transparent px-0 text-ink'"
           >
             <p
               v-if="message.role === 'assistant' && message.thinkingSeconds != null"
@@ -823,7 +823,7 @@ async function submit() {
               v-for="hit in message.catalogueHits"
               :key="`${hit.kind}:${hit.id}`"
               type="button"
-              class="flex items-start gap-2 rounded-xl border border-black/8 bg-white px-2.5 py-2 text-left transition-colors hover:border-brand hover:bg-brand-soft/40"
+              class="flex items-start gap-2 rounded-xl border border-line bg-raised px-2.5 py-2 text-left transition-colors hover:border-brand hover:bg-brand-soft/40"
               :title="`Insert ${hit.kind} ${hit.id}`"
               @click="emit('insert-catalogue', hit)"
             >
@@ -843,7 +843,7 @@ async function submit() {
 
       <div
         v-if="wizardActive && pendingPlan.length"
-        class="mt-3 max-w-[20rem] rounded-xl border border-black/8 bg-white px-3 py-2.5 shadow-sm"
+        class="mt-3 max-w-[20rem] rounded-xl border border-line bg-raised px-3 py-2.5 shadow-sm"
       >
         <p class="text-[0.6875rem] font-medium text-ink">Waiting for answers</p>
         <p class="mt-0.5 text-[0.75rem] text-faint line-through">Designing landing page structure</p>
@@ -851,9 +851,9 @@ async function submit() {
     </div>
 
     <!-- Lovable-style composer -->
-    <div class="border-t border-black/5 bg-white p-3">
-      <div class="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm">
-        <div class="flex items-center justify-between gap-2 border-b border-black/5 px-3 py-2">
+    <div class="border-t border-line bg-raised p-3">
+      <div class="overflow-hidden rounded-2xl border border-line bg-raised shadow-sm">
+        <div class="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
           <button
             type="button"
             class="truncate text-left text-[0.6875rem] text-faint hover:text-ink"
@@ -886,7 +886,7 @@ async function submit() {
         <div class="flex items-center gap-1.5 px-2 pb-2 pt-1">
           <button
             type="button"
-            class="grid h-8 w-8 place-items-center rounded-lg text-faint hover:bg-black/5 hover:text-ink"
+            class="grid h-8 w-8 place-items-center rounded-lg text-faint hover:bg-white/5 hover:text-ink"
             aria-label="Add attachment"
             @click="navigateTo('/website/media')"
           >
@@ -894,18 +894,18 @@ async function submit() {
           </button>
 
           <div class="relative ml-auto flex items-center gap-1">
-            <div class="flex overflow-hidden rounded-xl border border-black/10">
+            <div class="flex overflow-hidden rounded-xl border border-line">
               <button
                 type="button"
                 class="px-2.5 py-1.5 text-[0.75rem] font-semibold transition-colors"
-                :class="composerMode === 'build' ? 'bg-ink text-paper' : 'bg-white text-soft hover:text-ink'"
+                :class="composerMode === 'build' ? 'bg-ink text-paper' : 'bg-raised text-soft hover:text-ink'"
                 @click="composerMode = 'build'"
               >
                 Build
               </button>
               <button
                 type="button"
-                class="border-l border-black/10 px-2 py-1.5 text-soft hover:bg-black/5 hover:text-ink"
+                class="border-l border-line px-2 py-1.5 text-soft hover:bg-white/5 hover:text-ink"
                 aria-label="Composer modes"
                 @click="composerMode = composerMode === 'build' ? 'chat' : 'build'"
               >
@@ -949,7 +949,7 @@ async function submit() {
         <li v-for="tool in availableTools" :key="tool.id">
           <button
             type="button"
-            class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[0.75rem] text-soft transition-colors hover:bg-black/5 hover:text-ink disabled:opacity-40"
+            class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[0.75rem] text-soft transition-colors hover:bg-white/5 hover:text-ink disabled:opacity-40"
             :disabled="busy"
             :title="tool.hint"
             @click="invoke(tool)"

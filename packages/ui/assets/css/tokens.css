@@ -1,47 +1,49 @@
 /* ===========================================================================
    Design tokens.
 
-   Direction: Swiss/International — Peek faces (Figtree / Instrument Serif /
-   Rubik), a warm paper ground, one ink, one accent. Density inside tables and
-   cards, air between sections. Explicitly *not* dark-by-default: an admin tool
-   is read in daylight.
+   Direction: builder chrome in the Lovable / Framer grammar — dark by
+   default, a near-black neutral ground with hairline borders, one signal
+   blue for the primary action and canvas selection, and a lighter panel
+   surface that floats over a deeper canvas. Chosen by the product owner on
+   2026-09-01, replacing the daylight paper world of the day before; light
+   stays as an explicit per-person choice, never the default.
 
    Every colour is defined here on bare `:root` first, then re-declared for
-   dark. Nothing gets its only definition inside a media query.
+   light. Nothing gets its only definition inside a media query.
    =========================================================================== */
 
 :root {
   /* --- surfaces & ink ---------------------------------------------------- */
-  --paper: oklch(99% 0.003 95);
-  --paper-raised: oklch(100% 0 0);
-  --paper-sunken: oklch(96.8% 0.005 95);
-  --ink: oklch(23% 0.012 260);
-  --ink-soft: oklch(50% 0.014 260);
-  --ink-faint: oklch(65% 0.012 260);
-  --line: oklch(91% 0.005 95);
-  --line-strong: oklch(84% 0.008 95);
+  --paper: oklch(15% 0.004 260);
+  --paper-raised: oklch(19% 0.005 260);
+  --paper-sunken: oklch(12% 0.004 260);
+  --ink: oklch(95% 0.004 260);
+  --ink-soft: oklch(72% 0.006 260);
+  --ink-faint: oklch(55% 0.006 260);
+  --line: oklch(100% 0 0 / 0.08);
+  --line-strong: oklch(100% 0 0 / 0.16);
 
-  /* The canvas ground. Deliberately darker than `--paper-sunken`: a device
-     frame only reads as a frame if the surface behind it clearly recedes. */
-  --editor-canvas: oklch(90% 0.004 95);
+  /* The canvas ground. Deeper than `--paper-sunken`: a device frame only
+     reads as a frame if the surface behind it clearly recedes. */
+  --editor-canvas: oklch(9% 0.003 260);
 
   /* --- accent & status --------------------------------------------------- */
-  --brand: oklch(55% 0.16 48);
-  --brand-hover: oklch(48% 0.16 48);
-  --brand-soft: oklch(96.5% 0.028 58);
+  --brand: oklch(60% 0.2 252);
+  --brand-hover: oklch(66% 0.19 252);
+  --brand-soft: oklch(60% 0.2 252 / 0.16);
   --brand-ink: oklch(100% 0 0);
-  --positive: oklch(55% 0.13 152);
-  --positive-soft: oklch(96% 0.04 152);
-  --warning: oklch(68% 0.14 72);
-  --warning-soft: oklch(96% 0.05 82);
-  --danger: oklch(50% 0.2 22);
-  --danger-soft: oklch(96% 0.04 22);
-  --focus: oklch(56% 0.16 48);
+  --positive: oklch(74% 0.15 152);
+  --positive-soft: oklch(74% 0.15 152 / 0.14);
+  --warning: oklch(80% 0.14 80);
+  --warning-soft: oklch(80% 0.14 80 / 0.14);
+  --danger: oklch(64% 0.2 24);
+  --danger-soft: oklch(64% 0.2 24 / 0.14);
+  --focus: oklch(66% 0.19 252);
 
   /* --- elevation --------------------------------------------------------- */
-  --shadow-sm: 0 1px 2px oklch(23% 0.012 260 / 0.06);
-  --shadow-md: 0 2px 4px oklch(23% 0.012 260 / 0.05), 0 8px 20px oklch(23% 0.012 260 / 0.06);
-  --shadow-lg: 0 4px 8px oklch(23% 0.012 260 / 0.06), 0 20px 44px oklch(23% 0.012 260 / 0.1);
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.5), 0 0 0 1px oklch(100% 0 0 / 0.04);
+  --shadow-md: 0 4px 12px oklch(0% 0 0 / 0.45), 0 0 0 1px oklch(100% 0 0 / 0.06);
+  --shadow-lg: 0 12px 40px oklch(0% 0 0 / 0.6), 0 0 0 1px oklch(100% 0 0 / 0.08);
 
   /* --- layering -----------------------------------------------------------
      One ordered scale for everything that overlaps something else. Read it
@@ -73,63 +75,35 @@
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --paper: oklch(17% 0.012 260);
-    --paper-raised: oklch(21% 0.014 260);
-    --paper-sunken: oklch(14% 0.012 260);
-    --ink: oklch(96% 0.006 260);
-    --ink-soft: oklch(74% 0.012 260);
-    --ink-faint: oklch(58% 0.012 260);
-    --line: oklch(28% 0.014 260);
-    --line-strong: oklch(36% 0.016 260);
-    --editor-canvas: oklch(12% 0.01 260);
+/* Light is a choice a person makes, not something the OS decides: the
+   builder reads the same at night and in a shop, and the canvas contrast
+   depends on it. */
+:root[data-theme='light'] {
+  --paper: oklch(98.5% 0.002 260);
+  --paper-raised: oklch(100% 0 0);
+  --paper-sunken: oklch(96% 0.003 260);
+  --ink: oklch(20% 0.006 260);
+  --ink-soft: oklch(48% 0.008 260);
+  --ink-faint: oklch(62% 0.008 260);
+  --line: oklch(0% 0 0 / 0.08);
+  --line-strong: oklch(0% 0 0 / 0.16);
+  --editor-canvas: oklch(91% 0.003 260);
 
-    /* Solid brand stays dark enough for white labels — never black-on-orange. */
-    --brand: oklch(62% 0.15 48);
-    --brand-hover: oklch(68% 0.14 48);
-    --brand-soft: oklch(29% 0.065 50);
-    --brand-ink: oklch(100% 0 0);
-    --positive: oklch(74% 0.14 152);
-    --positive-soft: oklch(26% 0.06 152);
-    --warning: oklch(80% 0.13 78);
-    --warning-soft: oklch(28% 0.06 78);
-    --danger: oklch(62% 0.18 22);
-    --danger-soft: oklch(27% 0.07 27);
-    --focus: oklch(62% 0.15 48);
-
-    --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.4);
-    --shadow-md: 0 2px 4px oklch(0% 0 0 / 0.35), 0 8px 20px oklch(0% 0 0 / 0.4);
-    --shadow-lg: 0 4px 8px oklch(0% 0 0 / 0.4), 0 20px 44px oklch(0% 0 0 / 0.5);
-  }
-}
-
-:root[data-theme='dark'] {
-  --paper: oklch(17% 0.012 260);
-  --paper-raised: oklch(21% 0.014 260);
-  --paper-sunken: oklch(14% 0.012 260);
-  --ink: oklch(96% 0.006 260);
-  --ink-soft: oklch(74% 0.012 260);
-  --ink-faint: oklch(58% 0.012 260);
-  --line: oklch(28% 0.014 260);
-  --line-strong: oklch(36% 0.016 260);
-  --editor-canvas: oklch(12% 0.01 260);
-
-  --brand: oklch(62% 0.15 48);
-  --brand-hover: oklch(68% 0.14 48);
-  --brand-soft: oklch(29% 0.065 50);
+  --brand: oklch(55% 0.2 252);
+  --brand-hover: oklch(49% 0.2 252);
+  --brand-soft: oklch(55% 0.2 252 / 0.12);
   --brand-ink: oklch(100% 0 0);
-  --positive: oklch(74% 0.14 152);
-  --positive-soft: oklch(26% 0.06 152);
-  --warning: oklch(80% 0.13 78);
-  --warning-soft: oklch(28% 0.06 78);
-  --danger: oklch(62% 0.18 22);
-  --danger-soft: oklch(27% 0.07 27);
-  --focus: oklch(62% 0.15 48);
+  --positive: oklch(55% 0.14 152);
+  --positive-soft: oklch(55% 0.14 152 / 0.12);
+  --warning: oklch(66% 0.15 75);
+  --warning-soft: oklch(66% 0.15 75 / 0.14);
+  --danger: oklch(52% 0.2 24);
+  --danger-soft: oklch(52% 0.2 24 / 0.12);
+  --focus: oklch(55% 0.2 252);
 
-  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.4);
-  --shadow-md: 0 2px 4px oklch(0% 0 0 / 0.35), 0 8px 20px oklch(0% 0 0 / 0.4);
-  --shadow-lg: 0 4px 8px oklch(0% 0 0 / 0.4), 0 20px 44px oklch(0% 0 0 / 0.5);
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.06), 0 0 0 1px oklch(0% 0 0 / 0.04);
+  --shadow-md: 0 4px 12px oklch(0% 0 0 / 0.08), 0 0 0 1px oklch(0% 0 0 / 0.05);
+  --shadow-lg: 0 12px 40px oklch(0% 0 0 / 0.14), 0 0 0 1px oklch(0% 0 0 / 0.06);
 }
 
 /* ---------------------------------------------------------------------------

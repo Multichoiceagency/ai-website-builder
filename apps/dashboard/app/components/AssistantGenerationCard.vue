@@ -37,7 +37,7 @@ const phaseLabel = computed(() => {
 </script>
 
 <template>
-  <div class="w-full max-w-[20rem] overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm">
+  <div class="w-full max-w-[20rem] overflow-hidden rounded-2xl border border-line bg-raised shadow-sm">
     <p
       v-if="thinkingSeconds != null"
       class="px-3.5 pt-3 text-[0.75rem] text-faint"
@@ -55,26 +55,26 @@ const phaseLabel = computed(() => {
       class="relative mx-3.5 mb-3.5 aspect-[16/11] overflow-hidden rounded-xl"
       aria-hidden="true"
     >
-      <div class="absolute inset-0 bg-gradient-to-br from-[#f6d5c4] via-[#f0c4b0] to-[#e8b8a6]" />
-      <div class="absolute -right-6 -top-8 h-28 w-28 rounded-full bg-white/25 blur-2xl" />
-      <div class="absolute -bottom-8 left-4 h-24 w-32 rounded-full bg-[#d4a08a]/40 blur-2xl" />
+      <div class="absolute inset-0 bg-gradient-to-br from-brand-soft via-raised to-raised" />
+      <div class="absolute -right-6 -top-8 h-28 w-28 rounded-full bg-raised/5 blur-2xl" />
+      <div class="absolute -bottom-8 left-4 h-24 w-32 rounded-full bg-brand/30 blur-2xl" />
 
       <!-- Floating chrome chips -->
-      <div class="absolute left-3 top-3 rounded-lg bg-white/85 px-2 py-1 shadow-sm backdrop-blur-sm">
+      <div class="absolute left-3 top-3 rounded-lg bg-raised/10 px-2 py-1 shadow-sm backdrop-blur-sm">
         <div class="h-1.5 w-10 rounded-full bg-ink/15" />
         <div class="mt-1 h-1 w-7 rounded-full bg-ink/10" />
       </div>
-      <div class="absolute right-3 top-4 rounded-lg bg-white/80 px-2 py-1.5 shadow-sm backdrop-blur-sm">
+      <div class="absolute right-3 top-4 rounded-lg bg-raised/10 px-2 py-1.5 shadow-sm backdrop-blur-sm">
         <div class="flex gap-1">
-          <span class="h-2 w-2 rounded-full bg-[#f87171]/70" />
-          <span class="h-2 w-2 rounded-full bg-[#fbbf24]/70" />
-          <span class="h-2 w-2 rounded-full bg-[#34d399]/70" />
+          <span class="h-2 w-2 rounded-full bg-danger" />
+          <span class="h-2 w-2 rounded-full bg-warning" />
+          <span class="h-2 w-2 rounded-full bg-positive" />
         </div>
       </div>
 
       <!-- Center wireframe board -->
       <div
-        class="absolute left-1/2 top-1/2 w-[72%] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/50 bg-white/55 p-3 shadow-md backdrop-blur-md"
+        class="absolute left-1/2 top-1/2 w-[72%] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line bg-raised/5 p-3 shadow-md backdrop-blur-md"
       >
         <div class="h-2 w-1/3 rounded-full bg-ink/20" />
         <div class="mt-2 space-y-1.5">

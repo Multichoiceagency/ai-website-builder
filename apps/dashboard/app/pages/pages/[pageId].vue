@@ -1693,7 +1693,7 @@ function selectFromPanel(id: string) {
       Header z-index: the body paints after this row, so an absolute Page
       popover would otherwise sit under the side panels and canvas chrome.
     -->
-    <header class="editor-chrome relative z-[var(--z-nav-flyout)] flex h-12 shrink-0 items-center gap-3 border-b border-line bg-paper px-3">
+    <header class="editor-chrome relative z-[var(--z-nav-flyout)] flex h-11 shrink-0 items-center gap-3 border-b border-line bg-sunken px-3">
       <NuxtLink
         to="/website/pages"
         class="grid h-8 w-8 place-items-center rounded-md text-faint no-underline transition-colors hover:bg-sunken hover:text-ink"
@@ -1856,10 +1856,10 @@ function selectFromPanel(id: string) {
       </div>
     </header>
 
-    <div class="flex min-h-0 flex-1 overflow-hidden">
+    <div class="flex min-h-0 flex-1 overflow-hidden bg-canvas">
       <aside
         v-if="leftOpen"
-        class="editor-chrome flex min-h-0 shrink-0 flex-col border-r border-line bg-paper"
+        class="editor-chrome my-3 ml-3 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-paper shadow-float"
         :style="{ width: `${interactiveAssistantWidth}px` }"
       >
         <AssistantPanel
@@ -1884,7 +1884,7 @@ function selectFromPanel(id: string) {
       />
 
       <aside
-        class="editor-chrome flex min-h-0 w-[280px] shrink-0 flex-col border-r border-line bg-paper"
+        class="editor-chrome my-3 ml-3 flex min-h-0 w-[280px] shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-paper shadow-float"
       >
         <div class="flex shrink-0 flex-col gap-1.5 border-b border-line px-2 py-2">
           <p class="type-button-10 px-0.5 uppercase tracking-[0.06em] text-faint">Insert</p>
@@ -2059,7 +2059,7 @@ function selectFromPanel(id: string) {
 
       <aside
         v-if="rightOpen"
-        class="editor-chrome flex min-h-0 shrink-0 flex-col border-l border-line bg-paper"
+        class="editor-chrome my-3 mr-3 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-paper shadow-float"
         :style="{ width: `${rightWidth}px` }"
       >
         <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
