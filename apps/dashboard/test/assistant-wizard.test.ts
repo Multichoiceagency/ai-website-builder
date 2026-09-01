@@ -24,7 +24,7 @@ describe('wantsGuidedDesign', () => {
     expect(isBuildSpec('make the hero section: <style>.x{position:fixed}</style>')).toBe(true)
   })
 
-  it('does not mistake a long plain question for a spec', () => {
+  it('does not mistake a plain question for a spec', () => {
     expect(isBuildSpec('what does this mean?')).toBe(false)
   })
 })
