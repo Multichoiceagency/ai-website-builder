@@ -1886,260 +1886,258 @@ function selectFromPanel(id: string) {
     </header>
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
-      <template>
-        <aside
-          v-if="leftOpen"
-          class="editor-chrome flex min-h-0 shrink-0 flex-col border-r border-line bg-paper"
-          :style="{ width: `${interactiveAssistantWidth}px` }"
-        >
-          <AssistantPanel
-            :freeform-mode="true"
-            :apply-sections="applyAssistantSections"
-            :layout-context="assistLayoutContext"
-            :draft-message="assistDraftMessage"
-            :send-nonce="assistSendNonce"
-            @insert-catalogue="onInsertCatalogue"
-            @theme-updated="applyThemeLocal"
-            @insert-layout-canvas="ensureDesignArtboard()"
-            @layout-action="onAssistLayoutAction"
-          />
-        </aside>
-        <EditorResizer
-          v-if="leftOpen"
-          v-model="interactiveAssistantWidth"
-          side="left"
-          :min="280"
-          :max="520"
-          label="Resize the assistant panel"
+      <aside
+        v-if="leftOpen"
+        class="editor-chrome flex min-h-0 shrink-0 flex-col border-r border-line bg-paper"
+        :style="{ width: `${interactiveAssistantWidth}px` }"
+      >
+        <AssistantPanel
+          :freeform-mode="true"
+          :apply-sections="applyAssistantSections"
+          :layout-context="assistLayoutContext"
+          :draft-message="assistDraftMessage"
+          :send-nonce="assistSendNonce"
+          @insert-catalogue="onInsertCatalogue"
+          @theme-updated="applyThemeLocal"
+          @insert-layout-canvas="ensureDesignArtboard()"
+          @layout-action="onAssistLayoutAction"
         />
+      </aside>
+      <EditorResizer
+        v-if="leftOpen"
+        v-model="interactiveAssistantWidth"
+        side="left"
+        :min="280"
+        :max="520"
+        label="Resize the assistant panel"
+      />
 
-        <aside
-          class="editor-chrome flex min-h-0 w-[280px] shrink-0 flex-col border-r border-line bg-paper"
-        >
-          <div class="flex shrink-0 flex-col gap-1.5 border-b border-line px-2 py-2">
-            <p class="type-button-10 px-0.5 uppercase tracking-[0.06em] text-faint">Insert</p>
-            <div class="flex flex-wrap gap-1">
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Frame" @click="addDesignPreset('frame')">Frame</UiButton>
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Rectangle" @click="addDesignPreset('rectangle')">Rect</UiButton>
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Ellipse" @click="addDesignPreset('ellipse')">Ellipse</UiButton>
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Line" @click="addDesignPreset('line')">Line</UiButton>
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Heading" @click="addDesignPreset('heading')">H1</UiButton>
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Text" @click="addDesignPreset('text')">Text</UiButton>
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Image" @click="addDesignPreset('image')">Image</UiButton>
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Button" @click="addDesignPreset('button')">Button</UiButton>
-            </div>
-            <div class="flex flex-wrap gap-1">
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="designImportOpen = true">Import</UiButton>
-              <UiButton
-                size="sm"
-                variant="ghost"
-                :disabled="!can('page:write')"
-                @click="designGenerateOpen = true"
-              >Generate AI</UiButton>
-              <UiButton
-                size="sm"
-                variant="ghost"
-                :loading="designOptimizeBusy"
-                :disabled="!can('page:write') || !isSelectedLayoutCanvas"
-                @click="optimizeDesignWithAi"
-              >Optimize AI</UiButton>
-            </div>
+      <aside
+        class="editor-chrome flex min-h-0 w-[280px] shrink-0 flex-col border-r border-line bg-paper"
+      >
+        <div class="flex shrink-0 flex-col gap-1.5 border-b border-line px-2 py-2">
+          <p class="type-button-10 px-0.5 uppercase tracking-[0.06em] text-faint">Insert</p>
+          <div class="flex flex-wrap gap-1">
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Frame" @click="addDesignPreset('frame')">Frame</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Rectangle" @click="addDesignPreset('rectangle')">Rect</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Ellipse" @click="addDesignPreset('ellipse')">Ellipse</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Line" @click="addDesignPreset('line')">Line</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Heading" @click="addDesignPreset('heading')">H1</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Text" @click="addDesignPreset('text')">Text</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Image" @click="addDesignPreset('image')">Image</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Button" @click="addDesignPreset('button')">Button</UiButton>
           </div>
-          <div
-            v-if="selectedLayoutNodeId && selectedLayoutNodeId !== layoutRoot?.id"
-            class="flex shrink-0 flex-wrap gap-1 border-b border-line px-2 py-1.5"
-          >
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align left" @click="alignSelected('left')">L</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align center" @click="alignSelected('center')">C</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align right" @click="alignSelected('right')">R</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align top" @click="alignSelected('top')">T</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align middle" @click="alignSelected('middle')">M</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align bottom" @click="alignSelected('bottom')">B</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Bring forward (⌘])" @click="bumpSelectedZ(1)">↑Z</UiButton>
-            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Send backward (⌘[)" @click="bumpSelectedZ(-1)">↓Z</UiButton>
+          <div class="flex flex-wrap gap-1">
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="designImportOpen = true">Import</UiButton>
+            <UiButton
+              size="sm"
+              variant="ghost"
+              :disabled="!can('page:write')"
+              @click="designGenerateOpen = true"
+            >Generate AI</UiButton>
+            <UiButton
+              size="sm"
+              variant="ghost"
+              :loading="designOptimizeBusy"
+              :disabled="!can('page:write') || !isSelectedLayoutCanvas"
+              @click="optimizeDesignWithAi"
+            >Optimize AI</UiButton>
           </div>
-          <div class="min-h-0 flex-1 overflow-hidden">
-            <EditorLayersPanel
-              variant="design"
-              :sections="designSections"
-              :selected-id="selectedId"
-              :generating-ids="generatingIds"
-              :can-write="can('page:write')"
-              :structure-root="layoutRoot"
-              :selected-node-id="selectedLayoutNodeId"
-              @select="selectFromPanel"
-              @reorder="onDesignReorder"
-              @move="onDesignMove"
-              @duplicate="onDesignDuplicate"
-              @remove="onDesignRemove"
-              @add="ensureDesignArtboard()"
-              @select-node="onSelectLayoutNode"
-              @add-child="onLayoutAddChild"
-              @duplicate-node="onLayoutDuplicateNode"
-              @remove-node="onLayoutRemoveNode"
-              @move-node="onLayoutMoveNode"
-            />
-          </div>
-        </aside>
-
+        </div>
         <div
-          ref="designCanvasScrollEl"
-          data-editor-scroll
-          class="relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas"
+          v-if="selectedLayoutNodeId && selectedLayoutNodeId !== layoutRoot?.id"
+          class="flex shrink-0 flex-wrap gap-1 border-b border-line px-2 py-1.5"
         >
-          <p
-            v-if="message || errorMessage"
-            class="type-button-12 absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg px-3 py-1.5 shadow-raised"
-            :class="errorMessage ? 'bg-danger-soft text-danger' : 'bg-positive-soft text-positive'"
-            role="status"
-          >
-            {{ errorMessage || message }}
-          </p>
-
-          <DesignCanvasOverlay
-            v-if="layoutRoot"
-            class="min-h-full p-8"
-            :root="layoutRoot"
+          <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align left" @click="alignSelected('left')">L</UiButton>
+          <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align center" @click="alignSelected('center')">C</UiButton>
+          <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align right" @click="alignSelected('right')">R</UiButton>
+          <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align top" @click="alignSelected('top')">T</UiButton>
+          <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align middle" @click="alignSelected('middle')">M</UiButton>
+          <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Align bottom" @click="alignSelected('bottom')">B</UiButton>
+          <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Bring forward (⌘])" @click="bumpSelectedZ(1)">↑Z</UiButton>
+          <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" title="Send backward (⌘[)" @click="bumpSelectedZ(-1)">↓Z</UiButton>
+        </div>
+        <div class="min-h-0 flex-1 overflow-hidden">
+          <EditorLayersPanel
+            variant="design"
+            :sections="designSections"
+            :selected-id="selectedId"
+            :generating-ids="generatingIds"
+            :can-write="can('page:write')"
+            :structure-root="layoutRoot"
             :selected-node-id="selectedLayoutNodeId"
-            :zoom="zoom"
-            :disabled="!can('page:write')"
-            :select-to-edit="selectToEdit"
-            @select="onSelectLayoutNode"
-            @commit-frame="onDesignCommitFrame"
-            @nudge="onDesignNudge"
-            @align="onDesignAlign"
-            @bump-z="onDesignBumpZ"
-            @select-parent="onSelectParent"
-            @prompt-in-place="onPromptInPlace"
-            @patch-node="onCanvasPatch"
-            @delete-node="onLayoutRemoveNode"
-            @pick-image="onPickImage"
-          >
-            <EditorCanvas
-              :sections="sections"
-              :theme="data.site.theme"
-              :selected-id="selectedId"
-              :selected-node-id="selectedLayoutNodeId"
-              :device="device"
-              :zoom="zoom"
-              :can-write="can('page:write')"
-              :generating-ids="generatingIds"
-              :brand-logo="brandLogo"
-              :hide-section-toolbar="true"
-              @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
-              @select-node="onSelectLayoutNode"
-              @reorder="onDesignReorder"
-              @move-up="onDesignMove($event, -1)"
-              @move-down="onDesignMove($event, 1)"
-              @duplicate="onDesignDuplicate"
-              @remove="onDesignRemove"
-              @ask-ai="askAi"
-              @library-drop="onLibraryDrop"
-              @open-insert="ensureDesignArtboard()"
-            />
-          </DesignCanvasOverlay>
-          <div
-            v-else
-            class="flex min-h-[20rem] flex-col items-center justify-center gap-3 p-8 text-center"
-          >
-            <p class="type-button text-ink">Start a Design artboard</p>
-            <p class="type-caption-12 max-w-sm text-soft">
-              Insert Frame, Text, Image, or Button — or describe the page in the assistant.
-            </p>
-            <div class="flex flex-wrap justify-center gap-2">
-              <UiButton size="sm" :disabled="!can('page:write')" @click="addDesignPreset('frame')">Add Frame</UiButton>
-              <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="designGenerateOpen = true">Generate AI</UiButton>
-              <UiButton size="sm" variant="primary" :disabled="!can('page:write')" @click="ensureDesignArtboard()">
-                New artboard
-              </UiButton>
-            </div>
-          </div>
-          <input
-            ref="imageFileInput"
-            type="file"
-            accept="image/*"
-            class="sr-only"
-            @change="onImageFileChosen"
+            @select="selectFromPanel"
+            @reorder="onDesignReorder"
+            @move="onDesignMove"
+            @duplicate="onDesignDuplicate"
+            @remove="onDesignRemove"
+            @add="ensureDesignArtboard()"
+            @select-node="onSelectLayoutNode"
+            @add-child="onLayoutAddChild"
+            @duplicate-node="onLayoutDuplicateNode"
+            @remove-node="onLayoutRemoveNode"
+            @move-node="onLayoutMoveNode"
           />
         </div>
+      </aside>
 
-        <aside
-          v-if="rightOpen"
-          class="editor-chrome flex min-h-0 shrink-0 flex-col border-l border-line bg-paper"
-          :style="{ width: `${rightWidth}px` }"
+      <div
+        ref="designCanvasScrollEl"
+        data-editor-scroll
+        class="relative min-h-0 min-w-0 flex-1 overflow-auto bg-canvas"
+      >
+        <p
+          v-if="message || errorMessage"
+          class="type-button-12 absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg px-3 py-1.5 shadow-raised"
+          :class="errorMessage ? 'bg-danger-soft text-danger' : 'bg-positive-soft text-positive'"
+          role="status"
         >
-          <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-            <span class="type-button-12 text-ink">Design</span>
-            <button
-              type="button"
-              class="type-button-10 rounded-md px-2 py-1 text-faint hover:bg-sunken hover:text-ink"
-              @click="rightOpen = false"
-            >Close</button>
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto p-2">
-            <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
-              <LayoutNodeInspector
-                variant="design"
-                :node="layoutSelectedNode"
-                :disabled="!can('page:write')"
-                :site-id="data.site.id"
-                :show-ai-edit="true"
-                :custom-scripts="selectedLayoutScripts"
-                @update="onLayoutNodePatch"
-                @update-styles="onLayoutNodeStyles"
-                @update-hover-styles="onLayoutNodeHoverStyles"
-                @edit-with-ai="onEditLayoutNodeWithAi"
-                @update-scripts="onCustomScripts"
-              />
-            </template>
-            <!-- A registry section edits through its block's own field
-                 definitions; the node inspector has nothing to show for it. -->
-            <template v-else-if="selected && !isSelectedLayoutCanvas && selectedBlock">
-              <SectionProperties :section="selected" @update="updateSelectedSection" />
-              <SectionForm
-                class="mt-3"
-                :section="selected"
-                :block="selectedBlock"
-                :pages="data.siblings ?? []"
-                :site-id="data.site.id"
-                @update="updateSelectedProps"
-              />
-            </template>
-            <SiteDesignRail
-              v-else
-              :theme="data.site.theme"
-              :disabled="!can('page:write')"
-              @update:theme="patchSiteTheme"
-            />
-          </div>
-        </aside>
+          {{ errorMessage || message }}
+        </p>
 
-        <DesignImportDialog v-model:open="designImportOpen" @imported="onDesignImported" />
-
+        <DesignCanvasOverlay
+          v-if="layoutRoot"
+          class="min-h-full p-8"
+          :root="layoutRoot"
+          :selected-node-id="selectedLayoutNodeId"
+          :zoom="zoom"
+          :disabled="!can('page:write')"
+          :select-to-edit="selectToEdit"
+          @select="onSelectLayoutNode"
+          @commit-frame="onDesignCommitFrame"
+          @nudge="onDesignNudge"
+          @align="onDesignAlign"
+          @bump-z="onDesignBumpZ"
+          @select-parent="onSelectParent"
+          @prompt-in-place="onPromptInPlace"
+          @patch-node="onCanvasPatch"
+          @delete-node="onLayoutRemoveNode"
+          @pick-image="onPickImage"
+        >
+          <EditorCanvas
+            :sections="sections"
+            :theme="data.site.theme"
+            :selected-id="selectedId"
+            :selected-node-id="selectedLayoutNodeId"
+            :device="device"
+            :zoom="zoom"
+            :can-write="can('page:write')"
+            :generating-ids="generatingIds"
+            :brand-logo="brandLogo"
+            :hide-section-toolbar="true"
+            @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
+            @select-node="onSelectLayoutNode"
+            @reorder="onDesignReorder"
+            @move-up="onDesignMove($event, -1)"
+            @move-down="onDesignMove($event, 1)"
+            @duplicate="onDesignDuplicate"
+            @remove="onDesignRemove"
+            @ask-ai="askAi"
+            @library-drop="onLibraryDrop"
+            @open-insert="ensureDesignArtboard()"
+          />
+        </DesignCanvasOverlay>
         <div
-          v-if="designGenerateOpen"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Generate artboard with AI"
+          v-else
+          class="flex min-h-[20rem] flex-col items-center justify-center gap-3 p-8 text-center"
         >
-          <div class="w-full max-w-md rounded-xl border border-line bg-paper p-4 shadow-raised">
-            <h2 class="type-button text-ink">Generate artboard</h2>
-            <p class="type-caption-12 mt-1 text-soft">Describe the page composition. Replaces the current Design artboard.</p>
-            <UiTextarea
-              class="mt-3"
-              :rows="4"
-              :model-value="designGeneratePrompt"
-              placeholder="Hero for a fitness studio: bold headline, short subcopy, dark CTA…"
-              @update:model-value="designGeneratePrompt = $event"
-            />
-            <div class="mt-3 flex justify-end gap-2">
-              <UiButton size="sm" variant="ghost" :disabled="designGenerateBusy" @click="designGenerateOpen = false">Cancel</UiButton>
-              <UiButton size="sm" variant="primary" :loading="designGenerateBusy" @click="generateDesignWithAi">Generate</UiButton>
-            </div>
+          <p class="type-button text-ink">Start a Design artboard</p>
+          <p class="type-caption-12 max-w-sm text-soft">
+            Insert Frame, Text, Image, or Button — or describe the page in the assistant.
+          </p>
+          <div class="flex flex-wrap justify-center gap-2">
+            <UiButton size="sm" :disabled="!can('page:write')" @click="addDesignPreset('frame')">Add Frame</UiButton>
+            <UiButton size="sm" variant="ghost" :disabled="!can('page:write')" @click="designGenerateOpen = true">Generate AI</UiButton>
+            <UiButton size="sm" variant="primary" :disabled="!can('page:write')" @click="ensureDesignArtboard()">
+              New artboard
+            </UiButton>
           </div>
         </div>
-      </template>
+        <input
+          ref="imageFileInput"
+          type="file"
+          accept="image/*"
+          class="sr-only"
+          @change="onImageFileChosen"
+        />
+      </div>
+
+      <aside
+        v-if="rightOpen"
+        class="editor-chrome flex min-h-0 shrink-0 flex-col border-l border-line bg-paper"
+        :style="{ width: `${rightWidth}px` }"
+      >
+        <div class="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+          <span class="type-button-12 text-ink">Design</span>
+          <button
+            type="button"
+            class="type-button-10 rounded-md px-2 py-1 text-faint hover:bg-sunken hover:text-ink"
+            @click="rightOpen = false"
+          >Close</button>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto p-2">
+          <template v-if="isSelectedLayoutCanvas && layoutSelectedNode">
+            <LayoutNodeInspector
+              variant="design"
+              :node="layoutSelectedNode"
+              :disabled="!can('page:write')"
+              :site-id="data.site.id"
+              :show-ai-edit="true"
+              :custom-scripts="selectedLayoutScripts"
+              @update="onLayoutNodePatch"
+              @update-styles="onLayoutNodeStyles"
+              @update-hover-styles="onLayoutNodeHoverStyles"
+              @edit-with-ai="onEditLayoutNodeWithAi"
+              @update-scripts="onCustomScripts"
+            />
+          </template>
+          <!-- A registry section edits through its block's own field
+               definitions; the node inspector has nothing to show for it. -->
+          <template v-else-if="selected && !isSelectedLayoutCanvas && selectedBlock">
+            <SectionProperties :section="selected" @update="updateSelectedSection" />
+            <SectionForm
+              class="mt-3"
+              :section="selected"
+              :block="selectedBlock"
+              :pages="data.siblings ?? []"
+              :site-id="data.site.id"
+              @update="updateSelectedProps"
+            />
+          </template>
+          <SiteDesignRail
+            v-else
+            :theme="data.site.theme"
+            :disabled="!can('page:write')"
+            @update:theme="patchSiteTheme"
+          />
+        </div>
+      </aside>
+
+      <DesignImportDialog v-model:open="designImportOpen" @imported="onDesignImported" />
+
+      <div
+        v-if="designGenerateOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Generate artboard with AI"
+      >
+        <div class="w-full max-w-md rounded-xl border border-line bg-paper p-4 shadow-raised">
+          <h2 class="type-button text-ink">Generate artboard</h2>
+          <p class="type-caption-12 mt-1 text-soft">Describe the page composition. Replaces the current Design artboard.</p>
+          <UiTextarea
+            class="mt-3"
+            :rows="4"
+            :model-value="designGeneratePrompt"
+            placeholder="Hero for a fitness studio: bold headline, short subcopy, dark CTA…"
+            @update:model-value="designGeneratePrompt = $event"
+          />
+          <div class="mt-3 flex justify-end gap-2">
+            <UiButton size="sm" variant="ghost" :disabled="designGenerateBusy" @click="designGenerateOpen = false">Cancel</UiButton>
+            <UiButton size="sm" variant="primary" :loading="designGenerateBusy" @click="generateDesignWithAi">Generate</UiButton>
+          </div>
+        </div>
+      </div>
 
     </div>
 
