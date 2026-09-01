@@ -108,11 +108,26 @@ export class S3StorageProvider implements StorageProvider {
   async put(key: string, body: Buffer, contentType: string): Promise<void> {
     const target = this.url(assertSafeKey(key))
     const headers = this.sign('PUT', target, sha256Hex(body), { 'content-type': contentType })
+    const upload = () => fetch(target.href, { method: 'PUT', headers, body: new Uint8Array(body) })
 
-    const response = await fetch(target.href, { method: 'PUT', headers, body: new Uint8Array(body) })
+    let response = await upload()
+    // A PUT can only 404 when the bucket is missing. Nothing else creates it
+    // on a fresh MinIO, so the first upload of a deployment does.
+    if (response.status === 404 && (await this.createBucket())) response = await upload()
     if (!response.ok) {
       throw new Error(`Object storage rejected the upload (${response.status}).`)
     }
+  }
+
+  /** True when the bucket exists afterwards, whether it was just made or already ours. */
+  private async createBucket(): Promise<boolean> {
+    const base = new URL(this.config.endpoint)
+    const target = this.config.forcePathStyle
+      ? { href: `${base.origin}/${uriEncode(this.config.bucket)}`, host: base.host, canonicalPath: `/${uriEncode(this.config.bucket)}` }
+      : { href: `${base.protocol}//${this.config.bucket}.${base.host}/`, host: `${this.config.bucket}.${base.host}`, canonicalPath: '/' }
+    const headers = this.sign('PUT', target, EMPTY_SHA256, {})
+    const response = await fetch(target.href, { method: 'PUT', headers })
+    return response.ok || response.status === 409
   }
 
   async get(key: string): Promise<Buffer | null> {
