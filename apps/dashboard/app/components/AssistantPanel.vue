@@ -100,6 +100,10 @@ type AssistActionPayload =
     }
   | { type: 'replaceLayoutSubtree'; sectionId: string; nodeId: string; node: Record<string, unknown> }
   | { type: 'patchSectionProps'; sectionId: string; props: Record<string, unknown> }
+  | { type: 'generateCodeSection'; brief: string; target: string; title?: string }
+
+/** LLM plus a Vite island build; the default request budget is far too short. */
+const CODE_SECTION_TIMEOUT_MS = 240_000
 
 function friendlyAssistError(error: unknown): string {
   if (!(error instanceof ApiError)) return 'That did not work. Try one of the actions below.'
@@ -233,6 +237,32 @@ async function applyAssistActions(actions: AssistActionPayload[] | undefined) {
         if (!result) say('assistant', 'Open a page in the editor, then ask again to update that section.')
         else if (!result.applied) say('assistant', `No section with id \`${action.sectionId}\` on this page.`)
         else say('assistant', `Updated props on section \`${action.sectionId}\`.`)
+      } else if (action.type === 'generateCodeSection') {
+        if (!activeSiteId.value) {
+          say('assistant', 'Select a site first, then ask again to build that.')
+          continue
+        }
+        say('assistant', 'Building it now — about a minute.')
+        const built = await api.post<{ sections: Section[]; errors: string[] }>(
+          '/api/v1/ai/generate-component',
+          {
+            siteId: activeSiteId.value,
+            brief: action.brief,
+            target: action.target,
+            title: action.title,
+            saveAsset: true,
+            assign: true,
+          },
+          { timeoutMs: CODE_SECTION_TIMEOUT_MS },
+        )
+        // Placed through the editor, not the route's own page append, so it
+        // joins the undo history like a hand edit.
+        const result = await patchSections((sections) =>
+          built.sections.length ? [...sections, ...built.sections] : sections,
+        )
+        if (!result) say('assistant', 'Built and saved to your components. Open a page in the editor and ask again to place it.')
+        else if (!result.applied) say('assistant', 'The build returned nothing to place.')
+        else say('assistant', `Placed “${action.title ?? 'the new section'}” at the end of this page. Undo removes it.`)
       } else if (action.type === 'insertLayoutCanvas') {
         emit('insert-layout-canvas')
         say('assistant', 'Added an Empty section (layout canvas).')
@@ -722,7 +752,7 @@ async function submit() {
         <p class="text-[0.9375rem] font-semibold text-ink">What should we build?</p>
         <p class="mx-auto mt-1.5 max-w-[16rem] text-[0.8125rem] leading-relaxed text-soft">
           <template v-if="freeformMode">
-            Describe the page in plain language — I’ll only use freeform layout trees (Empty section), never Motionsites or registry components.
+            Describe what you want in plain language. Edits land on this page; a full build spec becomes a custom code section.
           </template>
           <template v-else>
             Say “create a landing page” — I’ll think, show a design preview, then ask choices A→Z.

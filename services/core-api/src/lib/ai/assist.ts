@@ -1,5 +1,7 @@
+import { componentTargetSchema } from '@platform/schemas'
 import { z } from 'zod'
 import { aiGateway } from '../generation/index.js'
+import { detectCodeBrief } from './code-brief.js'
 import { buildAssistCatalogueContext, type CatalogueHit } from './catalogue-context.js'
 import { DESIGN_SKILL_BRIEF } from './design-skills.js'
 import {
@@ -86,6 +88,13 @@ const assistActionSchema = z.discriminatedUnion('type', [
     props: z.record(z.unknown()).refine((value) => Object.keys(value).length > 0, {
       message: 'props must not be empty',
     }),
+  }),
+  z.object({
+    type: z.literal('generateCodeSection'),
+    /** The full brief, verbatim — it is stored with the section (ADR-0012). */
+    brief: z.string().min(8).max(16_000),
+    target: componentTargetSchema,
+    title: z.string().max(200).optional(),
   }),
 ])
 
@@ -273,6 +282,19 @@ export async function assistWithMessage(
     knowledgeBlock = ''
   }
 
+  // A registry block cannot answer a build spec; route it to codegen before a
+  // model gets to explain why it will not write code (ADR-0012).
+  const codeBrief = detectCodeBrief(message)
+  if (codeBrief) {
+    return {
+      answer:
+        'That needs a custom-built section — there is no block for it. I am building it as sandboxed code; it lands on this page with undo, or in your components when no page is open.',
+      model: 'rule:code-brief',
+      catalogueHits: [],
+      actions: [{ type: 'generateCodeSection', brief: message, target: codeBrief.target, title: codeBrief.title }],
+    }
+  }
+
   if (!freeformMode) {
     const brief = await analyzeMotionsitesBrief(message, { fetchRemoteMedia: true })
     if (brief.kind === 'exact_island' && brief.islandId) {
@@ -284,15 +306,6 @@ export async function assistWithMessage(
           : hits.slice(0, 6),
       }
     }
-    if (brief.kind === 'exact_island') {
-      return {
-        answer:
-          'That looks like a Motionsites React+Tailwind build brief, but no ready island matches yet. Call POST /api/v1/ai/motionsites-codegen with the brief to generate a single-file React component (DEPENDENCIES header + default export), then register it as an island. Ask AI will not invent React into page JSON (ADR-0003).',
-        model: brief.model,
-        catalogueHits: hits.slice(0, 6),
-      }
-    }
-
     const wantsScrollFrames =
       /\b(scroll[- ]?(scrub|video|3d)|frame\s*pack|interactive\s*3d|product\s*fly[- ]?through|scrub\s*(through|video)|apple[- ]style\s*scroll)\b/i.test(
         message,
