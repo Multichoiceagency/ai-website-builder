@@ -162,6 +162,7 @@ export const HEADER_LAYOUT_OPTIONS = [
   { label: 'Left', value: 'left' },
   { label: 'Centre', value: 'center' },
   { label: 'Split', value: 'split' },
+  { label: 'Stacked', value: 'stacked' },
 ]
 
 export const TONE_OPTIONS = [

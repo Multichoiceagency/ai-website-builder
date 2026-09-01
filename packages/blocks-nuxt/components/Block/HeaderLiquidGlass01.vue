@@ -19,7 +19,7 @@ const props = withDefaults(
     logo?: string
     logoHeight?: 'sm' | 'md' | 'lg' | 'xl'
     trademark?: boolean
-    layout?: 'left' | 'center' | 'split'
+    layout?: 'left' | 'center' | 'split' | 'stacked'
     links?: { label: string; href: string }[]
     ctaLabel?: string
     ctaHref?: string
@@ -44,16 +44,16 @@ const props = withDefaults(
 const logoSrc = computed(() => (props.logo ?? '').trim())
 
 const logoClass = computed(() => {
-  switch (props.logoHeight) {
-    case 'sm':
-      return 'h-5 w-auto'
-    case 'lg':
-      return 'h-10 w-auto'
-    case 'xl':
-      return 'h-14 w-auto'
-    default:
-      return 'h-7 w-auto'
-  }
+  const stacked = props.layout === 'stacked'
+  const height = {
+    sm: 'h-5',
+    md: 'h-7',
+    lg: 'h-10',
+    // The generated brand row: 48px on phones, 64px from md.
+    xl: stacked ? 'h-12 md:h-16' : 'h-14',
+  }[props.logoHeight]
+  // Capping width only here keeps published pages on the other layouts untouched.
+  return stacked ? `${height} w-auto max-w-[min(320px,80vw)] object-contain` : `${height} w-auto object-contain`
 })
 
 const headerClass = computed(() => {
@@ -62,12 +62,18 @@ const headerClass = computed(() => {
       return 'flex-col items-center justify-center gap-4'
     case 'left':
       return 'items-center justify-start gap-6'
+    // A full-width brand pushes nav and CTA onto the next flex line.
+    case 'stacked':
+      return 'flex-wrap items-center justify-center gap-x-6 gap-y-4'
     default:
       return 'items-center justify-between'
   }
 })
 
+const brandClass = computed(() => (props.layout === 'stacked' ? 'w-full justify-center' : 'shrink-0'))
+
 const navClass = computed(() => {
+  if (props.layout === 'stacked') return 'flex flex-wrap justify-center'
   if (props.layout === 'left') return 'ml-auto hidden md:flex'
   if (props.layout === 'center') return 'flex'
   return 'hidden md:flex'
@@ -85,15 +91,14 @@ const navClass = computed(() => {
     >
       <a
         href="/"
-        class="pointer-events-auto flex shrink-0 items-center gap-2 text-[17px] font-semibold tracking-tight text-white no-underline"
+        class="pointer-events-auto flex items-center gap-2 text-[17px] font-semibold tracking-tight text-white no-underline"
+        :class="brandClass"
       >
         <img
           v-if="logoSrc"
           :src="logoSrc"
           :alt="brand"
           :class="logoClass"
-          width="28"
-          height="28"
         />
         <template v-else>
           {{ brand }}<sup v-if="trademark" class="ml-0.5 text-[0.65em]">TM</sup>

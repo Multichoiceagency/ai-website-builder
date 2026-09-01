@@ -12,7 +12,7 @@ const linkItemFields = [
   { key: 'href', label: 'Link', type: 'url' as const },
 ]
 
-const headerLayoutSchema = z.enum(['left', 'center', 'split']).default('left')
+const headerLayoutSchema = z.enum(['left', 'center', 'split', 'stacked']).default('left')
 
 export const headerSimple01 = defineBlock({
   id: 'header-simple-01',
@@ -37,7 +37,7 @@ export const headerSimple01 = defineBlock({
       { value: 'xl', label: 'Extra large' },
     ]),
     field.select('layout', 'Layout', HEADER_LAYOUT_OPTIONS, {
-      help: 'Left: logo then links. Centre: logo centred. Split: logo left, links centre, button right.',
+      help: 'Left: logo then links. Centre: logo centred. Split: logo left, links centre, button right. Stacked: logo on its own row above the navigation.',
     }),
     field.items('links', 'Navigation links', linkItemFields, { itemLabel: 'Link', maxItems: 6 }),
     field.text('ctaLabel', 'Button label'),
@@ -96,7 +96,7 @@ export const headerLiquidGlass01 = defineBlock({
     ]),
     field.boolean('trademark', 'Show ™ after the brand'),
     field.select('layout', 'Layout', HEADER_LAYOUT_OPTIONS, {
-      help: 'Split matches the MotionSites default (logo left, links centre, CTA right).',
+      help: 'Split matches the MotionSites default (logo left, links centre, CTA right). Stacked puts the logo on its own row above the navigation.',
     }),
     field.items('links', 'Navigation links', linkItemFields, { itemLabel: 'Link', maxItems: 6 }),
     field.text('ctaLabel', 'Button label'),
@@ -107,7 +107,7 @@ export const headerLiquidGlass01 = defineBlock({
     logo: imageUrl(''),
     logoHeight: z.enum(['sm', 'md', 'lg', 'xl']).default('md'),
     trademark: bool(true),
-    layout: z.enum(['left', 'center', 'split']).default('split'),
+    layout: z.enum(['left', 'center', 'split', 'stacked']).default('split'),
     links: z
       .array(linkItem)
       .max(6)

@@ -7,7 +7,7 @@
   "scripts": {
     "build": "echo \"@platform/blocks-nuxt is a Nuxt layer \u2014 consumed as source (ADR-0010)\" && exit 0",
     "typecheck": "echo \"@platform/blocks-nuxt: type-checked by the apps that extend it\" && exit 0",
-    "test": "echo \"@platform/blocks-nuxt: covered by app tests\" && exit 0"
+    "test": "vitest run"
   },
   "dependencies": {
     "@platform/blocks": "workspace:*",
@@ -19,6 +19,10 @@
     "vue": "^3.5.13"
   },
   "devDependencies": {
-    "@nuxt/kit": "^4.0.0"
+    "@nuxt/kit": "^4.0.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^15.11.7",
+    "vitest": "^2.1.8"
   }
 }

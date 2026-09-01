@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, inject, toRef, unref } from 'vue'
+import { computed, inject, toRef, unref, type Ref } from 'vue'
 
 const props = withDefaults(
   defineProps<{
     brand?: string
     logo?: string
     logoHeight?: 'sm' | 'md' | 'lg' | 'xl'
-    layout?: 'left' | 'center' | 'split'
+    layout?: 'left' | 'center' | 'split' | 'stacked'
     links?: { label: string; href: string }[]
     ctaLabel?: string
     ctaHref?: string
@@ -16,7 +16,7 @@ const props = withDefaults(
 )
 
 /** Site business / SEO logo from editor or storefront (empty string when unset). */
-const siteBrandLogo = inject<string | { value: string }>('platformBrandLogo', '')
+const siteBrandLogo = inject<string | Ref<string>>('platformBrandLogo', '')
 
 const resolvedLogo = computed(() => {
   const section = (props.logo ?? '').trim()
@@ -24,20 +24,20 @@ const resolvedLogo = computed(() => {
   return String(unref(siteBrandLogo) ?? '').trim()
 })
 
-const logoClass = computed(() => {
-  switch (props.logoHeight) {
-    case 'sm':
-      return 'h-6 w-auto'
-    case 'lg':
-      return 'h-12 w-auto'
-    case 'xl':
-      return 'h-16 w-auto'
-    default:
-      return 'h-8 w-auto'
-  }
-})
-
 const layout = toRef(props, 'layout')
+
+const logoClass = computed(() => {
+  const stacked = layout.value === 'stacked'
+  const height = {
+    sm: 'h-6',
+    md: 'h-8',
+    lg: 'h-12',
+    // The generated brand row: 48px on phones, 64px from md.
+    xl: stacked ? 'h-12 md:h-16' : 'h-16',
+  }[props.logoHeight]
+  // Capping width only here keeps published pages on the other layouts untouched.
+  return stacked ? `${height} w-auto max-w-[min(320px,80vw)] object-contain` : `${height} w-auto object-contain`
+})
 
 const rowClass = computed(() => {
   switch (layout.value) {
@@ -45,20 +45,28 @@ const rowClass = computed(() => {
       return 'flex-col justify-center gap-3 py-3 md:flex-row md:items-center md:gap-6 md:py-0'
     case 'split':
       return 'justify-between gap-6'
+    // A full-width brand pushes nav and CTA onto the next flex line.
+    case 'stacked':
+      return 'flex-wrap justify-center gap-x-6 gap-y-3 py-4'
     default:
       return 'gap-6'
   }
 })
 
-const brandClass = computed(() => (layout.value === 'center' ? 'justify-center' : 'shrink-0'))
+const brandClass = computed(() => {
+  if (layout.value === 'stacked') return 'w-full justify-center'
+  return layout.value === 'center' ? 'justify-center' : 'shrink-0'
+})
 
 const navClass = computed(() => {
+  if (layout.value === 'stacked') return 'flex flex-wrap justify-center'
   if (layout.value === 'center') return 'flex justify-center'
   if (layout.value === 'split') return 'absolute left-1/2 hidden -translate-x-1/2 md:flex'
   return 'ml-auto hidden md:flex'
 })
 
 const ctaClass = computed(() => {
+  if (layout.value === 'stacked') return 'shrink-0'
   if (layout.value === 'center') return ''
   if (layout.value === 'split') return 'shrink-0'
   return 'ml-auto shrink-0 md:ml-0'
@@ -80,8 +88,6 @@ const ctaClass = computed(() => {
           :src="resolvedLogo"
           :alt="brand || 'Logo'"
           :class="logoClass"
-          width="32"
-          height="32"
         />
         <span
           v-if="brand"
