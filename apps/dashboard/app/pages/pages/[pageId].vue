@@ -2008,6 +2008,30 @@ function selectFromPanel(id: string) {
             @open-insert="ensureDesignArtboard()"
           />
         </DesignCanvasOverlay>
+        <!-- No artboard: registry sections still render, just without the freeform overlay. -->
+        <EditorCanvas
+          v-else-if="sections.length"
+          :sections="sections"
+          :theme="data.site.theme"
+          :selected-id="selectedId"
+          :selected-node-id="selectedLayoutNodeId"
+          :device="device"
+          :zoom="zoom"
+          :can-write="can('page:write')"
+          :generating-ids="generatingIds"
+          :brand-logo="brandLogo"
+          :hide-section-toolbar="true"
+          @select="selectedId = $event; rightTab = 'style'; rightOpen = true"
+          @select-node="onSelectLayoutNode"
+          @reorder="onDesignReorder"
+          @move-up="onDesignMove($event, -1)"
+          @move-down="onDesignMove($event, 1)"
+          @duplicate="onDesignDuplicate"
+          @remove="onDesignRemove"
+          @ask-ai="askAi"
+          @library-drop="onLibraryDrop"
+          @open-insert="ensureDesignArtboard()"
+        />
         <div
           v-else
           class="flex min-h-[20rem] flex-col items-center justify-center gap-3 p-8 text-center"
