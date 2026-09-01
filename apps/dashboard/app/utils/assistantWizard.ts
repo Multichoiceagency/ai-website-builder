@@ -28,9 +28,22 @@ export interface WizardAnswers {
 }
 
 /** Detect when free text should open the guided design flow instead of a one-shot reply. */
+/**
+ * A spec already carries the answers the wizard would ask for. Thresholds
+ * mirror the server's code-brief.ts; if one moves, the other must.
+ */
+export function isBuildSpec(text: string): boolean {
+  const trimmed = text.trim()
+  return (
+    trimmed.length >= 240 ||
+    /(<style|<script|@media|@keyframes|position\s*:\s*fixed|self-contained html|html file|dependencies\s*:)/i.test(trimmed)
+  )
+}
+
 export function wantsGuidedDesign(text: string): boolean {
   const lower = text.trim().toLowerCase()
   if (!lower) return false
+  if (isBuildSpec(text)) return false
   if (/^(hi|hello|hey|thanks|thank you)\b/.test(lower) && lower.length < 24) return false
   return (
     /\b(landing\s*page|website|web\s*site|homepage|home\s*page)\b/.test(lower) ||

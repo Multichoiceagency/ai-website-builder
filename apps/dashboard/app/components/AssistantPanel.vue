@@ -7,6 +7,7 @@ import {
   DESIGN_WIZARD_STEPS,
   fontPairFromTypeAnswer,
   formatWizardBrief,
+  isBuildSpec,
   seedFromPaletteAnswer,
   wantsGuidedDesign,
   type WizardAnswers,
@@ -662,22 +663,20 @@ async function submit() {
     return
   }
 
-  if (composerMode.value === 'build' && wantsGuidedDesign(text)) {
-    startWizard(text)
-    return
-  }
-
   if (wantsGuidedDesign(text)) {
     startWizard(text)
     return
   }
 
+  // A spec is sent whole; a tool label it happens to contain is not a command.
   const lower = text.toLowerCase()
-  const matched = availableTools.value.find(
-    (tool) =>
-      tool.id.split('_').every((word) => lower.includes(word)) ||
-      lower.includes(tool.label.toLowerCase()),
-  )
+  const matched = isBuildSpec(text)
+    ? null
+    : availableTools.value.find(
+        (tool) =>
+          tool.id.split('_').every((word) => lower.includes(word)) ||
+          lower.includes(tool.label.toLowerCase()),
+      )
 
   if (matched) {
     if (matched.risk === 'low') void execute(matched)
