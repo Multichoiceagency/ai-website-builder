@@ -127,7 +127,7 @@ const previewUrl = computed(() =>
 
 /** Pinned entries above the module list; `action` opens an overlay, `to` navigates. */
 const quickActions = computed(() => [
-  { label: 'Dashboard', icon: Sparkles, to: '/', active: route.path === '/' },
+  { label: 'Agent', icon: Sparkles, to: '/', active: route.path === '/' },
   { label: 'Search', icon: Search, action: () => (commandOpen.value = true), kbd: '⌘K', active: false },
   {
     label: 'Templates',

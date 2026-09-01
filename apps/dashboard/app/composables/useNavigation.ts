@@ -14,6 +14,7 @@ import {
   Globe,
   Home,
   Image,
+  LayoutDashboard,
   LayoutGrid,
   LayoutTemplate,
   Link2,
@@ -76,7 +77,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Home',
     to: '/',
     icon: Home,
-    items: [],
+    items: [{ label: 'Overview', to: '/overview', icon: LayoutDashboard }],
   },
   {
     id: 'website',
