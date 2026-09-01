@@ -3,6 +3,7 @@ import { computed, nextTick, ref } from 'vue'
 import type { PageSummary, Site } from '@platform/schemas'
 import { ExternalLink, Laptop, Loader2, Monitor, RotateCcw, Send, Smartphone, Tablet } from '@lucide/vue'
 import { useLocale } from '../composables/useLocale'
+import { buildStorefrontUrl } from '../utils/storefront-url'
 
 /**
  * THESIS: the owner says what they want changed and watches it happen on their
@@ -30,6 +31,7 @@ definePageMeta({ layout: 'default', alias: ['/agent'] })
 
 const api = useApi()
 const activeSiteId = useActiveSiteId()
+const config = useRuntimeConfig()
 const { t } = useLocale()
 
 const { data: sites } = await useAsyncData('agent:sites', () =>
@@ -53,7 +55,13 @@ const homePageId = computed(
 )
 
 const previewUrl = computed(() =>
-  site.value?.primaryHostname ? `https://${site.value.primaryHostname}` : null,
+  site.value?.primaryHostname
+    ? buildStorefrontUrl({
+        storefrontBase: String(config.public.storefrontUrl || 'http://localhost:3001'),
+        primaryHostname: site.value.primaryHostname,
+        path: '/',
+      })
+    : null,
 )
 
 interface Change {
