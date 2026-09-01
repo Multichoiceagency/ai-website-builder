@@ -57,6 +57,15 @@ const envSchema = z.object({
    */
   GEMINI_MODEL: optionalNonEmpty,
 
+  /**
+   * Image model for generated site imagery. No default: unset means AI image
+   * generation stays off and generation falls back to stock.
+   */
+  GEMINI_IMAGE_MODEL: optionalNonEmpty,
+
+  /** Free stock photos for generated sites. Unset disables the Pexels step. */
+  PEXELS_API_KEY: optionalNonEmpty,
+
   /** Places (New), Geocoding, PageSpeed — platform API key, not OAuth. */
   GOOGLE_API_KEY: optionalNonEmpty,
 

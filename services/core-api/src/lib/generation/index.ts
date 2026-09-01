@@ -15,6 +15,7 @@ import { AiGateway, type CopySlots } from '../ai/gateway.js'
 import { AnthropicCopyProvider } from '../ai/providers/anthropic.js'
 import { DeterministicCopyProvider } from '../ai/providers/deterministic.js'
 import { GeminiCopyProvider } from '../ai/providers/gemini.js'
+import type { MediaResolution } from './media-resolver.js'
 import { preferredBlock, type TemplateSteering } from './templates.js'
 
 /**
@@ -347,6 +348,7 @@ function propsForBlock(
   profile: BusinessProfile,
   copy: CopySlots,
   navigation: SitePlan['navigation'],
+  media: MediaResolution['byRole'] = {},
 ): Record<string, unknown> {
   const phone = profile.contact.phone
   const telHref = phone ? `tel:${phone.replace(/[^\d+]/g, '')}` : '/contact'
@@ -354,9 +356,13 @@ function propsForBlock(
   const isHome = page.goal === 'home'
 
   if (blockId.startsWith('header-')) {
+    const logo = profile.brand.logo
     return {
       brand: profile.company.name,
-      logo: profile.brand.logo,
+      logo,
+      // Written per generated site, not as a registry default, so published
+      // pages keep the header they already have.
+      ...(logo ? { layout: 'stacked', logoHeight: 'xl' } : {}),
       links: navigation.filter((item) => item.href !== '/').slice(0, 4),
       ctaLabel: phone ? phone : copy.primaryCta,
       ctaHref: telHref,
@@ -384,8 +390,8 @@ function propsForBlock(
       primaryHref: phone ? telHref : '/contact',
       secondaryLabel: isHome ? copy.secondaryCta : '',
       secondaryHref: navigation[1]?.href ?? '/contact',
-      image: profile.media[0] ?? '',
-      imageAlt: profile.company.name,
+      image: media.hero?.url ?? profile.media[0] ?? '',
+      imageAlt: media.hero?.alt || profile.company.name,
     }
   }
 
@@ -492,11 +498,12 @@ export function composePage(
   profile: BusinessProfile,
   copy: CopySlots,
   navigation: SitePlan['navigation'],
+  media: MediaResolution['byRole'] = {},
 ): Section[] {
   const sections: Section[] = []
 
   for (const blockId of page.blocks) {
-    const props = propsForBlock(blockId, page, profile, copy, navigation)
+    const props = propsForBlock(blockId, page, profile, copy, navigation, media)
     if (isEmptySection(blockId, props)) continue
 
     try {

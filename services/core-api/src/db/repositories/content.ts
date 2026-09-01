@@ -133,6 +133,20 @@ export async function insertMediaAsset(
   return toAsset(row!)
 }
 
+export async function findMediaByChecksum(
+  tx: Tx,
+  tenantId: string,
+  checksum: string,
+): Promise<MediaAsset | null> {
+  const [row] = await tx<MediaRow[]>`
+    SELECT * FROM media_assets
+    WHERE tenant_id = ${tenantId} AND checksum = ${checksum}
+    ORDER BY created_at ASC
+    LIMIT 1
+  `
+  return row ? toAsset(row) : null
+}
+
 export async function findMediaById(tx: Tx, tenantId: string, mediaId: string): Promise<MediaAsset | null> {
   const [row] = await tx<MediaRow[]>`
     SELECT * FROM media_assets WHERE tenant_id = ${tenantId} AND id = ${mediaId} LIMIT 1

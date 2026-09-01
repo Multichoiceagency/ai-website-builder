@@ -29,6 +29,7 @@ import {
   planSite,
   themeFromBrand,
 } from '../lib/generation/index.js'
+import { mediaIntentsFor, resolveSiteMedia } from '../lib/generation/media-resolver.js'
 import { resolveTemplate } from '../lib/generation/templates.js'
 import { profileFromPrompt } from '../lib/ai/site-builder-agent.js'
 import { draftFreeformSite, sectionsFromFreeformRoot } from '../lib/ai/freeform-site.js'
@@ -424,9 +425,20 @@ async function executeSiteGeneration(
     designBrief: steering?.brief,
   })
 
+  const media = await resolveSiteMedia({
+    tenantId: context.tenantId,
+    createdBy: context.user.email,
+    profile,
+    intents: mediaIntentsFor(profile),
+  }).catch((error: unknown) => {
+    // Imagery is decoration; a site without it still ships.
+    console.warn('[generation] media resolution failed:', (error as Error).message)
+    return null
+  })
+
   const composed = plan.pages.map((page) => ({
     page,
-    sections: composePage(page, profile, copy.slots, plan.navigation),
+    sections: composePage(page, profile, copy.slots, plan.navigation, media?.byRole ?? {}),
   }))
 
   const quality = assessQuality(plan, composed)
