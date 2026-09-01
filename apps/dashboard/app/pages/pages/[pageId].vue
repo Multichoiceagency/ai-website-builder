@@ -89,14 +89,6 @@ const device = ref<'desktop' | 'tablet' | 'mobile'>('desktop')
 const zoom = ref(70)
 const selectToEdit = ref(true)
 
-/** Single studio: assistant + artboard + inspector. */
-const designMode = computed(() => true)
-// Off since the generator writes registry sections again (commit 58ece31):
-// with this true the editor filtered them all out and showed a blank artboard
-// over a page that had content.
-const freeformOnly = computed(() => false)
-const aiFreeform = computed(() => false)
-const assistantLed = computed(() => false)
 
 /** Panel widths + open state persist per browser. */
 const leftWidth = ref(256)
@@ -359,7 +351,7 @@ const imageFileInput = ref<HTMLInputElement | null>(null)
 const pendingImageNodeId = ref<string | null>(null)
 const mediaUpload = useMediaUpload()
 const assistLayoutContext = computed(() => {
-  if (!freeformOnly.value || !selected.value || !isLayoutCanvasBlock(selected.value.block)) return null
+  if (!selected.value || !isLayoutCanvasBlock(selected.value.block)) return null
   return {
     sectionId: selected.value.id,
     selectedNodeId: layoutCanvas.selectedNodeId.value ?? undefined,
@@ -643,15 +635,8 @@ function insertBlockIds(
   },
   atIndex?: number,
 ) {
-  const blockIds = freeformOnly.value
-    ? payload.blockIds.filter((id) => isLayoutCanvasBlock(id))
-    : payload.blockIds
-  if (!blockIds.length) {
-    if (freeformOnly.value) {
-      errorMessage.value = 'This mode only inserts Empty section (layout canvas).'
-    }
-    return
-  }
+  const blockIds = payload.blockIds
+  if (!blockIds.length) return
   const built = blockIds.map((blockId) => createSection(blockId))
   const types = payload.motionTypes
   insertSections(
@@ -669,11 +654,6 @@ function insertBlockIds(
     rightTab.value = 'style'
     rightOpen.value = true
   }
-}
-
-function insertEmptyLayoutCanvas() {
-  insertBlockIds({ blockIds: ['layout-canvas-01'], source: 'block' })
-  message.value = 'Added Empty section.'
 }
 
 const designImportOpen = ref(false)
@@ -899,7 +879,7 @@ function onDesignImported(root: LayoutContainerNode) {
 }
 
 async function onDesignPaste(event: ClipboardEvent) {
-  if (!designMode.value || !can('page:write')) return
+  if (!can('page:write')) return
   const html = event.clipboardData?.getData('text/html')
   const text = event.clipboardData?.getData('text/plain')
   if (!html && !text) return
@@ -999,14 +979,6 @@ async function onInsertCatalogue(hit: {
   }
   errorMessage.value = ''
   try {
-    if (aiFreeform.value && (hit.kind !== 'block' || !isLayoutCanvasBlock(hit.id))) {
-      insertEmptyLayoutCanvas()
-      return
-    }
-    if (designMode.value && (hit.kind !== 'block' || !isLayoutCanvasBlock(hit.id))) {
-      ensureDesignArtboard()
-      return
-    }
     if (hit.kind === 'block') {
       insertBlockIds({ blockIds: [hit.id], source: 'block' })
       message.value = `Inserted ${hit.name}.`
@@ -1634,7 +1606,6 @@ function clampZoom(value: number): number {
 
 /** Figma-style: ⌘/Ctrl + scroll (and trackpad pinch) zooms the artboard. */
 function onDesignCanvasWheel(event: WheelEvent) {
-  if (!designMode.value) return
   if (!(event.ctrlKey || event.metaKey)) return
   event.preventDefault()
   const intensity = Math.min(24, Math.abs(event.deltaY))
@@ -1646,9 +1617,9 @@ function onDesignCanvasWheel(event: WheelEvent) {
 const designCanvasScrollEl = ref<HTMLElement | null>(null)
 
 watch(
-  [designMode, designCanvasScrollEl],
-  ([on, el], _prev, onCleanup) => {
-    if (!import.meta.client || !on || !el) return
+  designCanvasScrollEl,
+  (el, _prev, onCleanup) => {
+    if (!import.meta.client || !el) return
     el.addEventListener('wheel', onDesignCanvasWheel, { passive: false })
     onCleanup(() => el.removeEventListener('wheel', onDesignCanvasWheel))
   },
