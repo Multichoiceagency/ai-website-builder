@@ -57,36 +57,72 @@ function absoluteMediaUrl(url: string | null | undefined, coreApiUrl: string): s
   return url
 }
 
-/** Paint tenant branding onto `:root` so Tailwind token classes pick it up. */
+/**
+ * The stored defaults are the paper world this dashboard no longer ships;
+ * every tenant carries them because the columns have DB defaults. Only a
+ * value a tenant actually changed may override the design tokens.
+ */
+const LEGACY_DEFAULTS: Partial<Record<keyof WhiteLabelSettings, string>> = {
+  colorPrimary: '#c2410c',
+  colorAccent: '#0f766e',
+  colorSurface: '#fafaf9',
+  colorSurfaceAlt: '#ffffff',
+  colorText: '#18181b',
+  fontHeading: 'Figtree',
+  fontBody: 'Rubik',
+}
+
+function customised(settings: WhiteLabelSettings, key: keyof typeof LEGACY_DEFAULTS): string | null {
+  const value = settings[key]
+  if (typeof value !== 'string' || !value.trim()) return null
+  return value.trim().toLowerCase() === LEGACY_DEFAULTS[key]!.toLowerCase() ? null : value.trim()
+}
+
+const BRANDING_VARS = [
+  '--brand', '--brand-hover', '--brand-soft', '--brand-ink', '--focus',
+  '--paper', '--paper-raised', '--paper-sunken', '--ink', '--font-heading', '--font-body',
+] as const
+
+/** Root variables a tenant's white-label settings override; absent keys leave the tokens alone. */
+export function brandingOverrides(settings: WhiteLabelSettings): Record<string, string> {
+  const vars: Record<string, string> = {}
+  const primary = customised(settings, 'colorPrimary')
+  if (primary) {
+    vars['--brand'] = primary
+    vars['--brand-hover'] = `color-mix(in oklab, ${primary} 88%, white)`
+    vars['--brand-soft'] = `color-mix(in oklab, ${primary} 16%, transparent)`
+    vars['--brand-ink'] = luminance(primary) > 0.55 ? '#18181b' : '#ffffff'
+    vars['--focus'] = primary
+  }
+  const surface = customised(settings, 'colorSurface')
+  if (surface) {
+    vars['--paper'] = surface
+    vars['--paper-sunken'] = mixHex(surface, luminance(surface) > 0.5 ? 'black' : 'white', 0.04)
+  }
+  const raised = customised(settings, 'colorSurfaceAlt')
+  if (raised) vars['--paper-raised'] = raised
+  const text = customised(settings, 'colorText')
+  if (text) vars['--ink'] = text
+  const heading = customised(settings, 'fontHeading')
+  if (heading) vars['--font-heading'] = `"${heading}", ui-sans-serif, system-ui, sans-serif`
+  const body = customised(settings, 'fontBody')
+  if (body) vars['--font-body'] = `"${body}", ui-sans-serif, system-ui, sans-serif`
+  return vars
+}
+
 export function applyDashboardBrandingVars(settings: WhiteLabelSettings): void {
   if (typeof document === 'undefined') return
   const root = document.documentElement
-  const primary = settings.colorPrimary || DEFAULTS.colorPrimary
-  const soft = mixHex(primary, 'white', 0.88)
-  const hover = mixHex(primary, 'black', 0.12)
-  const brandInk = luminance(primary) > 0.55 ? '#18181b' : '#ffffff'
-
-  root.style.setProperty('--brand', primary)
-  root.style.setProperty('--brand-hover', hover)
-  root.style.setProperty('--brand-soft', soft)
-  root.style.setProperty('--brand-ink', brandInk)
-  root.style.setProperty('--focus', primary)
-  root.style.setProperty('--paper', settings.colorSurface || DEFAULTS.colorSurface)
-  root.style.setProperty('--paper-raised', settings.colorSurfaceAlt || DEFAULTS.colorSurfaceAlt)
-  root.style.setProperty('--paper-sunken', mixHex(settings.colorSurface || DEFAULTS.colorSurface, 'black', 0.03))
-  root.style.setProperty('--ink', settings.colorText || DEFAULTS.colorText)
-
-  ensureGoogleFont(settings.fontHeading || DEFAULTS.fontHeading)
-  ensureGoogleFont(settings.fontBody || DEFAULTS.fontBody)
-  root.style.setProperty(
-    '--font-heading',
-    `"${settings.fontHeading || DEFAULTS.fontHeading}", ui-sans-serif, system-ui, sans-serif`,
-  )
-  root.style.setProperty(
-    '--font-body',
-    `"${settings.fontBody || DEFAULTS.fontBody}", ui-sans-serif, system-ui, sans-serif`,
-  )
-  root.style.fontFamily = `var(--font-body)`
+  const vars = brandingOverrides(settings)
+  for (const name of BRANDING_VARS) {
+    if (vars[name]) root.style.setProperty(name, vars[name]!)
+    else root.style.removeProperty(name)
+  }
+  const heading = customised(settings, 'fontHeading')
+  const body = customised(settings, 'fontBody')
+  if (heading) ensureGoogleFont(heading)
+  if (body) ensureGoogleFont(body)
+  root.style.fontFamily = body ? 'var(--font-body)' : ''
 }
 
 /**
