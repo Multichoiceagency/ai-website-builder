@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import type { Site } from '@platform/schemas'
+import type { PageSummary, Site } from '@platform/schemas'
 import { ExternalLink, Laptop, Loader2, Monitor, RotateCcw, Send, Smartphone, Tablet } from '@lucide/vue'
 import { useLocale } from '../composables/useLocale'
 
@@ -41,6 +41,17 @@ const site = computed(
 )
 
 /** Only a connected domain yields a real address; a guessed one is someone else's site. */
+const { data: pages } = await useAsyncData(
+  'agent:pages',
+  () => (site.value ? api.get<PageSummary[]>(`/api/v1/sites/${site.value.id}/pages`) : Promise.resolve([])),
+  { watch: [site] },
+)
+
+/** Where a proposed edit gets applied: the home page, or the first one there is. */
+const homePageId = computed(
+  () => (pages.value?.find((page) => page.path === '/') ?? pages.value?.[0])?.id ?? null,
+)
+
 const previewUrl = computed(() =>
   site.value?.primaryHostname ? `https://${site.value.primaryHostname}` : null,
 )
@@ -56,6 +67,19 @@ interface Change {
   /** Absent when the action has no revision behind it; the card then says so. */
   undo: (() => Promise<void>) | null
   undone: boolean
+  /**
+   * Edits the assistant proposed but did not make. They are applied in the page
+   * editor, which snapshots for undo first — PRODUCT.md: never act further than
+   * you can undo, and site-level changes here have no revision behind them.
+   */
+  proposed: number
+  pageHref: string | null
+}
+
+interface AssistReply {
+  answer: string
+  model?: string
+  actions?: { type: string }[]
 }
 
 const changes = ref<Change[]>([])
@@ -71,22 +95,24 @@ async function ask() {
   busy.value = true
   failure.value = ''
   try {
-    const result = await api.post<{ summary?: string; target?: string }>('/api/v1/ai/assist', {
-      prompt: question,
-      siteId: site.value?.id ?? null,
+    const result = await api.post<AssistReply>('/api/v1/ai/assist', {
+      message: question,
+      includeCatalogue: true,
     })
 
     changes.value.unshift({
       id: crypto.randomUUID(),
       asked: question,
-      did: result?.summary ?? t('agent.card.noSummary'),
-      where: result?.target ?? site.value?.name ?? '',
+      did: result?.answer?.trim() || t('agent.card.noSummary'),
+      where: site.value?.name ?? '',
       at: new Date(),
       // Undo arrives with the action that earned it. Pages and posts carry
       // revisions; prices, theme, navigation and domains do not yet, and an
       // undo button that cannot work is worse than none.
       undo: null,
       undone: false,
+      proposed: result?.actions?.length ?? 0,
+      pageHref: homePageId.value ? `/pages/${homePageId.value}?mode=ai` : null,
     })
     draft.value = ''
     await nextTick()
@@ -214,6 +240,13 @@ const frameStyle = computed(() => {
           <article class="agent__change" :data-undone="change.undone">
             <p class="agent__change-asked">{{ change.asked }}</p>
             <p class="agent__change-did">{{ change.did }}</p>
+            <NuxtLink
+              v-if="change.proposed && change.pageHref"
+              class="agent__change-open"
+              :to="change.pageHref"
+            >
+              {{ t('agent.card.openToApply') }} ({{ change.proposed }})
+            </NuxtLink>
             <footer class="agent__change-foot">
               <span>{{ change.where }} · {{ timeOf(change.at) }}</span>
               <button
@@ -431,6 +464,16 @@ const frameStyle = computed(() => {
   font-size: var(--text-13, 0.8125rem);
   color: var(--ink-faint);
 }
+.agent__change-open {
+  align-self: start;
+  color: var(--brand);
+  font: inherit;
+  text-decoration: none;
+}
+.agent__change-open:hover {
+  text-decoration: underline;
+}
+
 .agent__change-did {
   margin-top: 0.35rem;
   font-size: var(--text-15, 0.9375rem);

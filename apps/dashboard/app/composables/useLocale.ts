@@ -127,6 +127,12 @@ const MESSAGES: Messages = {
     de: 'Erledigt \u2014 keine Zusammenfassung erhalten',
     fr: 'Fait \u2014 aucun r\u00e9sum\u00e9 re\u00e7u',
   },
+  'agent.card.openToApply': {
+    en: 'Apply in the editor',
+    nl: 'Toepassen in de editor',
+    de: 'Im Editor anwenden',
+    fr: 'Appliquer dans l\u2019\u00e9diteur',
+  },
   'agent.empty.title': { en: 'Nothing changed yet today', nl: 'Vandaag nog niets gewijzigd', de: 'Heute noch nichts ge\u00e4ndert', fr: 'Rien de chang\u00e9 aujourd\u2019hui' },
   'agent.empty.body': {
     en: 'Ask above and what happens appears here, with the way back on each card.',
