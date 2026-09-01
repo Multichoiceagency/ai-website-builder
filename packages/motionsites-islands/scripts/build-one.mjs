@@ -45,6 +45,15 @@ await build({
     outDir,
     emptyOutDir: true,
     assetsDir: 'assets',
+    // The section directory is the version; hashed names would only add
+    // characters the object-store keys refuse.
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name][extname]',
+      },
+    },
   },
 })
 

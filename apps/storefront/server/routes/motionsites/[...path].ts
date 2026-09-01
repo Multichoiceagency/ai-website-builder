@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, openSync, readSync, closeSync, statSync } from 'node:fs'
 import { dirname, extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createError, getHeader, getRouterParam, sendStream, setHeader } from 'h3'
+import { createError, getHeader, getRouterParam, send, sendStream, setHeader } from 'h3'
 
 /**
  * Serve MotionSites catalogue media from disk.
@@ -31,6 +31,24 @@ const EXT_MIME: Record<string, string> = {
   '.md': 'text/markdown; charset=utf-8',
 }
 
+function coreApiOrigin(): string {
+  const runtime = useRuntimeConfig() as { coreApiOrigin?: string; public?: { coreApiUrl?: string } }
+  return (runtime.coreApiOrigin || runtime.public?.coreApiUrl || process.env.CORE_API_URL || 'http://localhost:4000')
+    .replace(/\/$/, '')
+}
+
+/**
+ * Islands generated at runtime are built inside the API container and published
+ * to object storage; only curated ones are baked into this image's public dir.
+ */
+async function serveIslandFromApi(event: Parameters<typeof setHeader>[0], segments: string[]) {
+  const upstream = await fetch(`${coreApiOrigin()}/motionsites/${segments.map(encodeURIComponent).join('/')}`)
+  if (!upstream.ok) throw createError({ statusCode: upstream.status === 404 ? 404 : 502, statusMessage: 'Not found' })
+  setHeader(event, 'content-type', upstream.headers.get('content-type') ?? 'application/octet-stream')
+  setHeader(event, 'cache-control', upstream.headers.get('cache-control') ?? 'public, max-age=3600')
+  return send(event, Buffer.from(await upstream.arrayBuffer()))
+}
+
 function sniffMime(absolute: string, fallback: string): string {
   try {
     const fd = openSync(absolute, 'r')
@@ -50,7 +68,7 @@ function sniffMime(absolute: string, fallback: string): string {
   return fallback
 }
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const raw = getRouterParam(event, 'path') ?? ''
   const segments = raw
     .split('/')
@@ -67,6 +85,7 @@ export default defineEventHandler((event) => {
   }
 
   if (!existsSync(absolute) || !statSync(absolute).isFile()) {
+    if (segments[0] === 'islands' && segments.length >= 2) return serveIslandFromApi(event, segments)
     throw createError({ statusCode: 404, statusMessage: 'Not found' })
   }
 
@@ -78,7 +97,7 @@ export default defineEventHandler((event) => {
   setHeader(event, 'content-type', type)
   setHeader(event, 'accept-ranges', 'bytes')
   setHeader(event, 'cache-control', 'public, max-age=3600')
-  setHeader(event, 'content-length', String(size))
+  setHeader(event, 'content-length', size)
 
   const range = getHeader(event, 'range')
   if (range) {
@@ -96,7 +115,7 @@ export default defineEventHandler((event) => {
         const safeEnd = Math.min(end, size - 1)
         const chunk = safeEnd - start + 1
         setHeader(event, 'content-range', `bytes ${start}-${safeEnd}/${size}`)
-        setHeader(event, 'content-length', String(chunk))
+        setHeader(event, 'content-length', chunk)
         event.node.res.statusCode = 206
         return sendStream(event, createReadStream(absolute, { start, end: safeEnd }))
       }

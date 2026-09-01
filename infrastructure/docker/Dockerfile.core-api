@@ -9,20 +9,25 @@ COPY packages/schemas/package.json packages/schemas/
 COPY packages/blocks/package.json packages/blocks/
 COPY packages/permissions/package.json packages/permissions/
 COPY packages/templates/package.json packages/templates/
+COPY packages/motionsites-islands/package.json packages/motionsites-islands/
 COPY services/core-api/package.json services/core-api/
 # Coolify injects NODE_ENV=production into every stage (build-arg). That skips
 # TypeScript (devDependencies) and breaks `tsc`.
-RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false --filter @platform/core-api...
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false --filter @platform/core-api... --filter @platform/motionsites-islands...
 
 FROM deps AS build
 COPY packages/schemas packages/schemas
 COPY packages/blocks packages/blocks
 COPY packages/permissions packages/permissions
 COPY packages/templates packages/templates
+# Runtime codegen (ADR-0012) builds islands with Vite inside this image and
+# publishes them to object storage; the toolchain has to be here, not only in
+# the dashboard image.
+COPY packages/motionsites-islands packages/motionsites-islands
 COPY services/core-api services/core-api
 # Workspace package tsconfigs extend the monorepo base.
 COPY tsconfig.base.json ./
-RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false --filter @platform/core-api...
+RUN NODE_ENV=development pnpm install --frozen-lockfile --prod=false --filter @platform/core-api... --filter @platform/motionsites-islands...
 RUN pnpm --filter @platform/schemas build \
  && pnpm --filter @platform/blocks build \
  && pnpm --filter @platform/permissions build \

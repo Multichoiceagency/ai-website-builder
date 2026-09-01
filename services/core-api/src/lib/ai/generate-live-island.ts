@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
+import { publishIslandArtifacts } from '../motionsites/island-artifacts.js'
 import { generateMotionsitesComponent } from './motionsites-codegen.js'
 import { parseDependenciesHeader } from './motionsites-codegen-prompt.js'
 
@@ -364,6 +365,7 @@ export async function generateLiveIsland(
   if (!input.skipBuild) {
     try {
       await runIslandBuild(sectionId)
+      await publishIslandArtifacts({ sectionId, distDir: join(islandsPkgRoot(), 'dist', sectionId) })
       built = true
     } catch (error) {
       errors.push(error instanceof Error ? error.message : 'Island build failed')
