@@ -19,6 +19,7 @@
     "@langchain/core": "^1.2.5",
     "@langchain/langgraph": "^1.4.9",
     "@nangohq/node": "^0.71.3",
+    "@platform/agent": "workspace:*",
     "@platform/blocks": "workspace:*",
     "@platform/permissions": "workspace:*",
     "@platform/schemas": "workspace:*",

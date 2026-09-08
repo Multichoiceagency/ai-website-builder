@@ -7,6 +7,7 @@ import authPlugin from './plugins/auth.js'
 import errorHandlerPlugin from './plugins/error-handler.js'
 import adminRoutes from './routes/admin.js'
 import aiRoutes from './routes/ai.js'
+import aiBuilderRoutes from './routes/ai-builder.js'
 import trackingRoutes from './routes/tracking.js'
 import analyticsRoutes from './routes/analytics.js'
 import seoRoutes from './routes/seo.js'
@@ -110,6 +111,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(templatesRoutes, { prefix: '/api/v1/templates' })
   await app.register(assetsRoutes, { prefix: '/api/v1/assets' })
   await app.register(aiRoutes, { prefix: '/api/v1/ai' })
+  await app.register(aiBuilderRoutes, { prefix: '/api/v1/ai-builder' })
   // Page routes declare their own `/sites/...` and `/pages/...` paths because
   // creation is nested under a site while everything else is addressed by id.
   await app.register(pagesRoutes, { prefix: '/api/v1' })
